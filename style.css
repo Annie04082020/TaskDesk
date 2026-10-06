@@ -247,6 +247,7 @@ body::before {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  text-decoration: none;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -271,6 +272,7 @@ body::before {
   align-items: center;
   gap: 6px;
   letter-spacing: 0.02em;
+  text-decoration: none;
   transition: all 0.2s ease;
 }
 
