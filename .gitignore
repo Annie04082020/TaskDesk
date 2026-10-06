@@ -12,15 +12,11 @@ package-lock.json
 # Personal backup files
 taskdesk-backup*.json
 
+# Generated web directory for Capacitor
+www/
+
 # Capacitor & Android builds
-android/app/build/
-android/.gradle/
-android/build/
-android/captures/
-android/.idea/
-android/*.iml
-android/app/*.iml
-android/local.properties
+android/
 *.apk
 *.aab
 
