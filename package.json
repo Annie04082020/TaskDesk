@@ -1,0 +1,22 @@
+{
+  "name": "taskdesk",
+  "version": "1.0.0",
+  "description": "個人任務工作桌 (Task Desk) - PWA & Android App",
+  "main": "app.js",
+  "scripts": {
+    "start": "python -m http.server 8080",
+    "cap:add": "cap add android",
+    "cap:sync": "cap sync",
+    "cap:open": "cap open android"
+  },
+  "keywords": ["task", "desk", "pwa", "android", "capacitor"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@capacitor/core": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/cli": "^7.0.0"
+  }
+}

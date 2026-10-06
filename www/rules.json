@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "taskTypes": [
+    {
+      "id": "deep_focus",
+      "name": "深度專注",
+      "description": "讀書、寫報告、寫程式、研讀研究",
+      "minMind": "mid",
+      "minBody": "low",
+      "minTime": 60,
+      "places": ["home", "school"],
+      "aiAssist": false,
+      "keywords": ["讀書", "報告", "寫程式", "程式", "研究", "論文", "研讀", "複習", "演算法", "架構", "專題", "code", "coding"]
+    },
+    {
+      "id": "hands_on",
+      "name": "動手做",
+      "description": "接線、組裝、測試、修繕、實驗",
+      "minMind": "mid",
+      "minBody": "mid",
+      "minTime": 60,
+      "places": ["home", "school"],
+      "aiAssist": false,
+      "keywords": ["接線", "組裝", "測試", "修繕", "實驗", "製作", "維修", "烙鐵", "模型", "焊接", "硬體", "零件"]
+    },
+    {
+      "id": "admin",
+      "name": "行政雜事",
+      "description": "寄信、填表、報名、繳費、確認",
+      "minMind": "low",
+      "minBody": "low",
+      "minTime": 30,
+      "places": ["any"],
+      "aiAssist": false,
+      "keywords": ["寄信", "填表", "報名", "繳費", "回信", "申請", "發票", "預約", "確認", "信件", "表單", "帳單", "匯款", "加選", "退選"]
+    },
+    {
+      "id": "tidy",
+      "name": "整理",
+      "description": "回訊息、整理清單、改文件、小幅備份",
+      "minMind": "low",
+      "minBody": "low",
+      "minTime": 30,
+      "places": ["any"],
+      "aiAssist": false,
+      "keywords": ["回訊息", "整理清單", "改文件", "歸檔", "分類", "刪除", "備份", "訊息", "回覆", "line", "slack", "mail"]
+    },
+    {
+      "id": "bulk_organize",
+      "name": "巨量整理",
+      "description": "大量資料、文件、筆記的整理歸納與盤點",
+      "minMind": "mid",
+      "minBody": "low",
+      "minTime": 60,
+      "places": ["home", "school"],
+      "aiAssist": true,
+      "keywords": ["整理", "歸納", "彙整", "筆記", "資料夾", "大掃除", "盤點", "清點", "大批資料", "文獻整理"]
+    },
+    {
+      "id": "creative",
+      "name": "創作",
+      "description": "畫畫、設計、發想草圖、創意構想",
+      "minMind": "mid",
+      "minBody": "low",
+      "minTime": 30,
+      "places": ["home"],
+      "aiAssist": false,
+      "keywords": ["畫畫", "設計", "發想", "繪圖", "靈感", "草圖", "作曲", "插畫", "剪輯", "剪片", "構圖"]
+    },
+    {
+      "id": "physical",
+      "name": "身體活動",
+      "description": "運動、跆拳道、跑步、健身、重訓",
+      "minMind": "low",
+      "minBody": "high",
+      "minTime": 30,
+      "places": ["any"],
+      "aiAssist": false,
+      "keywords": ["運動", "跆拳道", "跑步", "重訓", "拉筋", "健身", "散步", "游泳", "打球", "拳擊", "深蹲", "體能"]
+    }
+  ]
+}

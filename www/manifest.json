@@ -1,0 +1,18 @@
+{
+  "name": "Task Desk 個人任務工作桌",
+  "short_name": "Task Desk",
+  "description": "零壓力、高專注的個人任務工作桌，三堆分流與狀態輔助",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#080b11",
+  "theme_color": "#080b11",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
