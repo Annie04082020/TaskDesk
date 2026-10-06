@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_today_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_bg_rounded"
+    android:padding="12dp">
+
+    <!-- Header -->
+    <LinearLayout
+        android:id="@+id/widget_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingBottom="8dp">
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Task Desk · 今日"
+            android:textColor="#f0f3f8"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_count_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0/3 件"
+            android:textColor="#9ba3b5"
+            android:textSize="11sp"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:background="@drawable/widget_tag_bg"
+            android:layout_marginEnd="8dp" />
+
+        <TextView
+            android:id="@+id/btn_widget_add"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:text="＋"
+            android:textColor="#e2e8f0"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:background="@drawable/widget_btn_bg" />
+    </LinearLayout>
+
+    <!-- Divider -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#2d3342"
+        android:layout_marginBottom="6dp" />
+
+    <!-- Empty View -->
+    <TextView
+        android:id="@+id/widget_empty_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:text="今日桌面尚無任務\n點擊進入挑選"
+        android:textColor="#7a8499"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
+    <!-- Tasks Slots -->
+    <!-- Slot 1 -->
+    <LinearLayout
+        android:id="@+id/widget_row_1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="•"
+            android:textColor="#4e88ff"
+            android:textSize="14sp"
+            android:paddingEnd="6dp" />
+
+        <TextView
+            android:id="@+id/widget_task_text_1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="#e6edf3"
+            android:textSize="12sp"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/widget_task_size_1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="小"
+            android:textColor="#9ba3b5"
+            android:textSize="10sp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:background="@drawable/widget_tag_bg" />
+    </LinearLayout>
+
+    <!-- Slot 2 -->
+    <LinearLayout
+        android:id="@+id/widget_row_2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="•"
+            android:textColor="#4e88ff"
+            android:textSize="14sp"
+            android:paddingEnd="6dp" />
+
+        <TextView
+            android:id="@+id/widget_task_text_2"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="#e6edf3"
+            android:textSize="12sp"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/widget_task_size_2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="小"
+            android:textColor="#9ba3b5"
+            android:textSize="10sp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:background="@drawable/widget_tag_bg" />
+    </LinearLayout>
+
+    <!-- Slot 3 -->
+    <LinearLayout
+        android:id="@+id/widget_row_3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="•"
+            android:textColor="#4e88ff"
+            android:textSize="14sp"
+            android:paddingEnd="6dp" />
+
+        <TextView
+            android:id="@+id/widget_task_text_3"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="#e6edf3"
+            android:textSize="12sp"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/widget_task_size_3"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="小"
+            android:textColor="#9ba3b5"
+            android:textSize="10sp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:background="@drawable/widget_tag_bg" />
+    </LinearLayout>
+
+    <!-- Slot 4 -->
+    <LinearLayout
+        android:id="@+id/widget_row_4"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="•"
+            android:textColor="#4e88ff"
+            android:textSize="14sp"
+            android:paddingEnd="6dp" />
+
+        <TextView
+            android:id="@+id/widget_task_text_4"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="#e6edf3"
+            android:textSize="12sp"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/widget_task_size_4"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="小"
+            android:textColor="#9ba3b5"
+            android:textSize="10sp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:background="@drawable/widget_tag_bg" />
+    </LinearLayout>
+
+</LinearLayout>

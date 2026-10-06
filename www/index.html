@@ -186,6 +186,30 @@
           </div>
         </div>
       </section>
+
+      <!-- Folder: History Archive (歷史檔案庫 / 完成封存) -->
+      <section class="section folder-accordion" id="folderHistory">
+        <div class="folder-header" id="folderHistoryHeader">
+          <div class="folder-title-left">
+            <span class="folder-name">歷史檔案庫</span>
+            <span class="folder-badge" id="historyCountBadge">0</span>
+            <span class="folder-desc">完成任務永久封存於此，不直接刪除</span>
+          </div>
+          <span class="folder-chevron">▼</span>
+        </div>
+        <div class="folder-content">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px; flex-wrap: wrap;">
+            <span class="capture-hint">完成的任務自動歸檔於本機，可隨時復原或匯出備份</span>
+            <div style="display: flex; gap: 6px;">
+              <button type="button" class="btn-secondary" id="btnExportHistoryMd" style="padding: 3px 8px; font-size: 0.72rem;">匯出 Markdown</button>
+              <button type="button" class="btn-secondary" id="btnExportHistoryJson" style="padding: 3px 8px; font-size: 0.72rem;">匯出 JSON</button>
+            </div>
+          </div>
+          <div class="card-list" id="historyArchiveCardList">
+            <!-- Dynamically Rendered History Items -->
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -249,15 +273,6 @@
         <!-- Consultation Result View -->
         <div id="consultResultArea" style="display: none;">
           <!-- Dynamically populated recommendations -->
-        </div>
-
-        <!-- Consultation Follow-up Dialog -->
-        <div id="consultDialogArea" class="consult-dialog" style="display: none;">
-          <div id="dialogMessages"></div>
-          <div class="add-subtask-form" id="dialogInputRow">
-            <input type="text" id="consultFollowupInput" class="add-subtask-input" placeholder="簡短詢問或備註（剩餘 5 輪）">
-            <button id="btnSendFollowup" class="btn-primary" style="padding: 4px 10px; font-size: 0.8rem;">送出</button>
-          </div>
         </div>
       </div>
       <div class="modal-footer" id="consultFooter">
@@ -399,19 +414,6 @@
         <div class="form-group">
           <div class="form-toggle-row">
             <div>
-              <div class="form-label">自動猜類型與拆子任務</div>
-              <div class="form-sublabel">開啟後任務文字會送給 Gemini；若無金鑰或失敗則使用本機關鍵字備案。</div>
-            </div>
-            <label class="switch">
-              <input type="checkbox" id="settingAutoGuess" checked>
-              <span class="slider"></span>
-            </label>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <div class="form-toggle-row">
-            <div>
               <div class="form-label">狀態諮詢時包含保溫清單</div>
               <div class="form-sublabel">「幫我選」時，是否同時將「保溫」中的未完成項目納入篩選。</div>
             </div>
@@ -419,27 +421,6 @@
               <input type="checkbox" id="settingIncludeKeep">
               <span class="slider"></span>
             </label>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="settingApiKey">Gemini API 金鑰</label>
-          <div class="form-sublabel">只儲存於本裝置本機中，不會上傳伺服器。</div>
-          <div style="display: flex; gap: 6px;">
-            <input type="password" id="settingApiKey" class="form-input" style="flex: 1;" placeholder="貼上 AI Studio 取得的 API Key">
-            <button type="button" id="btnToggleApiKeyShow" class="btn-secondary" style="padding: 6px 10px; font-size: 0.75rem;">顯示</button>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="settingModel">Gemini 模型</label>
-          <select id="settingModel" class="form-select">
-            <option value="gemini-2.5-flash">gemini-2.5-flash (推薦，速度快)</option>
-            <option value="gemini-1.5-flash">gemini-1.5-flash</option>
-            <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-          </select>
-          <div class="form-sublabel" style="margin-top: 4px;">
-            隱私提醒：送出的只有任務文字與粗分級的點選值。免費額度內容可能依 Google 條款被用於產品改善，請自行確認條款。
           </div>
         </div>
 

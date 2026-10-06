@@ -37,7 +37,7 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
-  // If request is to external APIs (e.g., Gemini API), don't cache
+  // If request is to external APIs (e.g., GitHub Gist sync), don't cache
   if (url.origin !== location.origin) {
     return;
   }

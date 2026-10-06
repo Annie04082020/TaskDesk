@@ -104,10 +104,7 @@
     weekLimit: 3, // 相容舊版
     theme: 'dark',
     safeTop: 56,
-    autoGuess: true,
     includeKeepInConsult: false,
-    geminiApiKey: '',
-    geminiModel: 'gemini-2.5-flash',
     pinLock: false,
     pinHash: ''
   };
@@ -147,6 +144,11 @@
     setupPWA();
     renderAll();
     checkLockOnStartup();
+    if (window.location.hash === '#quick_capture' || window.location.search.includes('action=quick_capture')) {
+      setTimeout(() => {
+        if (window.handleQuickCaptureFromWidget) window.handleQuickCaptureFromWidget();
+      }, 350);
+    }
   }
 
   // --- 載入與儲存 ---
@@ -281,10 +283,37 @@
   function saveItems() {
     try {
       localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
+      syncToAndroidWidgets();
     } catch (e) {
       console.error('儲存任務失敗:', e);
     }
   }
+
+  // 同步任務資料至 Android 原生小工具 (Widgets)
+  function syncToAndroidWidgets() {
+    try {
+      if (window.AndroidWidgetBridge && typeof window.AndroidWidgetBridge.updateWidgetsData === 'function') {
+        const payload = {
+          items: items,
+          todaySmallLimit: settings.todaySmallLimit || 3,
+          weekMediumLargeLimit: settings.weekMediumLargeLimit || 3
+        };
+        window.AndroidWidgetBridge.updateWidgetsData(JSON.stringify(payload));
+      }
+    } catch (err) {
+      console.warn('Android Widget 同步略過或尚未就緒:', err);
+    }
+  }
+
+  // 接收來自 Android Widget 的快速記錄觸發
+  window.handleQuickCaptureFromWidget = function () {
+    const quickInput = document.getElementById('inputQuickTask');
+    if (quickInput) {
+      quickInput.focus();
+      quickInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      showToast('快速記錄模式：請輸入任務名稱');
+    }
+  };
 
   async function loadRules() {
     try {
@@ -571,131 +600,6 @@
 
     saveItems();
     renderAll();
-
-    // 若設定開啟自動猜測且具備 API Key，進行非同步批次呼叫
-    if (settings.autoGuess && settings.geminiApiKey && settings.geminiApiKey.trim()) {
-      newItems.forEach(it => analyzingItemIds.add(it.id));
-      renderInbox(); // 顯示分析中狀態
-
-      // 非同步批次猜測，不阻礙任何使用者操作
-      runBatchAiGuess(newItems).then(() => {
-        newItems.forEach(it => analyzingItemIds.delete(it.id));
-        saveItems();
-        renderAll();
-      }).catch((err) => {
-        console.warn('AI 批次猜測中斷或錯誤，保留關鍵字備案:', err);
-        newItems.forEach(it => analyzingItemIds.delete(it.id));
-        renderAll();
-      });
-    }
-  }
-
-  // --- Gemini API 批次猜類型與拆子任務 ---
-  async function runBatchAiGuess(batchItems) {
-    const apiKey = settings.geminiApiKey.trim();
-    const model = settings.geminiModel || 'gemini-2.5-flash';
-
-    const typeSummary = rules.taskTypes.map(t => ({
-      id: t.id,
-      name: t.name,
-      description: t.description
-    }));
-
-    const itemsPayload = batchItems.map((it, idx) => ({
-      index: idx,
-      text: it.text
-    }));
-
-    const promptText = `你是任務分類助手。以下是使用者剛輸入的項目清單（以 index 編號），以及可用的任務類型（id、名稱、說明）：
-可選類型：${JSON.stringify(typeSummary)}
-
-使用者輸入項目：
-${JSON.stringify(itemsPayload)}
-
-請對每個項目：
-(1) 挑最接近的 type id，若都不像請回傳 null；
-(2) 只有當該項目明顯包含多個步驟時，才拆出最多 5 個子任務（動詞開頭的短句），否則回傳空陣列 []。
-不要改寫原文，不要新增或刪除項目，不要加任何評論。只回傳 JSON，不要有其他文字，也不要用 markdown 程式碼區塊。
-格式範例：[{"index":0,"typeId":"...","subtasks":["..."]}]`;
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          role: 'user',
-          parts: [{ text: promptText }]
-        }],
-        generationConfig: {
-          temperature: 0.1,
-          responseMimeType: 'application/json'
-        }
-      })
-    });
-
-    if (!resp.ok) {
-      throw new Error(`Gemini API 回應錯誤狀態碼: ${resp.status}`);
-    }
-
-    const data = await resp.json();
-    const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!candidateText) {
-      throw new Error('未收到有效的候選文字');
-    }
-
-    // 清理可能的 markdown 圍欄
-    let cleanJson = candidateText.trim();
-    if (cleanJson.startsWith('```')) {
-      cleanJson = cleanJson.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-    }
-
-    const parsedResults = JSON.parse(cleanJson);
-    if (!Array.isArray(parsedResults)) return;
-
-    for (const res of parsedResults) {
-      if (typeof res.index !== 'number' || res.index < 0 || res.index >= batchItems.length) continue;
-      const targetItem = batchItems[res.index];
-      if (!targetItem) continue;
-
-      // 檢查使用者是否已手動更改過類型，手動確認者不得覆蓋
-      if (targetItem.typeSource !== 'user') {
-        if (res.typeId && rules.taskTypes.some(t => t.id === res.typeId)) {
-          targetItem.typeId = res.typeId;
-          targetItem.typeSource = 'ai';
-        } else if (!targetItem.typeId) {
-          targetItem.typeId = null;
-        }
-      }
-
-      // 拆解子任務
-      if (Array.isArray(res.subtasks) && res.subtasks.length > 0) {
-        // 檢查是否已有現存子任務
-        const existingSubtasks = getSubtasks(targetItem.id);
-        if (existingSubtasks.length === 0) {
-          res.subtasks.slice(0, 5).forEach(subText => {
-            if (typeof subText === 'string' && subText.trim()) {
-              items.push({
-                id: generateId(),
-                text: subText.trim(),
-                size: 'small',
-                bucket: targetItem.bucket,
-                isNow: false,
-                done: false,
-                doneAt: null,
-                createdAt: Date.now(),
-                updatedAt: Date.now(),
-                typeId: targetItem.typeId,
-                typeSource: 'ai',
-                parentId: targetItem.id,
-                aiGenerated: true
-              });
-            }
-          });
-        }
-      }
-    }
   }
 
   // --- 分堆與狀態移動 ---
@@ -852,6 +756,9 @@ ${JSON.stringify(itemsPayload)}
 
       saveItems();
       renderAll();
+      if (isChecked) {
+        showToast(`已完成「${item.text}」，已永久歸檔至歷史檔案庫`);
+      }
     }, 200);
   }
 
@@ -999,77 +906,6 @@ ${JSON.stringify(itemsPayload)}
     return matchedEntries;
   }
 
-  // 呼叫 Gemini 進行狀態諮詢
-  async function callGeminiConsult(candidates, userState) {
-    const apiKey = settings.geminiApiKey.trim();
-    const model = settings.geminiModel || 'gemini-2.5-flash';
-
-    const placeNames = { home: '家', school: '學校', outdoors: '外面', transit: '移動中' };
-    const levelNames = { low: '低', mid: '中', high: '高' };
-    const laterNames = { none: '沒有後續行程', within1h: '1 小時內有行程', later: '今天稍晚有行程' };
-
-    const stateSummary = `地點: ${placeNames[userState.place] || userState.place}，體力: ${levelNames[userState.body]}，精神: ${levelNames[userState.mind]}，可用時間: ${userState.time} 分鐘，後續行程: ${laterNames[userState.later]}`;
-
-    const candidateSummary = candidates.map((c, i) => ({
-      index: i,
-      id: c.id,
-      text: c.displayText
-    }));
-
-    const systemPrompt = `你是任務選擇的輔助。使用者會給你本週任務清單與目前狀態（地點、體力、精神、可用時間、之後的行程）。請從清單中挑最多 2 件適合現在做的事，每件用一句話說明理由。你只提供選項，不要下命令，不要鼓勵或催促，不要說教。不要新增清單以外的任務。若狀態顯示很疲累，可以建議最輕的一件，或建議先休息，並保持中性語氣。回覆簡短。
-回傳格式限定 JSON：[{"index": 0, "reason": "一句中性理由"}]，不含 markdown 標籤。`;
-
-    const userPrompt = `目前狀態：${stateSummary}
-候選清單：${JSON.stringify(candidateSummary)}`;
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: systemPrompt }]
-        },
-        contents: [{
-          role: 'user',
-          parts: [{ text: userPrompt }]
-        }],
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: 'application/json'
-        }
-      })
-    });
-
-    if (!resp.ok) {
-      throw new Error(`Gemini 諮詢連線失敗: ${resp.status}`);
-    }
-
-    const data = await resp.json();
-    const textPart = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!textPart) throw new Error('無諮詢內容');
-
-    let clean = textPart.trim();
-    if (clean.startsWith('```')) {
-      clean = clean.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-    }
-
-    const recs = JSON.parse(clean);
-    const results = [];
-    if (Array.isArray(recs)) {
-      for (const r of recs.slice(0, 2)) {
-        if (typeof r.index === 'number' && candidates[r.index]) {
-          results.push({
-            entry: candidates[r.index],
-            reason: r.reason || '符合當前狀態與條件'
-          });
-        }
-      }
-    }
-    return results;
-  }
-
   // --- 畫面渲染 ---
   function renderAll() {
     renderWeekCounter();
@@ -1079,6 +915,7 @@ ${JSON.stringify(itemsPayload)}
     renderInbox();
     renderKeep();
     renderRelease();
+    renderHistoryArchive();
   }
 
   function renderWeekCounter() {
@@ -1822,6 +1659,222 @@ ${JSON.stringify(itemsPayload)}
     });
   }
 
+  // --- 歷史檔案庫渲染 ---
+  function renderHistoryArchive() {
+    const listEl = document.getElementById('historyArchiveCardList');
+    const badgeEl = document.getElementById('historyCountBadge');
+    if (!listEl) return;
+
+    listEl.innerHTML = '';
+    const completedItems = items.filter(it => it.done && !it.parentId);
+    if (badgeEl) badgeEl.textContent = completedItems.length;
+
+    if (completedItems.length === 0) {
+      const emptyMsg = document.createElement('div');
+      emptyMsg.className = 'empty-neutral';
+      emptyMsg.textContent = '歷史檔案庫目前是空的。當在今日或這週勾選完成任務時，會自動歸檔於此，不直接刪除。';
+      listEl.appendChild(emptyMsg);
+      return;
+    }
+
+    // 依完成時間排序（最新完成的在最前）
+    completedItems.sort((a, b) => (b.doneAt || b.updatedAt || 0) - (a.doneAt || a.updatedAt || 0));
+
+    completedItems.forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'task-card is-done';
+      card.dataset.cardId = item.id;
+      card.style.opacity = '0.88';
+      card.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+
+      const mainRow = document.createElement('div');
+      mainRow.className = 'card-main-row';
+
+      const check = document.createElement('input');
+      check.type = 'checkbox';
+      check.className = 'card-check';
+      check.checked = true;
+      check.title = '取消勾選可復原回工作桌';
+      check.addEventListener('change', () => {
+        toggleItemDone(item.id, false);
+        showToast(`已將「${item.text}」復原回工作桌`);
+      });
+
+      const body = document.createElement('div');
+      body.className = 'card-body';
+
+      const textEl = document.createElement('div');
+      textEl.className = 'card-text';
+      textEl.style.textDecoration = 'line-through';
+      textEl.style.color = 'var(--text-muted)';
+      textEl.textContent = item.text;
+
+      const metaRow = document.createElement('div');
+      metaRow.className = 'card-meta-row';
+
+      // 完成時間 Chip
+      const timeChip = document.createElement('span');
+      timeChip.className = 'chip';
+      const doneDate = item.doneAt ? new Date(item.doneAt) : null;
+      const timeStr = doneDate ? `${doneDate.getMonth() + 1}/${doneDate.getDate()} ${String(doneDate.getHours()).padStart(2, '0')}:${String(doneDate.getMinutes()).padStart(2, '0')} 完成` : '已完成';
+      timeChip.textContent = `✓ ${timeStr}`;
+      timeChip.style.color = 'var(--accent-secondary)';
+      metaRow.appendChild(timeChip);
+
+      // 尺寸 Chip
+      const itemSize = item.size || guessSize(item.text, item.typeId);
+      const sizeChip = document.createElement('span');
+      sizeChip.className = `chip chip-size chip-size-${itemSize}`;
+      const sizeMap = { small: '小 15-30m', medium: '中 1-2h', large: '大 2h+' };
+      sizeChip.textContent = sizeMap[itemSize] || '小';
+      metaRow.appendChild(sizeChip);
+
+      // 原始分堆來源標籤
+      const bucketChip = document.createElement('span');
+      bucketChip.className = 'chip';
+      const bucketMap = { today: '今日', week: '這週', inbox: '收集箱', keep: '保溫', release: '放生' };
+      bucketChip.textContent = bucketMap[item.bucket] || '工作桌';
+      metaRow.appendChild(bucketChip);
+
+      body.appendChild(textEl);
+      body.appendChild(metaRow);
+      mainRow.appendChild(check);
+      mainRow.appendChild(body);
+      card.appendChild(mainRow);
+
+      // 操作按鈕行
+      const actionsRow = document.createElement('div');
+      actionsRow.className = 'card-actions-row';
+
+      const triageBtns = document.createElement('div');
+      triageBtns.className = 'card-triage-btns';
+
+      const btnRestoreToday = document.createElement('button');
+      btnRestoreToday.className = 'btn-triage';
+      btnRestoreToday.textContent = '復原至今日';
+      btnRestoreToday.addEventListener('click', () => {
+        item.done = false;
+        item.doneAt = null;
+        item.bucket = 'today';
+        item.updatedAt = Date.now();
+        saveItems();
+        renderAll();
+        showToast(`已將「${item.text}」復原至今日工作桌`);
+      });
+      triageBtns.appendChild(btnRestoreToday);
+
+      const btnRestoreWeek = document.createElement('button');
+      btnRestoreWeek.className = 'btn-triage';
+      btnRestoreWeek.textContent = '復原至這週';
+      btnRestoreWeek.addEventListener('click', () => {
+        item.done = false;
+        item.doneAt = null;
+        item.bucket = 'week';
+        item.updatedAt = Date.now();
+        saveItems();
+        renderAll();
+        showToast(`已將「${item.text}」復原至這週工作桌`);
+      });
+      triageBtns.appendChild(btnRestoreWeek);
+
+      const btnDel = document.createElement('button');
+      btnDel.className = 'btn-delete-card';
+      btnDel.textContent = '刪除此紀錄';
+      btnDel.addEventListener('click', () => {
+        if (confirm(`確定要永久刪除「${item.text}」的紀錄嗎？`)) {
+          deleteItem(item.id);
+          showToast('已從歷史檔案庫中刪除');
+        }
+      });
+
+      actionsRow.appendChild(triageBtns);
+      actionsRow.appendChild(btnDel);
+      card.appendChild(actionsRow);
+
+      listEl.appendChild(card);
+    });
+  }
+
+  // 匯出歷史封存檔案為 Markdown
+  function exportHistoryMarkdown() {
+    const completedItems = items.filter(it => it.done && !it.parentId);
+    if (completedItems.length === 0) {
+      showToast('目前尚無完成任務可供匯出');
+      return;
+    }
+
+    const groups = {};
+    completedItems.forEach(it => {
+      const key = it.doneAt ? getWeekKey(new Date(it.doneAt)) : '未知週別';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(it);
+    });
+
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    let md = `# Task Desk - 歷史完成任務封存檔案\n`;
+    md += `*匯出時間：${now.toLocaleString()}*\n`;
+    md += `*總完成件數：${completedItems.length} 件*\n\n---\n\n`;
+
+    const sortedWeeks = Object.keys(groups).sort().reverse();
+    sortedWeeks.forEach(weekKey => {
+      const range = weekKey === '未知週別' ? '' : ` (${getWeekDateRangeStr(weekKey)})`;
+      md += `## ${weekKey}${range} - 完成 ${groups[weekKey].length} 件\n\n`;
+      groups[weekKey].forEach(it => {
+        const doneTime = it.doneAt ? new Date(it.doneAt).toLocaleString() : '未知時間';
+        const size = it.size || guessSize(it.text, it.typeId);
+        const sizeMap = { small: '小 15-30m', medium: '中 1-2h', large: '大 2h+' };
+        const typeObj = getTypeById(it.typeId);
+        const typeName = typeObj ? typeObj.name : '未分類';
+        md += `- [x] **${it.text}**\n  - 尺寸：${sizeMap[size] || size} | 類型：${typeName} | 完成時間：${doneTime}\n`;
+      });
+      md += `\n`;
+    });
+
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `TaskDesk-History-${dateStr}.md`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast(`已匯出 Markdown 歷史檔案 (${completedItems.length} 件)`);
+  }
+
+  // 匯出歷史封存檔案為 JSON
+  function exportHistoryJson() {
+    const completedItems = items.filter(it => it.done && !it.parentId);
+    if (completedItems.length === 0) {
+      showToast('目前尚無完成任務可供匯出');
+      return;
+    }
+
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    const data = {
+      app: 'Task Desk',
+      type: 'completed-tasks-archive',
+      exportedAt: Date.now(),
+      totalCount: completedItems.length,
+      tasks: completedItems
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `TaskDesk-History-${dateStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast(`已匯出 JSON 歷史檔案 (${completedItems.length} 件)`);
+  }
+
   // --- 狀態諮詢介面互動 ---
   function openConsultModal() {
     consultState.turnsRemaining = 5;
@@ -1882,24 +1935,12 @@ ${JSON.stringify(itemsPayload)}
       return;
     }
 
-    // 符合項目存在：優先嘗試 Gemini API，失敗或無金鑰則使用本機規則建議
-    let recommendations = [];
-    if (settings.geminiApiKey && settings.geminiApiKey.trim()) {
-      try {
-        recommendations = await callGeminiConsult(candidates, userState);
-      } catch (err) {
-        console.warn('Gemini 諮詢呼叫失敗，改用本機規則推薦:', err);
-      }
-    }
-
-    // 若無 Gemini 結果或 API 失敗：本機挑選前 2 件
-    if (recommendations.length === 0) {
-      const topPicks = candidates.slice(0, 2);
-      recommendations = topPicks.map(entry => ({
-        entry,
-        reason: '符合您目前設定的地點、可用時間與精神體力條件。'
-      }));
-    }
+    // 符合項目存在：直接使用本機規則客觀推薦前 2 件
+    const topPicks = candidates.slice(0, 2);
+    const recommendations = topPicks.map(entry => ({
+      entry,
+      reason: '符合您目前設定的地點、可用時間與精神體力條件。'
+    }));
 
     renderConsultResults(recommendations);
   }
@@ -1977,75 +2018,6 @@ ${JSON.stringify(itemsPayload)}
     bottomBar.appendChild(btnRandom);
     bottomBar.appendChild(btnDismiss);
     resultArea.appendChild(bottomBar);
-
-    // 顯示追問區域（若有 API 金鑰）
-    if (settings.geminiApiKey && settings.geminiApiKey.trim()) {
-      const dialogArea = document.getElementById('consultDialogArea');
-      dialogArea.style.display = 'flex';
-      updateFollowupInputState();
-    }
-  }
-
-  function updateFollowupInputState() {
-    const input = document.getElementById('consultFollowupInput');
-    const btn = document.getElementById('btnSendFollowup');
-    if (!input || !btn) return;
-
-    if (consultState.turnsRemaining <= 0) {
-      input.disabled = true;
-      input.placeholder = '已達對話輪數上限（5 輪）';
-      btn.disabled = true;
-    } else {
-      input.placeholder = `簡短詢問或備註（剩餘 ${consultState.turnsRemaining} 輪）`;
-    }
-  }
-
-  async function sendConsultFollowup() {
-    if (consultState.turnsRemaining <= 0) return;
-    const input = document.getElementById('consultFollowupInput');
-    const text = input.value.trim();
-    if (!text) return;
-
-    input.value = '';
-    consultState.turnsRemaining -= 1;
-    updateFollowupInputState();
-
-    const messagesArea = document.getElementById('dialogMessages');
-    const userMsg = document.createElement('div');
-    userMsg.className = 'dialog-bubble-user';
-    userMsg.textContent = text;
-    messagesArea.appendChild(userMsg);
-
-    const aiMsg = document.createElement('div');
-    aiMsg.className = 'dialog-bubble-ai';
-    aiMsg.textContent = '思考中…';
-    messagesArea.appendChild(aiMsg);
-
-    try {
-      const apiKey = settings.geminiApiKey.trim();
-      const model = settings.geminiModel || 'gemini-2.5-flash';
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-      const prompt = `你是任務選擇的輔助。保持簡短、中性、只給選項、不下命令。
-使用者說：${text}
-目前候選清單：${consultState.candidates.map(c => c.displayText).join('、')}
-請用一到兩句話簡短中性回覆。`;
-
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 150 }
-        })
-      });
-
-      const data = await resp.json();
-      const answer = data.candidates?.[0]?.content?.parts?.[0]?.text || '無回覆內容';
-      aiMsg.textContent = answer.trim();
-    } catch (e) {
-      aiMsg.textContent = '回覆失敗或網路離線。請保持中性，自行決定是否採用。';
-    }
   }
 
   // --- 資料匯出與匯入 ---
@@ -2477,8 +2449,8 @@ ${JSON.stringify(itemsPayload)}
       tabWeek.addEventListener('click', () => switchWorkbench('week'));
     }
 
-    // 折疊區塊切換 (Inbox, Keep, Release)
-    ['folderInbox', 'folderKeep', 'folderRelease'].forEach(folderId => {
+    // 折疊區塊切換 (Inbox, Keep, Release, History)
+    ['folderInbox', 'folderKeep', 'folderRelease', 'folderHistory'].forEach(folderId => {
       const folderEl = document.getElementById(folderId);
       const headerEl = document.getElementById(folderId + 'Header');
       if (folderEl && headerEl) {
@@ -2487,6 +2459,12 @@ ${JSON.stringify(itemsPayload)}
         });
       }
     });
+
+    // 歷史檔案匯出按鈕
+    const btnExpHistMd = document.getElementById('btnExportHistoryMd');
+    if (btnExpHistMd) btnExpHistMd.addEventListener('click', exportHistoryMarkdown);
+    const btnExpHistJson = document.getElementById('btnExportHistoryJson');
+    if (btnExpHistJson) btnExpHistJson.addEventListener('click', exportHistoryJson);
 
     // Header 按鈕：幫我選 (狀態諮詢)
     document.getElementById('btnOpenConsult').addEventListener('click', openConsultModal);
@@ -2514,10 +2492,6 @@ ${JSON.stringify(itemsPayload)}
     });
 
     document.getElementById('btnRunConsult').addEventListener('click', executeConsultation);
-    document.getElementById('btnSendFollowup').addEventListener('click', sendConsultFollowup);
-    document.getElementById('consultFollowupInput').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') sendConsultFollowup();
-    });
 
     // Header 按鈕：完成紀錄
     document.getElementById('btnOpenHistory').addEventListener('click', () => {
@@ -2867,10 +2841,7 @@ ${JSON.stringify(itemsPayload)}
       if (inputSafeTop) inputSafeTop.value = safeTopVal;
       if (valSafeTopText) valSafeTopText.textContent = `${safeTopVal}px`;
 
-      document.getElementById('settingAutoGuess').checked = settings.autoGuess;
       document.getElementById('settingIncludeKeep').checked = settings.includeKeepInConsult;
-      document.getElementById('settingApiKey').value = settings.geminiApiKey || '';
-      document.getElementById('settingModel').value = settings.geminiModel || 'gemini-2.5-flash';
       document.getElementById('settingPinLock').checked = !!settings.pinLock;
       document.getElementById('pinInputGroup').style.display = settings.pinLock ? 'block' : 'none';
       document.getElementById('settingPinPass').value = '';
@@ -2907,18 +2878,6 @@ ${JSON.stringify(itemsPayload)}
       modalSettings.style.display = 'none';
     });
 
-    document.getElementById('btnToggleApiKeyShow').addEventListener('click', () => {
-      const input = document.getElementById('settingApiKey');
-      const btn = document.getElementById('btnToggleApiKeyShow');
-      if (input.type === 'password') {
-        input.type = 'text';
-        btn.textContent = '隱藏';
-      } else {
-        input.type = 'password';
-        btn.textContent = '顯示';
-      }
-    });
-
     document.getElementById('btnSaveSettings').addEventListener('click', async () => {
       const inputTodaySmall = document.getElementById('settingTodaySmallLimit');
       if (inputTodaySmall) {
@@ -2944,10 +2903,7 @@ ${JSON.stringify(itemsPayload)}
         }
       }
 
-      settings.autoGuess = document.getElementById('settingAutoGuess').checked;
       settings.includeKeepInConsult = document.getElementById('settingIncludeKeep').checked;
-      settings.geminiApiKey = document.getElementById('settingApiKey').value.trim();
-      settings.geminiModel = document.getElementById('settingModel').value;
 
       const isPinLocked = document.getElementById('settingPinLock').checked;
       const newPin = document.getElementById('settingPinPass').value.trim();

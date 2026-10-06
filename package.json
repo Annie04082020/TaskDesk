@@ -1,10 +1,12 @@
 {
   "name": "taskdesk",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "個人任務工作桌 (Task Desk) - PWA & Android App",
   "main": "app.js",
   "scripts": {
     "start": "python -m http.server 8080",
+    "build": "node build.js",
+    "setup:widgets": "node setup-widgets.js",
     "cap:add": "cap add android",
     "cap:sync": "cap sync",
     "cap:open": "cap open android"

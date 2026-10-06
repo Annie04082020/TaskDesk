@@ -46,9 +46,14 @@ jobs:
           npm ci || npm install
           node build.js
 
-      - name: Add Capacitor Android platform
+      - name: Setup Capacitor Android platform & Widgets
         run: |
-          npx cap add android
+          if [ ! -d "android" ]; then
+            npx cap add android
+          else
+            npx cap sync android
+          fi
+          node setup-widgets.js
 
       - name: Build Android APK
         env:

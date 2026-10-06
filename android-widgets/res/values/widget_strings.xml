@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_today_label">Task Desk · 今日任務</string>
+    <string name="widget_today_desc">在桌面即時檢視今日工作桌重點任務與進度。</string>
+
+    <string name="widget_now_label">Task Desk · 當前專注</string>
+    <string name="widget_now_desc">在桌面釘選您目前正標記為「現在」的單一焦點任務。</string>
+
+    <string name="widget_capture_label">Task Desk · 快速收集</string>
+    <string name="widget_capture_desc">一鍵從桌面開啟輸入框，即時捕捉靈感與待辦事項。</string>
+</resources>
