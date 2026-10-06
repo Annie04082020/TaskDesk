@@ -99,7 +99,9 @@
   let rules = DEFAULT_RULES;
   let items = [];
   let settings = {
-    weekLimit: 3,
+    todaySmallLimit: 3,
+    weekMediumLargeLimit: 3,
+    weekLimit: 3, // 相容舊版
     theme: 'dark',
     safeTop: 56,
     autoGuess: true,
@@ -109,6 +111,8 @@
     pinLock: false,
     pinHash: ''
   };
+
+  let activeWorkbench = 'today'; // 'today' | 'week'
 
   let syncConfig = {
     githubToken: '',
@@ -150,7 +154,15 @@
     try {
       const saved = localStorage.getItem(STORAGE_KEY_SETTINGS);
       if (saved) {
-        settings = Object.assign({}, settings, JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        settings = Object.assign({}, settings, parsed);
+        // 向前相容既有設定
+        if (typeof parsed.todaySmallLimit !== 'number') {
+          settings.todaySmallLimit = 3;
+        }
+        if (typeof parsed.weekMediumLargeLimit !== 'number') {
+          settings.weekMediumLargeLimit = typeof parsed.weekLimit === 'number' ? parsed.weekLimit : 3;
+        }
       }
     } catch (e) {
       console.warn('載入設定失敗:', e);
@@ -184,11 +196,81 @@
     }
   }
 
+  // --- 任務大小與耗時預估 (小 15-30m / 中 1-2h / 大 2h+) ---
+  function guessSize(text, typeId) {
+    if (!text) return 'small';
+    const lower = text.toLowerCase();
+
+    // 大任務關鍵詞 (2h+ 深度專案、論文、重大工作)
+    const largeKeywords = [
+      '論文', '專案', '專題', '架構', '重構', '期末', '考科', '大掃除',
+      '整天', '全天', '系統設計', '複習全部', '完整', '大批'
+    ];
+    for (const kw of largeKeywords) {
+      if (lower.includes(kw)) return 'large';
+    }
+    if (typeId === 'bulk_organize') return 'large';
+
+    // 中任務關鍵詞 (1-2h 專注時段)
+    const mediumKeywords = [
+      '寫程式', '研究', '組裝', '測試', '實驗', '修繕', '製作', '重訓',
+      '運動', '跑步', '閱讀', '章節', '練習', 'code', 'coding', '報告', '讀書'
+    ];
+    for (const kw of mediumKeywords) {
+      if (lower.includes(kw)) return 'medium';
+    }
+    if (typeId === 'deep_focus' || typeId === 'hands_on' || typeId === 'physical') {
+      return 'medium';
+    }
+
+    // 預設為小任務 (15-30m 行政雜事、回信、繳費、整理)
+    return 'small';
+  }
+
+  // 切換「今日」與「本週」工作桌
+  function switchWorkbench(target) {
+    activeWorkbench = target === 'week' ? 'week' : 'today';
+    const tabToday = document.getElementById('tabWorkbenchToday');
+    const tabWeek = document.getElementById('tabWorkbenchWeek');
+    const secToday = document.getElementById('sectionToday');
+    const secWeek = document.getElementById('sectionWeek');
+
+    if (activeWorkbench === 'today') {
+      if (tabToday) {
+        tabToday.classList.add('active');
+        tabToday.setAttribute('aria-selected', 'true');
+      }
+      if (tabWeek) {
+        tabWeek.classList.remove('active');
+        tabWeek.setAttribute('aria-selected', 'false');
+      }
+      if (secToday) secToday.style.display = 'block';
+      if (secWeek) secWeek.style.display = 'none';
+    } else {
+      if (tabToday) {
+        tabToday.classList.remove('active');
+        tabToday.setAttribute('aria-selected', 'false');
+      }
+      if (tabWeek) {
+        tabWeek.classList.add('active');
+        tabWeek.setAttribute('aria-selected', 'true');
+      }
+      if (secToday) secToday.style.display = 'none';
+      if (secWeek) secWeek.style.display = 'block';
+    }
+  }
+
   function loadItems() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_ITEMS);
       if (saved) {
         items = JSON.parse(saved);
+        // 確保每個任務都有 size 屬性
+        items.forEach(it => {
+          if (!it.size) {
+            it.size = guessSize(it.text, it.typeId);
+          }
+        });
       }
     } catch (e) {
       console.warn('載入任務失敗:', e);
@@ -460,16 +542,18 @@
   }
 
   // --- 核心業務邏輯：新增項目 ---
-  async function addItemsToInbox(rawTexts) {
+  async function addItemsToInbox(rawTexts, explicitSize) {
     if (!rawTexts || rawTexts.length === 0) return;
 
     const newItems = [];
     for (const text of rawTexts) {
       // 立即使用本機關鍵字備案作為初值
       const keywordGuessedType = guessTypeByKeywords(text);
+      const itemSize = explicitSize || guessSize(text, keywordGuessedType);
       const item = {
         id: generateId(),
         text: text,
+        size: itemSize, // 'small' | 'medium' | 'large'
         bucket: 'inbox',
         isNow: false,
         done: false,
@@ -595,6 +679,7 @@ ${JSON.stringify(itemsPayload)}
               items.push({
                 id: generateId(),
                 text: subText.trim(),
+                size: 'small',
                 bucket: targetItem.bucket,
                 isNow: false,
                 done: false,
@@ -619,16 +704,36 @@ ${JSON.stringify(itemsPayload)}
     if (!item) return;
 
     item.updatedAt = Date.now();
+    const itemSize = item.size || guessSize(item.text, item.typeId);
 
-    if (targetBucket === 'week') {
-      // 檢查「這週」上限（母任務+子任務僅算一件頂層項目）
-      const currentWeekCount = items.filter(it => it.bucket === 'week' && !it.parentId && !it.done).length;
-      if (item.bucket !== 'week' && currentWeekCount >= settings.weekLimit) {
-        showToast(`這週已滿 ${settings.weekLimit} 件，要先移走一件或完成一件`);
-        return;
+    if (targetBucket === 'today') {
+      // 檢查「今日」小任務上限（母任務僅算一件頂層項目）
+      if (itemSize === 'small') {
+        const currentTodaySmallCount = items.filter(it => 
+          it.bucket === 'today' && !it.parentId && !it.done && 
+          (it.size || guessSize(it.text, it.typeId)) === 'small'
+        ).length;
+
+        if (item.bucket !== 'today' && currentTodaySmallCount >= settings.todaySmallLimit) {
+          showToast(`今日小任務已滿 ${settings.todaySmallLimit} 件，要先移走一件或完成一件`);
+          return;
+        }
+      }
+    } else if (targetBucket === 'week') {
+      // 檢查「這週」中與大任務上限
+      if (itemSize === 'medium' || itemSize === 'large') {
+        const currentWeekMedLargeCount = items.filter(it => 
+          it.bucket === 'week' && !it.parentId && !it.done && 
+          ['medium', 'large'].includes(it.size || guessSize(it.text, it.typeId))
+        ).length;
+
+        if (item.bucket !== 'week' && currentWeekMedLargeCount >= settings.weekMediumLargeLimit) {
+          showToast(`這週中/大任務已滿 ${settings.weekMediumLargeLimit} 件，要先移走一件或完成一件`);
+          return;
+        }
       }
     } else {
-      // 若移出「這週」，取消其「現在」標記
+      // 若移出「今日」與「這週」，取消其「現在」標記
       if (item.isNow) {
         item.isNow = false;
       }
@@ -659,17 +764,38 @@ ${JSON.stringify(itemsPayload)}
         it.isNow = false;
       });
       item.isNow = true;
-      // 確保該項目在「這週」
-      if (item.bucket !== 'week') {
-        const currentWeekCount = items.filter(it => it.bucket === 'week' && !it.parentId && !it.done).length;
-        if (currentWeekCount >= settings.weekLimit) {
-          showToast(`這週已滿 ${settings.weekLimit} 件，無法將此項目移至這週`);
-          item.isNow = false;
-          saveItems();
-          renderAll();
-          return;
+
+      // 若該項目不在「今日」也不在「這週」，移入當前開啟的工作桌
+      if (item.bucket !== 'today' && item.bucket !== 'week') {
+        const targetBucket = activeWorkbench === 'week' ? 'week' : 'today';
+        const itemSize = item.size || guessSize(item.text, item.typeId);
+
+        if (targetBucket === 'today' && itemSize === 'small') {
+          const currentTodaySmallCount = items.filter(it => 
+            it.bucket === 'today' && !it.parentId && !it.done && 
+            (it.size || guessSize(it.text, it.typeId)) === 'small'
+          ).length;
+          if (currentTodaySmallCount >= settings.todaySmallLimit) {
+            showToast(`今日小任務已滿 ${settings.todaySmallLimit} 件，無法將此項目移至今日`);
+            item.isNow = false;
+            saveItems();
+            renderAll();
+            return;
+          }
+        } else if (targetBucket === 'week' && (itemSize === 'medium' || itemSize === 'large')) {
+          const currentWeekMedLargeCount = items.filter(it => 
+            it.bucket === 'week' && !it.parentId && !it.done && 
+            ['medium', 'large'].includes(it.size || guessSize(it.text, it.typeId))
+          ).length;
+          if (currentWeekMedLargeCount >= settings.weekMediumLargeLimit) {
+            showToast(`這週中/大任務已滿 ${settings.weekMediumLargeLimit} 件，無法將此項目移至這週`);
+            item.isNow = false;
+            saveItems();
+            renderAll();
+            return;
+          }
         }
-        item.bucket = 'week';
+        item.bucket = targetBucket;
       }
     }
 
@@ -749,6 +875,7 @@ ${JSON.stringify(itemsPayload)}
     items.push({
       id: generateId(),
       text: subText.trim(),
+      size: 'small',
       bucket: parent.bucket,
       isNow: false,
       done: false,
@@ -830,7 +957,7 @@ ${JSON.stringify(itemsPayload)}
     // 取得候選庫：未完成的「這週」項目（及可選的「保溫」項目）
     const candidateTopItems = items.filter(it => {
       if (it.done || it.parentId) return false;
-      if (it.bucket === 'week') return true;
+      if (it.bucket === 'today' || it.bucket === 'week') return true;
       if (settings.includeKeepInConsult && it.bucket === 'keep') return true;
       return false;
     });
@@ -946,6 +1073,8 @@ ${JSON.stringify(itemsPayload)}
   // --- 畫面渲染 ---
   function renderAll() {
     renderWeekCounter();
+    renderWorkbenchCounters();
+    renderToday();
     renderWeek();
     renderInbox();
     renderKeep();
@@ -1022,6 +1151,23 @@ ${JSON.stringify(itemsPayload)}
       openTypePicker(item.id, typeChip);
     });
     metaRow.appendChild(typeChip);
+
+    // 尺寸 Chip
+    const itemSize = item.size || guessSize(item.text, item.typeId);
+    const sizeChip = document.createElement('span');
+    sizeChip.className = `chip chip-size chip-size-${itemSize}`;
+    const sizeLabelMap = {
+      small: '小 15-30m',
+      medium: '中 1-2h',
+      large: '大 2h+'
+    };
+    sizeChip.textContent = sizeLabelMap[itemSize] || '小 15-30m';
+    sizeChip.title = '點擊變更任務大小與耗時預估';
+    sizeChip.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openSizePicker(item.id, sizeChip);
+    });
+    metaRow.appendChild(sizeChip);
 
     // AI 協助中性標籤
     if (typeObj && typeObj.aiAssist) {
@@ -1115,6 +1261,12 @@ ${JSON.stringify(itemsPayload)}
     triageBtns.className = 'card-triage-btns';
 
     if (bucketContext === 'inbox') {
+      const btnToToday = document.createElement('button');
+      btnToToday.className = 'btn-triage';
+      btnToToday.textContent = '今日';
+      btnToToday.addEventListener('click', () => moveItemBucket(item.id, 'today'));
+      triageBtns.appendChild(btnToToday);
+
       const btnToWeek = document.createElement('button');
       btnToWeek.className = 'btn-triage';
       btnToWeek.textContent = '這週';
@@ -1132,6 +1284,37 @@ ${JSON.stringify(itemsPayload)}
       btnToRelease.textContent = '放生';
       btnToRelease.addEventListener('click', () => moveItemBucket(item.id, 'release'));
       triageBtns.appendChild(btnToRelease);
+    } else if (bucketContext === 'today') {
+      // 「現在」切換按鈕
+      const btnNow = document.createElement('button');
+      btnNow.className = `btn-now-toggle ${item.isNow ? 'is-active' : ''}`;
+      btnNow.textContent = item.isNow ? '取消「現在」' : '設為「現在」';
+      btnNow.addEventListener('click', () => toggleItemNow(item.id));
+      triageBtns.appendChild(btnNow);
+
+      const btnToWeek = document.createElement('button');
+      btnToWeek.className = 'btn-triage';
+      btnToWeek.textContent = '移至這週';
+      btnToWeek.addEventListener('click', () => moveItemBucket(item.id, 'week'));
+      triageBtns.appendChild(btnToWeek);
+
+      const btnToKeep = document.createElement('button');
+      btnToKeep.className = 'btn-triage';
+      btnToKeep.textContent = '移至保溫';
+      btnToKeep.addEventListener('click', () => moveItemBucket(item.id, 'keep'));
+      triageBtns.appendChild(btnToKeep);
+
+      const btnToRelease = document.createElement('button');
+      btnToRelease.className = 'btn-triage';
+      btnToRelease.textContent = '移至放生';
+      btnToRelease.addEventListener('click', () => moveItemBucket(item.id, 'release'));
+      triageBtns.appendChild(btnToRelease);
+
+      const btnToInbox = document.createElement('button');
+      btnToInbox.className = 'btn-triage';
+      btnToInbox.textContent = '退回收集箱';
+      btnToInbox.addEventListener('click', () => moveItemBucket(item.id, 'inbox'));
+      triageBtns.appendChild(btnToInbox);
     } else if (bucketContext === 'week') {
       // 「現在」切換按鈕
       const btnNow = document.createElement('button');
@@ -1139,6 +1322,12 @@ ${JSON.stringify(itemsPayload)}
       btnNow.textContent = item.isNow ? '取消「現在」' : '設為「現在」';
       btnNow.addEventListener('click', () => toggleItemNow(item.id));
       triageBtns.appendChild(btnNow);
+
+      const btnToToday = document.createElement('button');
+      btnToToday.className = 'btn-triage';
+      btnToToday.textContent = '移至今日';
+      btnToToday.addEventListener('click', () => moveItemBucket(item.id, 'today'));
+      triageBtns.appendChild(btnToToday);
 
       const btnToKeep = document.createElement('button');
       btnToKeep.className = 'btn-triage';
@@ -1158,6 +1347,12 @@ ${JSON.stringify(itemsPayload)}
       btnToInbox.addEventListener('click', () => moveItemBucket(item.id, 'inbox'));
       triageBtns.appendChild(btnToInbox);
     } else if (bucketContext === 'keep') {
+      const btnToToday = document.createElement('button');
+      btnToToday.className = 'btn-triage';
+      btnToToday.textContent = '移至今日';
+      btnToToday.addEventListener('click', () => moveItemBucket(item.id, 'today'));
+      triageBtns.appendChild(btnToToday);
+
       const btnToWeek = document.createElement('button');
       btnToWeek.className = 'btn-triage';
       btnToWeek.textContent = '移至這週';
@@ -1176,6 +1371,12 @@ ${JSON.stringify(itemsPayload)}
       btnToInbox.addEventListener('click', () => moveItemBucket(item.id, 'inbox'));
       triageBtns.appendChild(btnToInbox);
     } else if (bucketContext === 'release') {
+      const btnToToday = document.createElement('button');
+      btnToToday.className = 'btn-triage';
+      btnToToday.textContent = '移至今日';
+      btnToToday.addEventListener('click', () => moveItemBucket(item.id, 'today'));
+      triageBtns.appendChild(btnToToday);
+
       const btnToWeek = document.createElement('button');
       btnToWeek.className = 'btn-triage';
       btnToWeek.textContent = '移至這週';
@@ -1209,6 +1410,64 @@ ${JSON.stringify(itemsPayload)}
     return card;
   }
 
+  // 渲染工作桌頁籤計數
+  function renderWorkbenchCounters() {
+    const todayTabBadge = document.getElementById('todayTabBadge');
+    const weekTabBadge = document.getElementById('weekTabBadge');
+
+    const todayCount = items.filter(it => it.bucket === 'today' && !it.parentId && !it.done).length;
+    const weekCount = items.filter(it => it.bucket === 'week' && !it.parentId && !it.done).length;
+
+    if (todayTabBadge) todayTabBadge.textContent = todayCount;
+    if (weekTabBadge) weekTabBadge.textContent = weekCount;
+  }
+
+  // 渲染「今日」清單
+  function renderToday() {
+    const listEl = document.getElementById('todayCardList');
+    const badgeEl = document.getElementById('todayCountBadge');
+    const noticeEl = document.getElementById('todayLimitNotice');
+    if (!listEl) return;
+
+    listEl.innerHTML = '';
+    const todayItems = items.filter(it => it.bucket === 'today' && !it.parentId && !it.done);
+
+    // 排序：將 isNow 項目排在最頂端
+    todayItems.sort((a, b) => {
+      if (a.isNow) return -1;
+      if (b.isNow) return 1;
+      return a.createdAt - b.createdAt;
+    });
+
+    const smallCount = todayItems.filter(it => (it.size || guessSize(it.text, it.typeId)) === 'small').length;
+
+    if (badgeEl) {
+      badgeEl.textContent = `${smallCount} / ${settings.todaySmallLimit} (小)`;
+    }
+
+    if (noticeEl) {
+      if (smallCount >= settings.todaySmallLimit) {
+        noticeEl.textContent = `小任務已達上限（${settings.todaySmallLimit} 件）`;
+        noticeEl.style.color = 'var(--accent-primary)';
+      } else {
+        noticeEl.textContent = `小任務上限 ${settings.todaySmallLimit} 件（總計 ${todayItems.length} 件）`;
+        noticeEl.style.color = '';
+      }
+    }
+
+    if (todayItems.length === 0) {
+      const emptyMsg = document.createElement('div');
+      emptyMsg.className = 'empty-neutral';
+      emptyMsg.textContent = '今日工作桌目前沒有項目。可從收集箱點選「今日」移入。';
+      listEl.appendChild(emptyMsg);
+      return;
+    }
+
+    todayItems.forEach(item => {
+      listEl.appendChild(createCardElement(item, 'today'));
+    });
+  }
+
   // 渲染「這週」清單
   function renderWeek() {
     const listEl = document.getElementById('weekCardList');
@@ -1226,12 +1485,23 @@ ${JSON.stringify(itemsPayload)}
       return a.createdAt - b.createdAt;
     });
 
-    badgeEl.textContent = `${weekItems.length} / ${settings.weekLimit}`;
+    const medLargeCount = weekItems.filter(it => {
+      const s = it.size || guessSize(it.text, it.typeId);
+      return s === 'medium' || s === 'large';
+    }).length;
 
-    if (weekItems.length >= settings.weekLimit) {
-      noticeEl.textContent = `已達上限（${settings.weekLimit} 件）`;
-    } else {
-      noticeEl.textContent = '';
+    if (badgeEl) {
+      badgeEl.textContent = `${medLargeCount} / ${settings.weekMediumLargeLimit} (中/大)`;
+    }
+
+    if (noticeEl) {
+      if (medLargeCount >= settings.weekMediumLargeLimit) {
+        noticeEl.textContent = `中/大任務已達上限（${settings.weekMediumLargeLimit} 件）`;
+        noticeEl.style.color = 'var(--accent-primary)';
+      } else {
+        noticeEl.textContent = `中/大任務上限 ${settings.weekMediumLargeLimit} 件（總計 ${weekItems.length} 件）`;
+        noticeEl.style.color = '';
+      }
     }
 
     if (weekItems.length === 0) {
@@ -1366,6 +1636,73 @@ ${JSON.stringify(itemsPayload)}
     }
 
     // 靠右邊界防溢出
+    if (left + menuWidth > window.innerWidth - 10) {
+      left = Math.max(10, window.innerWidth - menuWidth - 10);
+    }
+
+    menu.style.top = `${top}px`;
+    menu.style.left = `${left}px`;
+
+    const closeHandler = (e) => {
+      if (!menu.contains(e.target) && e.target !== targetEl) {
+        menu.remove();
+        document.removeEventListener('click', closeHandler);
+        window.removeEventListener('scroll', closeHandler, true);
+        window.removeEventListener('resize', closeHandler);
+      }
+    };
+    setTimeout(() => {
+      document.addEventListener('click', closeHandler);
+      window.addEventListener('scroll', closeHandler, true);
+      window.addEventListener('resize', closeHandler);
+    }, 10);
+  }
+
+  // --- 尺寸選擇下拉選單 (全域浮動層，脫離卡片與資料夾層疊限制) ---
+  function openSizePicker(itemId, targetEl) {
+    const existing = document.querySelector('.size-picker-menu');
+    if (existing) existing.remove();
+
+    const menu = document.createElement('div');
+    menu.className = 'type-picker-menu size-picker-menu';
+
+    const item = items.find(it => it.id === itemId);
+    const currentSize = item ? (item.size || guessSize(item.text, item.typeId)) : 'small';
+
+    const sizeOptions = [
+      { id: 'small', title: '小 (15-30m)', desc: '微型任務、行政雜事、回信' },
+      { id: 'medium', title: '中 (1-2h)', desc: '特定模組、中度專注時段' },
+      { id: 'large', title: '大 (2h+)', desc: '重大專案、論文、深度研讀' }
+    ];
+
+    sizeOptions.forEach(opt => {
+      const optEl = document.createElement('div');
+      optEl.className = `type-picker-item ${currentSize === opt.id ? 'active' : ''}`;
+      optEl.innerHTML = `<div style="font-weight: 600; font-family: var(--font-mono);">${opt.title}</div><div style="font-size: 0.72rem; color: var(--meta-text); line-height: 1.3; margin-top: 2px;">${opt.desc}</div>`;
+      optEl.addEventListener('click', () => {
+        if (item) {
+          item.size = opt.id;
+          item.updatedAt = Date.now();
+          saveItems();
+          renderAll();
+        }
+        menu.remove();
+      });
+      menu.appendChild(optEl);
+    });
+
+    document.body.appendChild(menu);
+
+    const rect = targetEl.getBoundingClientRect();
+    const menuWidth = 220;
+    const menuHeight = menu.offsetHeight || 190;
+
+    let top = rect.bottom + 4;
+    let left = rect.left;
+
+    if (top + menuHeight > window.innerHeight - 10) {
+      top = Math.max(10, rect.top - menuHeight - 4);
+    }
     if (left + menuWidth > window.innerWidth - 10) {
       left = Math.max(10, window.innerWidth - menuWidth - 10);
     }
@@ -1568,13 +1905,13 @@ ${JSON.stringify(itemsPayload)}
   }
 
   function pickRandomWeekItem() {
-    const uncompletedWeek = items.filter(it => it.bucket === 'week' && !it.parentId && !it.done);
-    if (uncompletedWeek.length === 0) {
-      showToast('目前「這週」沒有未完成項目');
+    const uncompletedActive = items.filter(it => (it.bucket === 'today' || it.bucket === 'week') && !it.parentId && !it.done);
+    if (uncompletedActive.length === 0) {
+      showToast('目前「今日」或「這週」沒有未完成項目');
       document.getElementById('modalConsult').style.display = 'none';
       return;
     }
-    const chosen = uncompletedWeek[Math.floor(Math.random() * uncompletedWeek.length)];
+    const chosen = uncompletedActive[Math.floor(Math.random() * uncompletedActive.length)];
     toggleItemNow(chosen.id);
     showToast(`已隨機將「${chosen.text}」設為「現在」`);
     document.getElementById('modalConsult').style.display = 'none';
@@ -2095,6 +2432,19 @@ ${JSON.stringify(itemsPayload)}
 
   // --- 事件監聽配置 ---
   function setupEventListeners() {
+    // 收集箱尺寸選擇器
+    let selectedCaptureSize = 'small';
+    const sizeSelector = document.getElementById('captureSizeSelector');
+    if (sizeSelector) {
+      sizeSelector.querySelectorAll('.size-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          sizeSelector.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          selectedCaptureSize = btn.dataset.size || 'small';
+        });
+      });
+    }
+
     // 收集箱批次送出
     const btnCapture = document.getElementById('btnCaptureSubmit');
     const inputCapture = document.getElementById('inputCapture');
@@ -2104,7 +2454,7 @@ ${JSON.stringify(itemsPayload)}
       if (!raw || !raw.trim()) return;
       const parsed = parseBatchInput(raw);
       if (parsed.length > 0) {
-        addItemsToInbox(parsed);
+        addItemsToInbox(parsed, selectedCaptureSize);
         inputCapture.value = '';
         showToast(`已將 ${parsed.length} 件項目加入收集箱`);
       }
@@ -2116,6 +2466,16 @@ ${JSON.stringify(itemsPayload)}
         handleCapture();
       }
     });
+
+    // 工作桌頁籤切換 (今日 / 本週)
+    const tabToday = document.getElementById('tabWorkbenchToday');
+    const tabWeek = document.getElementById('tabWorkbenchWeek');
+    if (tabToday) {
+      tabToday.addEventListener('click', () => switchWorkbench('today'));
+    }
+    if (tabWeek) {
+      tabWeek.addEventListener('click', () => switchWorkbench('week'));
+    }
 
     // 折疊區塊切換 (Inbox, Keep, Release)
     ['folderInbox', 'folderKeep', 'folderRelease'].forEach(folderId => {
@@ -2495,7 +2855,11 @@ ${JSON.stringify(itemsPayload)}
     // Header 按鈕：設定
     const modalSettings = document.getElementById('modalSettings');
     document.getElementById('btnOpenSettings').addEventListener('click', () => {
-      document.getElementById('settingWeekLimit').value = settings.weekLimit;
+      const inputTodaySmall = document.getElementById('settingTodaySmallLimit');
+      if (inputTodaySmall) inputTodaySmall.value = settings.todaySmallLimit || 3;
+      const inputWeekMedLarge = document.getElementById('settingWeekMediumLargeLimit');
+      if (inputWeekMedLarge) inputWeekMedLarge.value = settings.weekMediumLargeLimit || 3;
+
       document.getElementById('settingTheme').value = settings.theme;
       const safeTopVal = settings.safeTop || 56;
       const inputSafeTop = document.getElementById('settingSafeTop');
@@ -2556,9 +2920,18 @@ ${JSON.stringify(itemsPayload)}
     });
 
     document.getElementById('btnSaveSettings').addEventListener('click', async () => {
-      const newLimit = parseInt(document.getElementById('settingWeekLimit').value, 10);
-      if (!isNaN(newLimit) && newLimit > 0) {
-        settings.weekLimit = newLimit;
+      const inputTodaySmall = document.getElementById('settingTodaySmallLimit');
+      if (inputTodaySmall) {
+        const val = parseInt(inputTodaySmall.value, 10);
+        if (!isNaN(val) && val > 0) settings.todaySmallLimit = val;
+      }
+      const inputWeekMedLarge = document.getElementById('settingWeekMediumLargeLimit');
+      if (inputWeekMedLarge) {
+        const val = parseInt(inputWeekMedLarge.value, 10);
+        if (!isNaN(val) && val > 0) {
+          settings.weekMediumLargeLimit = val;
+          settings.weekLimit = val; // 同步維持相容
+        }
       }
       settings.theme = document.getElementById('settingTheme').value;
 

@@ -80,7 +80,12 @@
         rows="2"
       ></textarea>
       <div class="capture-bottom">
-        <span class="capture-hint">新想法先進收集箱，再決定去留</span>
+        <div class="capture-size-selector" id="captureSizeSelector">
+          <span class="capture-hint" style="margin-right: 2px;">大小：</span>
+          <button type="button" class="size-btn active" data-size="small" title="約 15-30 分鐘，如行政雜事、回信">小 15-30m</button>
+          <button type="button" class="size-btn" data-size="medium" title="約 1-2 小時，如特定模組、中度專注">中 1-2h</button>
+          <button type="button" class="size-btn" data-size="large" title="2 小時以上，如重大專題、深度研讀">大 2h+</button>
+        </div>
         <div class="capture-actions">
           <button id="btnCaptureSubmit" class="btn-primary">放入收集箱</button>
         </div>
@@ -89,14 +94,42 @@
 
     <!-- Main Content List -->
     <main class="main-sections">
-      <!-- Section: Week (這週 - 預設主要畫面) -->
-      <section class="section" id="sectionWeek">
+      <!-- Workbench Tabs: 今日 / 本週 -->
+      <div class="workbench-switcher" role="tablist">
+        <button type="button" class="workbench-tab-btn active" id="tabWorkbenchToday" role="tab" aria-selected="true">
+          <span class="workbench-tab-dot"></span>
+          <span class="workbench-tab-name">今日工作桌</span>
+          <span class="workbench-tab-badge" id="todayTabBadge">0</span>
+        </button>
+        <button type="button" class="workbench-tab-btn" id="tabWorkbenchWeek" role="tab" aria-selected="false">
+          <span class="workbench-tab-dot"></span>
+          <span class="workbench-tab-name">本週工作桌</span>
+          <span class="workbench-tab-badge" id="weekTabBadge">0</span>
+        </button>
+      </div>
+
+      <!-- Section: Today (今日 - 預設主要工作桌) -->
+      <section class="section" id="sectionToday">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <h2 class="section-title">今日</h2>
+            <span class="section-count-badge" id="todayCountBadge">0 / 3</span>
+          </div>
+          <span class="section-limit-notice" id="todayLimitNotice">小任務上限 3 件</span>
+        </div>
+        <div class="card-list" id="todayCardList">
+          <!-- Dynamically Rendered Today Items -->
+        </div>
+      </section>
+
+      <!-- Section: Week (這週) -->
+      <section class="section" id="sectionWeek" style="display: none;">
         <div class="section-header">
           <div class="section-title-wrap">
             <h2 class="section-title">這週</h2>
             <span class="section-count-badge" id="weekCountBadge">0 / 3</span>
           </div>
-          <span class="section-limit-notice" id="weekLimitNotice"></span>
+          <span class="section-limit-notice" id="weekLimitNotice">中/大任務上限 3 件</span>
         </div>
         <div class="card-list" id="weekCardList">
           <!-- Dynamically Rendered Week Items -->
@@ -334,9 +367,15 @@
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label class="form-label" for="settingWeekLimit">「這週」上限數量</label>
-          <div class="form-sublabel">預設 3 件，可依個人習慣調整。</div>
-          <input type="number" id="settingWeekLimit" class="form-input" min="1" max="20" value="3">
+          <label class="form-label" for="settingTodaySmallLimit">「今日」小任務上限數量</label>
+          <div class="form-sublabel">預設 3 件「小」任務（約 15-30 分鐘微型任務），可依個人節奏調整。</div>
+          <input type="number" id="settingTodaySmallLimit" class="form-input" min="1" max="20" value="3">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="settingWeekMediumLargeLimit">「這週」中與大任務上限數量</label>
+          <div class="form-sublabel">預設 3 件「中 / 大」專注任務（1-2 小時或深入專案），可依需要調整。</div>
+          <input type="number" id="settingWeekMediumLargeLimit" class="form-input" min="1" max="20" value="3">
         </div>
 
         <div class="form-group">
