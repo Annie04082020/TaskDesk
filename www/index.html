@@ -49,6 +49,12 @@
             <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
           </svg>
         </button>
+        <button id="btnLockApp" class="btn-icon" title="立即鎖定工作桌" aria-label="鎖定" style="display: none;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+        </button>
         <button id="btnOpenSettings" class="btn-icon" title="設定" aria-label="設定">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"></circle>
@@ -328,6 +334,26 @@
         </div>
 
         <div class="form-group" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+          <div class="form-toggle-row">
+            <div>
+              <div class="form-label">啟用存取密碼鎖 (PIN Lock)</div>
+              <div class="form-sublabel">開啟後需輸入密碼才能存取工作桌，即使他人共用本機亦無法查看。</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="settingPinLock">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div id="pinInputGroup" style="display: none; margin-top: 8px;">
+            <label class="form-label" for="settingPinPass">設定新密碼 / PIN 碼</label>
+            <div style="display: flex; gap: 6px; margin-top: 4px;">
+              <input type="password" id="settingPinPass" class="form-input" style="flex: 1;" placeholder="輸入解鎖密碼（留空則保留原密碼）">
+              <button type="button" id="btnTogglePinShow" class="btn-secondary" style="padding: 6px 10px; font-size: 0.75rem;">顯示</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
           <div class="form-label">資料備份與還原</div>
           <div class="form-sublabel">資料皆存於本機。建議定期匯出備份以防瀏覽器快取被清空。</div>
           <div style="display: flex; gap: 8px; margin-top: 8px;">
@@ -438,6 +464,19 @@
       <div class="modal-footer">
         <button class="btn-secondary" id="btnCloseSyncFooter">關閉</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Lock Screen Overlay -->
+  <div id="lockScreenOverlay" class="lock-screen-overlay" style="display: none;">
+    <div class="lock-screen-card">
+      <div class="brand-dot" style="width: 10px; height: 10px; margin: 0 auto; box-shadow: 0 0 15px var(--accent-primary);"></div>
+      <h2 class="lock-screen-title">Task Desk 已鎖定</h2>
+      <p class="lock-screen-desc">請輸入您的個人存取密碼以進入工作桌</p>
+      <form id="formUnlock" onsubmit="return false;" style="display: flex; flex-direction: column; gap: 12px; margin-top: 14px;">
+        <input type="password" id="inputUnlockPin" class="form-input" style="text-align: center; font-size: 1.15rem; letter-spacing: 0.25em;" placeholder="••••" autocomplete="current-password">
+        <button type="submit" id="btnDoUnlock" class="btn-primary" style="justify-content: center; padding: 10px; font-size: 0.92rem;">解鎖工作桌</button>
+      </form>
     </div>
   </div>
 

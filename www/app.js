@@ -104,7 +104,9 @@
     autoGuess: true,
     includeKeepInConsult: false,
     geminiApiKey: '',
-    geminiModel: 'gemini-2.5-flash'
+    geminiModel: 'gemini-2.5-flash',
+    pinLock: false,
+    pinHash: ''
   };
 
   let syncConfig = {
@@ -138,6 +140,7 @@
     setupEventListeners();
     setupPWA();
     renderAll();
+    checkLockOnStartup();
   }
 
   // --- 載入與儲存 ---
@@ -221,6 +224,65 @@
       document.documentElement.setAttribute('data-theme', 'light');
     } else {
       document.documentElement.removeAttribute('data-theme');
+    }
+  }
+
+  // --- 存取密碼鎖 (PIN Lock) ---
+  let isLocked = false;
+
+  async function hashPin(pin) {
+    if (!pin) return '';
+    const encoder = new TextEncoder();
+    const data = encoder.encode(pin + '_taskdesk_salt');
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function checkLockOnStartup() {
+    const btnLock = document.getElementById('btnLockApp');
+    if (settings.pinLock && settings.pinHash) {
+      if (btnLock) btnLock.style.display = 'flex';
+      lockApp();
+    } else {
+      if (btnLock) btnLock.style.display = 'none';
+    }
+  }
+
+  function lockApp() {
+    isLocked = true;
+    const overlay = document.getElementById('lockScreenOverlay');
+    const input = document.getElementById('inputUnlockPin');
+    if (overlay) {
+      overlay.style.display = 'flex';
+      if (input) {
+        input.value = '';
+        setTimeout(() => input.focus(), 80);
+      }
+    }
+  }
+
+  async function unlockApp() {
+    const input = document.getElementById('inputUnlockPin');
+    const overlay = document.getElementById('lockScreenOverlay');
+    const card = overlay.querySelector('.lock-screen-card');
+    const entered = input.value;
+    const enteredHash = await hashPin(entered);
+
+    if (enteredHash === settings.pinHash) {
+      isLocked = false;
+      overlay.style.display = 'none';
+      input.value = '';
+      showToast('工作桌已解鎖');
+    } else {
+      if (card) {
+        card.classList.remove('lock-shake');
+        void card.offsetWidth;
+        card.classList.add('lock-shake');
+      }
+      showToast('密碼錯誤，請重新輸入');
+      input.value = '';
+      input.focus();
     }
   }
 
@@ -2057,7 +2119,26 @@ ${JSON.stringify(itemsPayload)}
       document.getElementById('settingIncludeKeep').checked = settings.includeKeepInConsult;
       document.getElementById('settingApiKey').value = settings.geminiApiKey || '';
       document.getElementById('settingModel').value = settings.geminiModel || 'gemini-2.5-flash';
+      document.getElementById('settingPinLock').checked = !!settings.pinLock;
+      document.getElementById('pinInputGroup').style.display = settings.pinLock ? 'block' : 'none';
+      document.getElementById('settingPinPass').value = '';
       modalSettings.style.display = 'flex';
+    });
+
+    document.getElementById('settingPinLock').addEventListener('change', (e) => {
+      document.getElementById('pinInputGroup').style.display = e.target.checked ? 'block' : 'none';
+    });
+
+    document.getElementById('btnTogglePinShow').addEventListener('click', () => {
+      const input = document.getElementById('settingPinPass');
+      const btn = document.getElementById('btnTogglePinShow');
+      if (input.type === 'password') {
+        input.type = 'text';
+        btn.textContent = '隱藏';
+      } else {
+        input.type = 'password';
+        btn.textContent = '顯示';
+      }
     });
 
     document.getElementById('btnCloseSettings').addEventListener('click', () => {
@@ -2076,7 +2157,7 @@ ${JSON.stringify(itemsPayload)}
       }
     });
 
-    document.getElementById('btnSaveSettings').addEventListener('click', () => {
+    document.getElementById('btnSaveSettings').addEventListener('click', async () => {
       const newLimit = parseInt(document.getElementById('settingWeekLimit').value, 10);
       if (!isNaN(newLimit) && newLimit > 0) {
         settings.weekLimit = newLimit;
@@ -2087,12 +2168,35 @@ ${JSON.stringify(itemsPayload)}
       settings.geminiApiKey = document.getElementById('settingApiKey').value.trim();
       settings.geminiModel = document.getElementById('settingModel').value;
 
+      const isPinLocked = document.getElementById('settingPinLock').checked;
+      const newPin = document.getElementById('settingPinPass').value.trim();
+
+      if (isPinLocked) {
+        if (newPin) {
+          settings.pinHash = await hashPin(newPin);
+          settings.pinLock = true;
+        } else if (settings.pinHash) {
+          settings.pinLock = true;
+        } else {
+          showToast('請先輸入 PIN 解鎖密碼');
+          return;
+        }
+      } else {
+        settings.pinLock = false;
+      }
+
       saveSettings();
       applyTheme(settings.theme);
+      checkLockOnStartup();
       renderAll();
       modalSettings.style.display = 'none';
       showToast('設定已儲存');
     });
+
+    // 密碼鎖定與解鎖事件
+    document.getElementById('btnLockApp').addEventListener('click', lockApp);
+    document.getElementById('formUnlock').addEventListener('submit', unlockApp);
+    document.getElementById('btnDoUnlock').addEventListener('click', unlockApp);
 
     // 匯出 / 匯入 JSON
     document.getElementById('btnExportJson').addEventListener('click', exportBackupJson);
