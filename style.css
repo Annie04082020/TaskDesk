@@ -174,10 +174,17 @@ body::before {
   width: 100%;
   max-width: var(--max-w);
   min-height: 100vh;
-  padding: 18px 16px 88px 16px;
+  padding: calc(max(var(--app-safe-top, 56px), env(safe-area-inset-top, 0px)) + 6px) 16px 88px 16px;
   display: flex;
   flex-direction: column;
   gap: 18px;
+  box-sizing: border-box;
+}
+
+@media (min-width: 769px) {
+  #app {
+    padding-top: var(--app-safe-top-desktop, 24px);
+  }
 }
 
 /* ==========================================================================

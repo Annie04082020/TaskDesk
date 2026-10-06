@@ -101,6 +101,7 @@
   let settings = {
     weekLimit: 3,
     theme: 'dark',
+    safeTop: 56,
     autoGuess: true,
     includeKeepInConsult: false,
     geminiApiKey: '',
@@ -135,6 +136,7 @@
     loadSettings();
     loadSyncConfig();
     applyTheme(settings.theme);
+    applySafeTop(settings.safeTop);
     loadItems();
     await loadRules();
     setupEventListeners();
@@ -225,6 +227,12 @@
     } else {
       document.documentElement.removeAttribute('data-theme');
     }
+  }
+
+  // 手機頂部避讓前鏡頭挖孔
+  function applySafeTop(val) {
+    const top = parseInt(val, 10) || 56;
+    document.documentElement.style.setProperty('--app-safe-top', `${top}px`);
   }
 
   // --- 存取密碼鎖 (PIN Lock) ---
@@ -382,9 +390,61 @@
     return `${f(ISOweekStart)} - ${f(ISOweekEnd)}`;
   }
 
-  // --- 批次輸入解析 ---
-  function parseBatchInput(rawText) {
+  // --- 批次輸入解析 (支援換行純文字、符號分割、及 Google Tasks Takeout JSON) ---
+  function parseBatchInput(rawText, onlyUncompleted = true) {
     if (!rawText || !rawText.trim()) return [];
+    const trimmed = rawText.trim();
+
+    // 嘗試解析 JSON (例如 Google Tasks Takeout 或陣列)
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        const tasksFound = [];
+
+        function processTaskObject(task) {
+          if (!task) return;
+          if (onlyUncompleted && (task.status === 'completed' || task.done === true)) {
+            return;
+          }
+          const title = task.title || task.text || task.name || task.summary || '';
+          if (typeof title === 'string' && title.trim()) {
+            let fullText = title.trim();
+            if (task.notes && typeof task.notes === 'string' && task.notes.trim()) {
+              fullText += ` (${task.notes.trim()})`;
+            }
+            tasksFound.push(fullText);
+          }
+        }
+
+        if (Array.isArray(parsed)) {
+          parsed.forEach(it => {
+            if (typeof it === 'string' && it.trim()) {
+              tasksFound.push(it.trim());
+            } else if (typeof it === 'object') {
+              processTaskObject(it);
+            }
+          });
+        } else if (typeof parsed === 'object') {
+          // Google Takeout tasks#taskLists 格式
+          if (Array.isArray(parsed.items)) {
+            parsed.items.forEach(item => {
+              if (Array.isArray(item.items)) {
+                item.items.forEach(t => processTaskObject(t));
+              } else {
+                processTaskObject(item);
+              }
+            });
+          }
+        }
+
+        if (tasksFound.length > 0) {
+          return tasksFound;
+        }
+      } catch (e) {
+        // 非有效 JSON，繼續進行常規純文字拆解
+      }
+    }
+
     // 依換行、頓號、逗號、分號分割
     const lines = rawText.split(/[\r\n、，,；;]+/);
     const result = [];
@@ -2087,10 +2147,57 @@ ${JSON.stringify(itemsPayload)}
       document.getElementById('modalHistory').style.display = 'none';
     });
 
-    // Header 按鈕：文字匯入
+    // Header 按鈕：任務匯入
+    const importTextArea = document.getElementById('importTextArea');
+    const importOnlyUncompleted = document.getElementById('importOnlyUncompleted');
+    const importNotice = document.getElementById('importParsedCountNotice');
+    const inputGoogleTaskFile = document.getElementById('inputGoogleTaskFile');
+    const btnUploadGoogleTaskFile = document.getElementById('btnUploadGoogleTaskFile');
+
+    function updateImportCountPreview() {
+      const text = importTextArea.value;
+      if (!text.trim()) {
+        if (importNotice) importNotice.textContent = '';
+        return;
+      }
+      const onlyUncompleted = importOnlyUncompleted ? importOnlyUncompleted.checked : true;
+      const parsed = parseBatchInput(text, onlyUncompleted);
+      if (importNotice) {
+        importNotice.textContent = `偵測到 ${parsed.length} 件任務`;
+      }
+    }
+
+    if (importTextArea) {
+      importTextArea.addEventListener('input', updateImportCountPreview);
+    }
+    if (importOnlyUncompleted) {
+      importOnlyUncompleted.addEventListener('change', updateImportCountPreview);
+    }
+
+    if (btnUploadGoogleTaskFile && inputGoogleTaskFile) {
+      btnUploadGoogleTaskFile.addEventListener('click', () => {
+        inputGoogleTaskFile.click();
+      });
+      inputGoogleTaskFile.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          const file = e.target.files[0];
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            importTextArea.value = event.target.result;
+            updateImportCountPreview();
+            showToast(`已載入「${file.name}」檔案`);
+          };
+          reader.readAsText(file);
+          inputGoogleTaskFile.value = '';
+        }
+      });
+    }
+
     document.getElementById('btnOpenImport').addEventListener('click', () => {
-      document.getElementById('importTextArea').value = '';
+      importTextArea.value = '';
+      if (importNotice) importNotice.textContent = '';
       document.getElementById('modalImport').style.display = 'flex';
+      setTimeout(() => importTextArea.focus(), 80);
     });
     document.getElementById('btnCloseImport').addEventListener('click', () => {
       document.getElementById('modalImport').style.display = 'none';
@@ -2099,14 +2206,15 @@ ${JSON.stringify(itemsPayload)}
       document.getElementById('modalImport').style.display = 'none';
     });
     document.getElementById('btnDoImport').addEventListener('click', () => {
-      const text = document.getElementById('importTextArea').value;
-      const lines = parseBatchInput(text);
+      const text = importTextArea.value;
+      const onlyUncompleted = importOnlyUncompleted ? importOnlyUncompleted.checked : true;
+      const lines = parseBatchInput(text, onlyUncompleted);
       if (lines.length > 0) {
         addItemsToInbox(lines);
-        showToast(`已匯入 ${lines.length} 件項目至收集箱`);
+        showToast(`已匯入 ${lines.length} 件項目至收集箱，已自動分類`);
         document.getElementById('modalImport').style.display = 'none';
       } else {
-        showToast('請輸入或貼上文字');
+        showToast('請輸入文字或選擇 Google Tasks 檔案');
       }
     });
 
@@ -2115,6 +2223,12 @@ ${JSON.stringify(itemsPayload)}
     document.getElementById('btnOpenSettings').addEventListener('click', () => {
       document.getElementById('settingWeekLimit').value = settings.weekLimit;
       document.getElementById('settingTheme').value = settings.theme;
+      const safeTopVal = settings.safeTop || 56;
+      const inputSafeTop = document.getElementById('settingSafeTop');
+      const valSafeTopText = document.getElementById('settingSafeTopVal');
+      if (inputSafeTop) inputSafeTop.value = safeTopVal;
+      if (valSafeTopText) valSafeTopText.textContent = `${safeTopVal}px`;
+
       document.getElementById('settingAutoGuess').checked = settings.autoGuess;
       document.getElementById('settingIncludeKeep').checked = settings.includeKeepInConsult;
       document.getElementById('settingApiKey').value = settings.geminiApiKey || '';
@@ -2124,6 +2238,16 @@ ${JSON.stringify(itemsPayload)}
       document.getElementById('settingPinPass').value = '';
       modalSettings.style.display = 'flex';
     });
+
+    const settingSafeTop = document.getElementById('settingSafeTop');
+    if (settingSafeTop) {
+      settingSafeTop.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        const valText = document.getElementById('settingSafeTopVal');
+        if (valText) valText.textContent = `${val}px`;
+        applySafeTop(val);
+      });
+    }
 
     document.getElementById('settingPinLock').addEventListener('change', (e) => {
       document.getElementById('pinInputGroup').style.display = e.target.checked ? 'block' : 'none';
@@ -2163,6 +2287,16 @@ ${JSON.stringify(itemsPayload)}
         settings.weekLimit = newLimit;
       }
       settings.theme = document.getElementById('settingTheme').value;
+
+      const inputSafeTop = document.getElementById('settingSafeTop');
+      if (inputSafeTop) {
+        const val = parseInt(inputSafeTop.value, 10);
+        if (!isNaN(val)) {
+          settings.safeTop = val;
+          applySafeTop(settings.safeTop);
+        }
+      }
+
       settings.autoGuess = document.getElementById('settingAutoGuess').checked;
       settings.includeKeepInConsult = document.getElementById('settingIncludeKeep').checked;
       settings.geminiApiKey = document.getElementById('settingApiKey').value.trim();

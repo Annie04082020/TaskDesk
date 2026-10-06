@@ -249,18 +249,31 @@
     </div>
   </div>
 
-  <!-- Modal: Text Import (文字批次匯入) -->
+  <!-- Modal: Batch / Google Tasks Import (批次與 Google Tasks 匯入) -->
   <div class="modal-overlay" id="modalImport" style="display: none;">
     <div class="modal-sheet">
       <div class="modal-header">
-        <h3 class="modal-title">貼上文字匯入</h3>
+        <h3 class="modal-title">任務批次 / Google Tasks 匯入</h3>
         <button class="modal-close" id="btnCloseImport">&times;</button>
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label class="form-label" for="importTextArea">文字內容（一行一項，例如 Google Tasks 內容）</label>
-          <div class="form-sublabel">匯入後會依行拆解，一律進入收集箱。</div>
-          <textarea id="importTextArea" class="form-textarea" rows="8" placeholder="讀論文第三章&#10;買麵包&#10;寄信給指導教授"></textarea>
+          <label class="form-label" for="importTextArea">文字內容或 Google Takeout Tasks.json</label>
+          <div class="form-sublabel">支援直接貼上文字（一行一項）、或匯入 Google Takeout 匯出的 Tasks.json。</div>
+          <div style="display: flex; gap: 8px; margin-top: 6px; margin-bottom: 8px;">
+            <button type="button" id="btnUploadGoogleTaskFile" class="btn-secondary" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+              📁 選擇 Google Tasks JSON / 文字檔
+            </button>
+            <input type="file" id="inputGoogleTaskFile" accept=".json,.txt" style="display: none;">
+          </div>
+          <textarea id="importTextArea" class="form-textarea" rows="7" placeholder="可以直接貼上一行一項的文字，或將 Google Takeout 的 Tasks.json 內容貼在此處...&#10;&#10;例如：&#10;讀論文第三章&#10;買麵包&#10;寄信給指導教授"></textarea>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 8px; flex-wrap: wrap; gap: 8px;">
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-main); cursor: pointer;">
+              <input type="checkbox" id="importOnlyUncompleted" checked>
+              <span>僅匯入未完成任務 (過濾已完成)</span>
+            </label>
+            <span id="importParsedCountNotice" style="font-family: var(--font-mono); font-size: 0.76rem; color: var(--accent-primary);"></span>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
@@ -291,6 +304,15 @@
             <option value="dark">深色模式 (Dark)</option>
             <option value="light">淺色模式 (Light)</option>
           </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="settingSafeTop">頂部安全邊距（避開手機鏡頭挖孔 / 狀態列）</label>
+          <div class="form-sublabel">針對 Zenfone 10 等挖孔鏡頭手機微調頂部高度。預設 56px。</div>
+          <div style="display: flex; align-items: center; gap: 10px; margin-top: 6px;">
+            <input type="range" id="settingSafeTop" min="20" max="96" step="2" value="56" style="flex: 1;">
+            <span id="settingSafeTopVal" style="font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent-primary); min-width: 45px;">56px</span>
+          </div>
         </div>
 
         <div class="form-group">
