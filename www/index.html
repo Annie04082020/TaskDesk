@@ -251,31 +251,73 @@
 
   <!-- Modal: Batch / Google Tasks Import (批次與 Google Tasks 匯入) -->
   <div class="modal-overlay" id="modalImport" style="display: none;">
-    <div class="modal-sheet">
+    <div class="modal-sheet" style="max-height: 88vh;">
       <div class="modal-header">
         <h3 class="modal-title">任務批次 / Google Tasks 匯入</h3>
         <button class="modal-close" id="btnCloseImport">&times;</button>
       </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label class="form-label" for="importTextArea">文字內容或 Google Takeout Tasks.json</label>
-          <div class="form-sublabel">支援直接貼上文字（一行一項）、或匯入 Google Takeout 匯出的 Tasks.json。</div>
-          <div style="display: flex; gap: 8px; margin-top: 6px; margin-bottom: 8px;">
-            <button type="button" id="btnUploadGoogleTaskFile" class="btn-secondary" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
-              📁 選擇 Google Tasks JSON / 文字檔
-            </button>
-            <input type="file" id="inputGoogleTaskFile" accept=".json,.txt" style="display: none;">
+
+      <!-- Sub-tabs: File vs Plain Text -->
+      <div style="display: flex; border-bottom: 1px solid var(--border-light); background: rgba(0,0,0,0.2);">
+        <button type="button" class="import-tab-btn active" id="tabImportFile">
+          Google Tasks 檔案 (.Tasks / .json)
+        </button>
+        <button type="button" class="import-tab-btn" id="tabImportText">
+          貼上純文字清單
+        </button>
+      </div>
+
+      <div class="modal-body" style="padding-top: 14px;">
+        <!-- TAB 1: File Import View -->
+        <div id="viewImportFile" style="display: flex; flex-direction: column; gap: 12px;">
+          <!-- Dropzone -->
+          <div id="importDropzone" class="import-dropzone">
+            <div style="font-size: 1.5rem; margin-bottom: 4px;">📁</div>
+            <div style="font-size: 0.92rem; font-weight: 600; color: var(--text-color);">點擊選擇或拖放 Google Tasks 檔案</div>
+            <div style="font-size: 0.78rem; color: var(--meta-text); margin-top: 4px;">支援 .Tasks、.json 或純文字檔 (例如 1000606440619.Tasks)</div>
+            <input type="file" id="inputGoogleTaskFile" accept=".Tasks,.tasks,.json,.txt,*" style="display: none;">
           </div>
-          <textarea id="importTextArea" class="form-textarea" rows="7" placeholder="可以直接貼上一行一項的文字，或將 Google Takeout 的 Tasks.json 內容貼在此處...&#10;&#10;例如：&#10;讀論文第三章&#10;買麵包&#10;寄信給指導教授"></textarea>
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 8px; flex-wrap: wrap; gap: 8px;">
-            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-main); cursor: pointer;">
-              <input type="checkbox" id="importOnlyUncompleted" checked>
-              <span>僅匯入未完成任務 (過濾已完成)</span>
-            </label>
-            <span id="importParsedCountNotice" style="font-family: var(--font-mono); font-size: 0.76rem; color: var(--accent-primary);"></span>
+
+          <!-- Parsed Lists Container (Hidden until file selected) -->
+          <div id="googleTasksParsedContainer" style="display: none; flex-direction: column; gap: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+              <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-color);">
+                檔案：<span id="importFileName" style="color: var(--accent-primary); font-family: var(--font-mono);"></span>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <button type="button" id="btnSelectAllLists" class="btn-secondary" style="padding: 3px 8px; font-size: 0.72rem;">全選</button>
+                <button type="button" id="btnDeselectAllLists" class="btn-secondary" style="padding: 3px 8px; font-size: 0.72rem;">全不選</button>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: rgba(0, 240, 255, 0.05); border: 1px solid rgba(0, 240, 255, 0.2); border-radius: var(--radius-sm); flex-wrap: wrap; gap: 6px;">
+              <label style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-color); cursor: pointer; margin: 0;">
+                <input type="checkbox" id="importFileOnlyUncompleted" checked>
+                <span>僅匯入未完成項目 (排除已打勾)</span>
+              </label>
+              <span id="importFileTotalSelectedCount" style="font-family: var(--font-mono); font-size: 0.76rem; color: var(--accent-primary); font-weight: 600;">共選取 0 件</span>
+            </div>
+
+            <!-- List of task lists -->
+            <div id="googleTaskListsContainer" style="display: flex; flex-direction: column; gap: 8px; max-height: 240px; overflow-y: auto; padding-right: 2px;">
+              <!-- Dynamically populated checklist of lists -->
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 2: Textarea View (Hidden by default or switchable) -->
+        <div id="viewImportText" style="display: none; flex-direction: column; gap: 10px;">
+          <div class="form-group">
+            <label class="form-label" for="importTextArea">文字內容（一行一項）</label>
+            <div class="form-sublabel">支援直接貼上文字清單，匯入後會依行拆解並進入收集箱。</div>
+            <textarea id="importTextArea" class="form-textarea" rows="7" placeholder="讀論文第三章&#10;買麵包&#10;寄信給指導教授"></textarea>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 6px;">
+              <span id="importParsedCountNotice" style="font-family: var(--font-mono); font-size: 0.76rem; color: var(--accent-primary);"></span>
+            </div>
           </div>
         </div>
       </div>
+
       <div class="modal-footer">
         <button class="btn-secondary" id="btnCancelImport">取消</button>
         <button class="btn-primary" id="btnDoImport">整批匯入收集箱</button>

@@ -11,6 +11,8 @@ package-lock.json
 
 # Personal backup files
 taskdesk-backup*.json
+*.Tasks
+*.tasks
 
 # Generated web directory for Capacitor
 www/

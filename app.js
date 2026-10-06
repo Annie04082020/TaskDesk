@@ -1316,7 +1316,7 @@ ${JSON.stringify(itemsPayload)}
     });
   }
 
-  // --- 類型選擇下拉清單 ---
+  // --- 類型選擇下拉清單 (全域浮動層，脫離卡片與資料夾層疊限制) ---
   function openTypePicker(itemId, targetEl) {
     // 關閉既有的選單
     const existing = document.querySelector('.type-picker-menu');
@@ -1350,17 +1350,41 @@ ${JSON.stringify(itemsPayload)}
       menu.appendChild(opt);
     });
 
-    targetEl.parentElement.style.position = 'relative';
-    targetEl.parentElement.appendChild(menu);
+    // 掛載至 body，避開任何 card 或 accordion 的 backdrop-filter 堆疊上下文阻擋
+    document.body.appendChild(menu);
+
+    const rect = targetEl.getBoundingClientRect();
+    const menuWidth = 200;
+    const menuHeight = menu.offsetHeight || 260;
+
+    let top = rect.bottom + 4;
+    let left = rect.left;
+
+    // 若下方空間不足（例如卡片靠近畫面底部），自動向上展開避開重疊
+    if (top + menuHeight > window.innerHeight - 10) {
+      top = Math.max(10, rect.top - menuHeight - 4);
+    }
+
+    // 靠右邊界防溢出
+    if (left + menuWidth > window.innerWidth - 10) {
+      left = Math.max(10, window.innerWidth - menuWidth - 10);
+    }
+
+    menu.style.top = `${top}px`;
+    menu.style.left = `${left}px`;
 
     const closeHandler = (e) => {
       if (!menu.contains(e.target) && e.target !== targetEl) {
         menu.remove();
         document.removeEventListener('click', closeHandler);
+        window.removeEventListener('scroll', closeHandler, true);
+        window.removeEventListener('resize', closeHandler);
       }
     };
     setTimeout(() => {
       document.addEventListener('click', closeHandler);
+      window.addEventListener('scroll', closeHandler, true);
+      window.addEventListener('resize', closeHandler);
     }, 10);
   }
 
@@ -2148,20 +2172,273 @@ ${JSON.stringify(itemsPayload)}
     });
 
     // Header 按鈕：任務匯入
-    const importTextArea = document.getElementById('importTextArea');
-    const importOnlyUncompleted = document.getElementById('importOnlyUncompleted');
-    const importNotice = document.getElementById('importParsedCountNotice');
+    const tabImportFile = document.getElementById('tabImportFile');
+    const tabImportText = document.getElementById('tabImportText');
+    const viewImportFile = document.getElementById('viewImportFile');
+    const viewImportText = document.getElementById('viewImportText');
+    const importDropzone = document.getElementById('importDropzone');
     const inputGoogleTaskFile = document.getElementById('inputGoogleTaskFile');
-    const btnUploadGoogleTaskFile = document.getElementById('btnUploadGoogleTaskFile');
+    const googleTasksParsedContainer = document.getElementById('googleTasksParsedContainer');
+    const googleTaskListsContainer = document.getElementById('googleTaskListsContainer');
+    const importFileName = document.getElementById('importFileName');
+    const importFileOnlyUncompleted = document.getElementById('importFileOnlyUncompleted');
+    const importFileTotalSelectedCount = document.getElementById('importFileTotalSelectedCount');
+    const btnSelectAllLists = document.getElementById('btnSelectAllLists');
+    const btnDeselectAllLists = document.getElementById('btnDeselectAllLists');
+    const importTextArea = document.getElementById('importTextArea');
+    const importNotice = document.getElementById('importParsedCountNotice');
+
+    let currentParsedGoogleLists = null;
+    let activeImportTab = 'file';
+
+    // 頁籤切換
+    function switchImportTab(tab) {
+      activeImportTab = tab;
+      if (tab === 'file') {
+        tabImportFile.classList.add('active');
+        tabImportText.classList.remove('active');
+        viewImportFile.style.display = 'flex';
+        viewImportText.style.display = 'none';
+      } else {
+        tabImportText.classList.add('active');
+        tabImportFile.classList.remove('active');
+        viewImportText.style.display = 'flex';
+        viewImportFile.style.display = 'none';
+        if (importTextArea) setTimeout(() => importTextArea.focus(), 80);
+      }
+    }
+
+    if (tabImportFile) tabImportFile.addEventListener('click', () => switchImportTab('file'));
+    if (tabImportText) tabImportText.addEventListener('click', () => switchImportTab('text'));
+
+    // Google Tasks JSON / .Tasks 結構解析器
+    function parseGoogleTasksStructure(rawContent) {
+      let data;
+      try {
+        data = JSON.parse(rawContent);
+      } catch (e) {
+        return null;
+      }
+      if (!data || typeof data !== 'object') return null;
+
+      if (data.kind === 'tasks#taskLists' || Array.isArray(data.items)) {
+        const lists = [];
+        const rawLists = Array.isArray(data.items) ? data.items : [];
+        rawLists.forEach((lst, idx) => {
+          if (!lst || typeof lst !== 'object') return;
+          const listTitle = lst.title || `清單 ${idx + 1}`;
+          const rawItems = Array.isArray(lst.items) ? lst.items : [];
+          const uncompletedTasks = [];
+          const completedTasks = [];
+
+          rawItems.forEach(item => {
+            if (!item || typeof item !== 'object') return;
+            const title = (item.title || item.text || item.summary || '').trim();
+            if (!title) return;
+            let fullText = title;
+            if (item.notes && typeof item.notes === 'string' && item.notes.trim()) {
+              fullText += ` (${item.notes.trim()})`;
+            }
+            if (item.status === 'completed' || item.done === true) {
+              completedTasks.push(fullText);
+            } else {
+              uncompletedTasks.push(fullText);
+            }
+          });
+
+          lists.push({
+            id: lst.id || `list_${idx}`,
+            title: listTitle,
+            totalCount: rawItems.length,
+            uncompletedCount: uncompletedTasks.length,
+            completedCount: completedTasks.length,
+            uncompletedTasks: uncompletedTasks,
+            allTasks: uncompletedTasks.concat(completedTasks),
+            // 預設選取有待辦且非超龐大重複循環清單 (大於 500 件如 Daily Quest 預設不勾，保護流暢度)
+            selected: uncompletedTasks.length > 0 && uncompletedTasks.length <= 500
+          });
+        });
+        return lists;
+      }
+      return null;
+    }
+
+    function renderGoogleTasksPreview() {
+      if (!currentParsedGoogleLists || !googleTaskListsContainer) return;
+      googleTaskListsContainer.innerHTML = '';
+
+      const onlyUncompleted = importFileOnlyUncompleted ? importFileOnlyUncompleted.checked : true;
+      let totalSelectedTasks = 0;
+
+      currentParsedGoogleLists.forEach((lst, idx) => {
+        const count = onlyUncompleted ? lst.uncompletedCount : lst.totalCount;
+        if (lst.selected) {
+          totalSelectedTasks += count;
+        }
+
+        const card = document.createElement('div');
+        card.className = 'google-list-card';
+
+        const headerRow = document.createElement('div');
+        headerRow.className = 'google-list-header';
+
+        const titleWrap = document.createElement('label');
+        titleWrap.className = 'google-list-title-wrap';
+        titleWrap.style.cursor = 'pointer';
+
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.checked = !!lst.selected;
+        check.addEventListener('change', (e) => {
+          lst.selected = e.target.checked;
+          renderGoogleTasksPreview();
+        });
+
+        const nameSpan = document.createElement('span');
+        nameSpan.style.fontSize = '0.86rem';
+        nameSpan.style.fontWeight = '600';
+        nameSpan.style.color = 'var(--text-color)';
+        nameSpan.textContent = lst.title;
+
+        titleWrap.appendChild(check);
+        titleWrap.appendChild(nameSpan);
+
+        const badgeWrap = document.createElement('div');
+        badgeWrap.style.display = 'flex';
+        badgeWrap.style.alignItems = 'center';
+        badgeWrap.style.gap = '8px';
+
+        const badge = document.createElement('span');
+        badge.className = 'folder-badge';
+        badge.style.fontFamily = 'var(--font-mono)';
+        badge.style.fontSize = '0.74rem';
+        badge.style.color = lst.uncompletedCount > 0 ? 'var(--accent-primary)' : 'var(--meta-text)';
+        badge.textContent = `${count} 件${onlyUncompleted ? '待辦' : '任務'}`;
+
+        const togglePreviewBtn = document.createElement('button');
+        togglePreviewBtn.type = 'button';
+        togglePreviewBtn.className = 'btn-secondary';
+        togglePreviewBtn.style.padding = '2px 6px';
+        togglePreviewBtn.style.fontSize = '0.7rem';
+        togglePreviewBtn.textContent = '預覽';
+
+        badgeWrap.appendChild(badge);
+        badgeWrap.appendChild(togglePreviewBtn);
+
+        headerRow.appendChild(titleWrap);
+        headerRow.appendChild(badgeWrap);
+        card.appendChild(headerRow);
+
+        // 預覽任務列表 (預設收合)
+        const previewBox = document.createElement('div');
+        previewBox.className = 'google-list-tasks-preview';
+        previewBox.style.display = 'none';
+        const displayTasks = onlyUncompleted ? lst.uncompletedTasks : lst.allTasks;
+        if (displayTasks.length === 0) {
+          previewBox.textContent = '此清單無符合條件的任務。';
+        } else {
+          previewBox.textContent = displayTasks.slice(0, 30).map((t, i) => `${i + 1}. ${t}`).join('\n') +
+            (displayTasks.length > 30 ? `\n... 等共 ${displayTasks.length} 件` : '');
+        }
+        card.appendChild(previewBox);
+
+        togglePreviewBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const isHidden = previewBox.style.display === 'none';
+          previewBox.style.display = isHidden ? 'block' : 'none';
+          togglePreviewBtn.textContent = isHidden ? '收合' : '預覽';
+        });
+
+        googleTaskListsContainer.appendChild(card);
+      });
+
+      if (importFileTotalSelectedCount) {
+        importFileTotalSelectedCount.textContent = `共選取 ${totalSelectedTasks} 件`;
+      }
+    }
+
+    function handleGoogleFileLoad(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target.result;
+        const lists = parseGoogleTasksStructure(text);
+        if (lists && lists.length > 0) {
+          currentParsedGoogleLists = lists;
+          if (importFileName) importFileName.textContent = file.name;
+          if (googleTasksParsedContainer) googleTasksParsedContainer.style.display = 'flex';
+          renderGoogleTasksPreview();
+          showToast(`已成功讀取 Google Tasks 檔案，共 ${lists.length} 個清單`);
+        } else {
+          // 若非 Google Tasks 多清單 JSON，直接填入純文字模式
+          switchImportTab('text');
+          importTextArea.value = text;
+          updateImportCountPreview();
+          showToast(`已載入純文字檔案「${file.name}」`);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // 點擊與拖放上傳
+    if (importDropzone && inputGoogleTaskFile) {
+      importDropzone.addEventListener('click', () => {
+        inputGoogleTaskFile.click();
+      });
+      inputGoogleTaskFile.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          handleGoogleFileLoad(e.target.files[0]);
+          inputGoogleTaskFile.value = '';
+        }
+      });
+
+      importDropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        importDropzone.classList.add('dragover');
+      });
+      importDropzone.addEventListener('dragleave', () => {
+        importDropzone.classList.remove('dragover');
+      });
+      importDropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        importDropzone.classList.remove('dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          handleGoogleFileLoad(e.dataTransfer.files[0]);
+        }
+      });
+    }
+
+    if (btnSelectAllLists) {
+      btnSelectAllLists.addEventListener('click', () => {
+        if (currentParsedGoogleLists) {
+          currentParsedGoogleLists.forEach(l => l.selected = true);
+          renderGoogleTasksPreview();
+        }
+      });
+    }
+
+    if (btnDeselectAllLists) {
+      btnDeselectAllLists.addEventListener('click', () => {
+        if (currentParsedGoogleLists) {
+          currentParsedGoogleLists.forEach(l => l.selected = false);
+          renderGoogleTasksPreview();
+        }
+      });
+    }
+
+    if (importFileOnlyUncompleted) {
+      importFileOnlyUncompleted.addEventListener('change', () => {
+        renderGoogleTasksPreview();
+      });
+    }
 
     function updateImportCountPreview() {
-      const text = importTextArea.value;
+      const text = importTextArea ? importTextArea.value : '';
       if (!text.trim()) {
         if (importNotice) importNotice.textContent = '';
         return;
       }
-      const onlyUncompleted = importOnlyUncompleted ? importOnlyUncompleted.checked : true;
-      const parsed = parseBatchInput(text, onlyUncompleted);
+      const parsed = parseBatchInput(text, true);
       if (importNotice) {
         importNotice.textContent = `偵測到 ${parsed.length} 件任務`;
       }
@@ -2170,34 +2447,12 @@ ${JSON.stringify(itemsPayload)}
     if (importTextArea) {
       importTextArea.addEventListener('input', updateImportCountPreview);
     }
-    if (importOnlyUncompleted) {
-      importOnlyUncompleted.addEventListener('change', updateImportCountPreview);
-    }
-
-    if (btnUploadGoogleTaskFile && inputGoogleTaskFile) {
-      btnUploadGoogleTaskFile.addEventListener('click', () => {
-        inputGoogleTaskFile.click();
-      });
-      inputGoogleTaskFile.addEventListener('change', (e) => {
-        if (e.target.files && e.target.files[0]) {
-          const file = e.target.files[0];
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            importTextArea.value = event.target.result;
-            updateImportCountPreview();
-            showToast(`已載入「${file.name}」檔案`);
-          };
-          reader.readAsText(file);
-          inputGoogleTaskFile.value = '';
-        }
-      });
-    }
 
     document.getElementById('btnOpenImport').addEventListener('click', () => {
-      importTextArea.value = '';
-      if (importNotice) importNotice.textContent = '';
       document.getElementById('modalImport').style.display = 'flex';
-      setTimeout(() => importTextArea.focus(), 80);
+      if (activeImportTab === 'text' && importTextArea) {
+        setTimeout(() => importTextArea.focus(), 80);
+      }
     });
     document.getElementById('btnCloseImport').addEventListener('click', () => {
       document.getElementById('modalImport').style.display = 'none';
@@ -2205,16 +2460,35 @@ ${JSON.stringify(itemsPayload)}
     document.getElementById('btnCancelImport').addEventListener('click', () => {
       document.getElementById('modalImport').style.display = 'none';
     });
+
     document.getElementById('btnDoImport').addEventListener('click', () => {
-      const text = importTextArea.value;
-      const onlyUncompleted = importOnlyUncompleted ? importOnlyUncompleted.checked : true;
-      const lines = parseBatchInput(text, onlyUncompleted);
-      if (lines.length > 0) {
-        addItemsToInbox(lines);
-        showToast(`已匯入 ${lines.length} 件項目至收集箱，已自動分類`);
-        document.getElementById('modalImport').style.display = 'none';
+      if (activeImportTab === 'file' && currentParsedGoogleLists) {
+        const onlyUncompleted = importFileOnlyUncompleted ? importFileOnlyUncompleted.checked : true;
+        const selectedTasks = [];
+        currentParsedGoogleLists.forEach(lst => {
+          if (lst.selected) {
+            const listItems = onlyUncompleted ? lst.uncompletedTasks : lst.allTasks;
+            selectedTasks.push(...listItems);
+          }
+        });
+
+        if (selectedTasks.length > 0) {
+          addItemsToInbox(selectedTasks);
+          showToast(`已成功匯入 ${selectedTasks.length} 件任務至收集箱`);
+          document.getElementById('modalImport').style.display = 'none';
+        } else {
+          showToast('請至少勾選一個具有任務的清單');
+        }
       } else {
-        showToast('請輸入文字或選擇 Google Tasks 檔案');
+        const text = importTextArea ? importTextArea.value : '';
+        const lines = parseBatchInput(text, true);
+        if (lines.length > 0) {
+          addItemsToInbox(lines);
+          showToast(`已匯入 ${lines.length} 件項目至收集箱`);
+          document.getElementById('modalImport').style.display = 'none';
+        } else {
+          showToast('請輸入文字或選擇 Google Tasks 檔案');
+        }
       }
     });
 
