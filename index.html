@@ -111,6 +111,10 @@
           <span class="nav-tool-card-title">歷史檔案庫</span>
           <span class="nav-tool-card-desc">拉開歷史抽屜檢視與復原已完成任務</span>
         </button>
+        <button type="button" class="nav-tool-card" id="menuItemSettings">
+          <span class="nav-tool-card-title">系統設定</span>
+          <span class="nav-tool-card-desc">任務上限、主題、Safe Area、資料備份</span>
+        </button>
         <button type="button" class="nav-tool-card" id="menuItemLock" style="display: none;">
           <span class="nav-tool-card-title">立即鎖定工作桌</span>
           <span class="nav-tool-card-desc">需輸入 PIN 碼才能存取</span>
@@ -138,10 +142,10 @@
           <div class="capture-size-selector" id="captureSizeSelector">
             <span class="capture-hint" style="margin-right: 2px;">大小：</span>
             <button type="button" class="size-btn active" data-size="auto" title="不確定時選自動：系統依內容判斷，若無法估算則自動設為 5-10m 試水溫">自動</button>
-            <button type="button" class="size-btn" data-size="micro" title="先做 5-10 分鐘試水溫，建立起步動能">試水溫 5-10m</button>
-            <button type="button" class="size-btn" data-size="small" title="約 15-30 分鐘，如行政雜事、回信">小 15-30m</button>
-            <button type="button" class="size-btn" data-size="medium" title="約 1-2 小時，如特定模組、中度專注">中 1-2h</button>
-            <button type="button" class="size-btn" data-size="large" title="2 小時以上，如重大專題、深度研讀">大 2h+</button>
+            <button type="button" class="size-btn" data-size="micro" title="先做 5-10 分鐘試水溫，建立起步動能">試水溫</button>
+            <button type="button" class="size-btn" data-size="small" title="約 15-30 分鐘，如行政雜事、回信">小</button>
+            <button type="button" class="size-btn" data-size="medium" title="約 1-2 小時，如特定模組、中度專注">中</button>
+            <button type="button" class="size-btn" data-size="large" title="2 小時以上，如重大專題、深度研讀">大</button>
           </div>
           <div class="capture-deadline-group" id="captureDeadlineGroup">
             <button type="button" id="btnToggleCaptureDeadline" class="btn-capture-deadline" title="選填截止死線 (僅背景加權，主介面不顯示)">
@@ -164,16 +168,16 @@
 
     <!-- Main Content List -->
     <main class="main-sections">
-      <!-- Workbench Tabs: 今日 / 本週 -->
+      <!-- Workbench Tabs: 今日 / 這週 -->
       <div class="workbench-switcher" role="tablist">
         <button type="button" class="workbench-tab-btn active" id="tabWorkbenchToday" role="tab" aria-selected="true">
           <span class="workbench-tab-dot"></span>
-          <span class="workbench-tab-name">今日工作桌</span>
+          <span class="workbench-tab-name">今日</span>
           <span class="workbench-tab-badge" id="todayTabBadge">0</span>
         </button>
         <button type="button" class="workbench-tab-btn" id="tabWorkbenchWeek" role="tab" aria-selected="false">
           <span class="workbench-tab-dot"></span>
-          <span class="workbench-tab-name">本週工作桌</span>
+          <span class="workbench-tab-name">這週</span>
           <span class="workbench-tab-badge" id="weekTabBadge">0</span>
         </button>
       </div>
@@ -229,7 +233,7 @@
             <span class="dock-drawer-badge" id="dockBadgeRelease">0</span>
           </button>
           <button type="button" class="dock-drawer-btn" data-drawer="history" id="dockBtnHistory" title="拉開歷史檔案抽屜">
-            <span class="dock-drawer-name">歷史檔案</span>
+            <span class="dock-drawer-name">歷史</span>
             <span class="dock-drawer-badge" id="dockBadgeHistory">0</span>
           </button>
         </div>
@@ -603,7 +607,7 @@
           <div class="form-sublabel">在 Android 手機上安裝原生 Task Desk，支援離線執行與跨裝置手動同步。</div>
           <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
             <a href="https://github.com/Annie04082020/TaskDesk/releases/latest" target="_blank" rel="noopener" class="btn-primary" style="justify-content: center; text-decoration: none; padding: 10px 14px;">
-              <span>前往 GitHub Releases 下載最新 APK (v1.0.10)</span>
+              <span>前往 GitHub Releases 下載最新 APK (v1.0.11)</span>
             </a>
             <div style="font-size: 0.74rem; color: var(--meta-text); line-height: 1.45;">
               <strong>APK 更新說明：</strong>手機端安裝的 APK 屬於獨立離線封裝。更新網頁原始碼後，GitHub 會自動打包新版本 APK，點擊上方按鈕下載安裝即可直接覆蓋更新！

@@ -1189,110 +1189,128 @@
       // 「現在」切換按鈕
       const btnNow = document.createElement('button');
       btnNow.className = `btn-now-toggle ${item.isNow ? 'is-active' : ''}`;
-      btnNow.textContent = item.isNow ? '取消「現在」' : '設為「現在」';
+      btnNow.textContent = item.isNow ? '專注中' : '現在做';
+      btnNow.title = item.isNow ? '取消當前專注' : '設為當前專注事項';
       btnNow.addEventListener('click', () => toggleItemNow(item.id));
       triageBtns.appendChild(btnNow);
 
       const btnToWeek = document.createElement('button');
       btnToWeek.className = 'btn-triage';
-      btnToWeek.textContent = '移至這週';
+      btnToWeek.textContent = '這週';
+      btnToWeek.title = '移至這週工作桌';
       btnToWeek.addEventListener('click', () => moveItemBucket(item.id, 'week'));
       triageBtns.appendChild(btnToWeek);
 
       const btnToKeep = document.createElement('button');
       btnToKeep.className = 'btn-triage';
-      btnToKeep.textContent = '移至保溫';
+      btnToKeep.textContent = '保溫';
+      btnToKeep.title = '移至保溫抽屜';
       btnToKeep.addEventListener('click', () => moveItemBucket(item.id, 'keep'));
       triageBtns.appendChild(btnToKeep);
 
       const btnToRelease = document.createElement('button');
       btnToRelease.className = 'btn-triage';
-      btnToRelease.textContent = '移至放生';
+      btnToRelease.textContent = '放生';
+      btnToRelease.title = '移至放生抽屜';
       btnToRelease.addEventListener('click', () => moveItemBucket(item.id, 'release'));
       triageBtns.appendChild(btnToRelease);
 
       const btnToInbox = document.createElement('button');
       btnToInbox.className = 'btn-triage';
-      btnToInbox.textContent = '退回收集箱';
+      btnToInbox.textContent = '收集箱';
+      btnToInbox.title = '退回收集箱抽屜';
       btnToInbox.addEventListener('click', () => moveItemBucket(item.id, 'inbox'));
       triageBtns.appendChild(btnToInbox);
     } else if (bucketContext === 'week') {
       // 「現在」切換按鈕
       const btnNow = document.createElement('button');
       btnNow.className = `btn-now-toggle ${item.isNow ? 'is-active' : ''}`;
-      btnNow.textContent = item.isNow ? '取消「現在」' : '設為「現在」';
+      btnNow.textContent = item.isNow ? '專注中' : '現在做';
+      btnNow.title = item.isNow ? '取消當前專注' : '設為當前專注事項';
       btnNow.addEventListener('click', () => toggleItemNow(item.id));
       triageBtns.appendChild(btnNow);
 
       const btnToToday = document.createElement('button');
       btnToToday.className = 'btn-triage';
-      btnToToday.textContent = '移至今日';
+      btnToToday.textContent = '今日';
+      btnToToday.title = '移至今日工作桌';
       btnToToday.addEventListener('click', () => moveItemBucket(item.id, 'today'));
       triageBtns.appendChild(btnToToday);
 
       const btnToKeep = document.createElement('button');
       btnToKeep.className = 'btn-triage';
-      btnToKeep.textContent = '移至保溫';
+      btnToKeep.textContent = '保溫';
+      btnToKeep.title = '移至保溫抽屜';
       btnToKeep.addEventListener('click', () => moveItemBucket(item.id, 'keep'));
       triageBtns.appendChild(btnToKeep);
 
       const btnToRelease = document.createElement('button');
       btnToRelease.className = 'btn-triage';
-      btnToRelease.textContent = '移至放生';
+      btnToRelease.textContent = '放生';
+      btnToRelease.title = '移至放生抽屜';
       btnToRelease.addEventListener('click', () => moveItemBucket(item.id, 'release'));
       triageBtns.appendChild(btnToRelease);
 
       const btnToInbox = document.createElement('button');
       btnToInbox.className = 'btn-triage';
-      btnToInbox.textContent = '退回收集箱';
+      btnToInbox.textContent = '收集箱';
+      btnToInbox.title = '退回收集箱抽屜';
       btnToInbox.addEventListener('click', () => moveItemBucket(item.id, 'inbox'));
       triageBtns.appendChild(btnToInbox);
     } else if (bucketContext === 'keep') {
       const btnToToday = document.createElement('button');
       btnToToday.className = 'btn-triage';
-      btnToToday.textContent = '移至今日';
+      btnToToday.textContent = '今日';
+      btnToToday.title = '移至今日工作桌';
       btnToToday.addEventListener('click', () => moveItemBucket(item.id, 'today'));
       triageBtns.appendChild(btnToToday);
 
       const btnToWeek = document.createElement('button');
       btnToWeek.className = 'btn-triage';
-      btnToWeek.textContent = '移至這週';
+      btnToWeek.textContent = '這週';
+      btnToWeek.title = '移至這週工作桌';
       btnToWeek.addEventListener('click', () => moveItemBucket(item.id, 'week'));
       triageBtns.appendChild(btnToWeek);
 
       const btnToRelease = document.createElement('button');
       btnToRelease.className = 'btn-triage';
-      btnToRelease.textContent = '移至放生';
+      btnToRelease.textContent = '放生';
+      btnToRelease.title = '移至放生抽屜';
       btnToRelease.addEventListener('click', () => moveItemBucket(item.id, 'release'));
       triageBtns.appendChild(btnToRelease);
 
       const btnToInbox = document.createElement('button');
       btnToInbox.className = 'btn-triage';
-      btnToInbox.textContent = '退回收集箱';
+      btnToInbox.textContent = '收集箱';
+      btnToInbox.title = '退回收集箱抽屜';
       btnToInbox.addEventListener('click', () => moveItemBucket(item.id, 'inbox'));
       triageBtns.appendChild(btnToInbox);
     } else if (bucketContext === 'release') {
       const btnToToday = document.createElement('button');
       btnToToday.className = 'btn-triage';
-      btnToToday.textContent = '移至今日';
+      btnToToday.textContent = '今日';
+      btnToToday.title = '移至今日工作桌';
       btnToToday.addEventListener('click', () => moveItemBucket(item.id, 'today'));
       triageBtns.appendChild(btnToToday);
 
       const btnToWeek = document.createElement('button');
       btnToWeek.className = 'btn-triage';
-      btnToWeek.textContent = '移至這週';
+      btnToWeek.textContent = '這週';
+      btnToWeek.title = '移至這週工作桌';
       btnToWeek.addEventListener('click', () => moveItemBucket(item.id, 'week'));
       triageBtns.appendChild(btnToWeek);
 
       const btnToKeep = document.createElement('button');
       btnToKeep.className = 'btn-triage';
-      btnToKeep.textContent = '移至保溫';
+      btnToKeep.textContent = '保溫';
+      btnToKeep.title = '移至保溫抽屜';
       btnToKeep.addEventListener('click', () => moveItemBucket(item.id, 'keep'));
       triageBtns.appendChild(btnToKeep);
 
       const btnToInbox = document.createElement('button');
       btnToInbox.className = 'btn-triage';
-      btnToInbox.textContent = '退回收集箱';
+      btnToInbox.textContent = '收集箱';
+      btnToInbox.title = '退回收集箱抽屜';
       btnToInbox.addEventListener('click', () => moveItemBucket(item.id, 'inbox'));
       triageBtns.appendChild(btnToInbox);
     }
@@ -2502,7 +2520,8 @@
 
     const btnRestoreToday = document.createElement('button');
     btnRestoreToday.className = 'btn-triage';
-    btnRestoreToday.textContent = '復原至今日';
+    btnRestoreToday.textContent = '回今日';
+    btnRestoreToday.title = '復原至今日工作桌';
     btnRestoreToday.addEventListener('click', () => {
       item.done = false;
       item.doneAt = null;
@@ -2516,7 +2535,8 @@
 
     const btnRestoreWeek = document.createElement('button');
     btnRestoreWeek.className = 'btn-triage';
-    btnRestoreWeek.textContent = '復原至這週';
+    btnRestoreWeek.textContent = '回這週';
+    btnRestoreWeek.title = '復原至這週工作桌';
     btnRestoreWeek.addEventListener('click', () => {
       item.done = false;
       item.doneAt = null;
@@ -3652,6 +3672,14 @@
       });
     }
 
+    const mItemSettings = document.getElementById('menuItemSettings');
+    if (mItemSettings) {
+      mItemSettings.addEventListener('click', () => {
+        closeNavTools();
+        openSettingsModal();
+      });
+    }
+
     const mItemLock = document.getElementById('menuItemLock');
     if (mItemLock) {
       mItemLock.addEventListener('click', () => {
@@ -4064,20 +4092,29 @@
       importTextArea.addEventListener('input', updateImportCountPreview);
     }
 
-    document.getElementById('btnOpenImport').addEventListener('click', () => {
-      document.getElementById('modalImport').style.display = 'flex';
+    function safeOn(id, event, handler) {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener(event, handler);
+      return el;
+    }
+
+    safeOn('btnOpenImport', 'click', () => {
+      const modal = document.getElementById('modalImport');
+      if (modal) modal.style.display = 'flex';
       if (activeImportTab === 'text' && importTextArea) {
         setTimeout(() => importTextArea.focus(), 80);
       }
     });
-    document.getElementById('btnCloseImport').addEventListener('click', () => {
-      document.getElementById('modalImport').style.display = 'none';
+    safeOn('btnCloseImport', 'click', () => {
+      const modal = document.getElementById('modalImport');
+      if (modal) modal.style.display = 'none';
     });
-    document.getElementById('btnCancelImport').addEventListener('click', () => {
-      document.getElementById('modalImport').style.display = 'none';
+    safeOn('btnCancelImport', 'click', () => {
+      const modal = document.getElementById('modalImport');
+      if (modal) modal.style.display = 'none';
     });
 
-    document.getElementById('btnDoImport').addEventListener('click', () => {
+    safeOn('btnDoImport', 'click', () => {
       if (activeImportTab === 'file' && currentParsedGoogleLists) {
         const onlyUncompleted = importFileOnlyUncompleted ? importFileOnlyUncompleted.checked : true;
         const selectedTasks = [];
@@ -4091,7 +4128,8 @@
         if (selectedTasks.length > 0) {
           addItemsToInbox(selectedTasks);
           showToast(`已成功匯入 ${selectedTasks.length} 件任務至收集箱`);
-          document.getElementById('modalImport').style.display = 'none';
+          const modal = document.getElementById('modalImport');
+          if (modal) modal.style.display = 'none';
         } else {
           showToast('請至少勾選一個具有任務的清單');
         }
@@ -4101,34 +4139,46 @@
         if (lines.length > 0) {
           addItemsToInbox(lines);
           showToast(`已匯入 ${lines.length} 件項目至收集箱`);
-          document.getElementById('modalImport').style.display = 'none';
+          const modal = document.getElementById('modalImport');
+          if (modal) modal.style.display = 'none';
         } else {
           showToast('請輸入文字或選擇 Google Tasks 檔案');
         }
       }
     });
 
-    // Header 按鈕：設定
-    const modalSettings = document.getElementById('modalSettings');
-    document.getElementById('btnOpenSettings').addEventListener('click', () => {
+    // 設定 Modal 操作函式
+    function openSettingsModal() {
+      const modalSettings = document.getElementById('modalSettings');
+      if (!modalSettings) return;
+
       const inputTodaySmall = document.getElementById('settingTodaySmallLimit');
       if (inputTodaySmall) inputTodaySmall.value = settings.todaySmallLimit || 3;
       const inputWeekMedLarge = document.getElementById('settingWeekMediumLargeLimit');
       if (inputWeekMedLarge) inputWeekMedLarge.value = settings.weekMediumLargeLimit || 3;
 
-      document.getElementById('settingTheme').value = settings.theme;
+      const settingThemeEl = document.getElementById('settingTheme');
+      if (settingThemeEl) settingThemeEl.value = settings.theme;
       const safeTopVal = settings.safeTop || 56;
       const inputSafeTop = document.getElementById('settingSafeTop');
       const valSafeTopText = document.getElementById('settingSafeTopVal');
       if (inputSafeTop) inputSafeTop.value = safeTopVal;
       if (valSafeTopText) valSafeTopText.textContent = `${safeTopVal}px`;
 
-      document.getElementById('settingIncludeKeep').checked = settings.includeKeepInConsult;
-      document.getElementById('settingPinLock').checked = !!settings.pinLock;
-      document.getElementById('pinInputGroup').style.display = settings.pinLock ? 'block' : 'none';
-      document.getElementById('settingPinPass').value = '';
+      const settingIncludeKeepEl = document.getElementById('settingIncludeKeep');
+      if (settingIncludeKeepEl) settingIncludeKeepEl.checked = settings.includeKeepInConsult;
+      const settingPinLockEl = document.getElementById('settingPinLock');
+      if (settingPinLockEl) settingPinLockEl.checked = !!settings.pinLock;
+      const pinGroup = document.getElementById('pinInputGroup');
+      if (pinGroup) pinGroup.style.display = settings.pinLock ? 'block' : 'none';
+      const pinPassEl = document.getElementById('settingPinPass');
+      if (pinPassEl) pinPassEl.value = '';
+
       modalSettings.style.display = 'flex';
-    });
+    }
+
+    // 常駐設定按鈕 (桌面/手機均可直接點擊)
+    safeOn('btnOpenSettings', 'click', openSettingsModal);
 
     const settingSafeTop = document.getElementById('settingSafeTop');
     if (settingSafeTop) {
@@ -4140,13 +4190,15 @@
       });
     }
 
-    document.getElementById('settingPinLock').addEventListener('change', (e) => {
-      document.getElementById('pinInputGroup').style.display = e.target.checked ? 'block' : 'none';
+    safeOn('settingPinLock', 'change', (e) => {
+      const pinGroup = document.getElementById('pinInputGroup');
+      if (pinGroup) pinGroup.style.display = e.target.checked ? 'block' : 'none';
     });
 
-    document.getElementById('btnTogglePinShow').addEventListener('click', () => {
+    safeOn('btnTogglePinShow', 'click', () => {
       const input = document.getElementById('settingPinPass');
       const btn = document.getElementById('btnTogglePinShow');
+      if (!input || !btn) return;
       if (input.type === 'password') {
         input.type = 'text';
         btn.textContent = '隱藏';
@@ -4163,12 +4215,13 @@
       });
     }
 
-    document.getElementById('btnCloseSettings').addEventListener('click', () => {
+    safeOn('btnCloseSettings', 'click', () => {
       applyTheme(settings.theme);
-      modalSettings.style.display = 'none';
+      const modalSettings = document.getElementById('modalSettings');
+      if (modalSettings) modalSettings.style.display = 'none';
     });
 
-    document.getElementById('btnSaveSettings').addEventListener('click', async () => {
+    safeOn('btnSaveSettings', 'click', async () => {
       const inputTodaySmall = document.getElementById('settingTodaySmallLimit');
       if (inputTodaySmall) {
         const val = parseInt(inputTodaySmall.value, 10);
@@ -4179,10 +4232,11 @@
         const val = parseInt(inputWeekMedLarge.value, 10);
         if (!isNaN(val) && val > 0) {
           settings.weekMediumLargeLimit = val;
-          settings.weekLimit = val; // 同步維持相容
+          settings.weekLimit = val;
         }
       }
-      settings.theme = document.getElementById('settingTheme').value;
+      const settingThemeEl = document.getElementById('settingTheme');
+      if (settingThemeEl) settings.theme = settingThemeEl.value;
 
       const inputSafeTop = document.getElementById('settingSafeTop');
       if (inputSafeTop) {
@@ -4193,10 +4247,13 @@
         }
       }
 
-      settings.includeKeepInConsult = document.getElementById('settingIncludeKeep').checked;
+      const settingIncludeKeepEl = document.getElementById('settingIncludeKeep');
+      if (settingIncludeKeepEl) settings.includeKeepInConsult = settingIncludeKeepEl.checked;
 
-      const isPinLocked = document.getElementById('settingPinLock').checked;
-      const newPin = document.getElementById('settingPinPass').value.trim();
+      const settingPinLockEl = document.getElementById('settingPinLock');
+      const isPinLocked = settingPinLockEl ? settingPinLockEl.checked : false;
+      const pinPassEl = document.getElementById('settingPinPass');
+      const newPin = pinPassEl ? pinPassEl.value.trim() : '';
 
       if (isPinLocked) {
         if (newPin) {
@@ -4216,84 +4273,91 @@
       applyTheme(settings.theme);
       checkLockOnStartup();
       renderAll();
-      modalSettings.style.display = 'none';
+      const modalSettings = document.getElementById('modalSettings');
+      if (modalSettings) modalSettings.style.display = 'none';
       showToast('設定已儲存');
     });
 
     // 密碼鎖定與解鎖事件
-    document.getElementById('btnLockApp').addEventListener('click', lockApp);
-    document.getElementById('formUnlock').addEventListener('submit', unlockApp);
-    document.getElementById('btnDoUnlock').addEventListener('click', unlockApp);
+    safeOn('btnLockApp', 'click', lockApp);
+    safeOn('formUnlock', 'submit', unlockApp);
+    safeOn('btnDoUnlock', 'click', unlockApp);
 
     // 匯出 / 匯入 JSON
-    document.getElementById('btnExportJson').addEventListener('click', exportBackupJson);
+    safeOn('btnExportJson', 'click', exportBackupJson);
     const inputImportJson = document.getElementById('inputImportJson');
-    document.getElementById('btnImportJsonTrigger').addEventListener('click', () => {
-      inputImportJson.click();
+    safeOn('btnImportJsonTrigger', 'click', () => {
+      if (inputImportJson) inputImportJson.click();
     });
-    inputImportJson.addEventListener('change', (e) => {
-      if (e.target.files && e.target.files[0]) {
-        importBackupJson(e.target.files[0]);
-        inputImportJson.value = '';
-      }
-    });
+    if (inputImportJson) {
+      inputImportJson.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          importBackupJson(e.target.files[0]);
+          inputImportJson.value = '';
+        }
+      });
+    }
 
     // 清除全部資料（兩階段確認）
     let clearConfirmPending = false;
     const btnClearAll = document.getElementById('btnClearAllData');
-    btnClearAll.addEventListener('click', () => {
-      if (!clearConfirmPending) {
-        clearConfirmPending = true;
-        btnClearAll.textContent = '確定要清除嗎？再點一次確認';
-        setTimeout(() => {
+    if (btnClearAll) {
+      btnClearAll.addEventListener('click', () => {
+        if (!clearConfirmPending) {
+          clearConfirmPending = true;
+          btnClearAll.textContent = '確定要清除嗎？再點一次確認';
+          setTimeout(() => {
+            clearConfirmPending = false;
+            btnClearAll.textContent = '清除全部資料';
+          }, 4000);
+        } else {
+          items = [];
+          saveItems();
+          renderAll();
+          const modalSettings = document.getElementById('modalSettings');
+          if (modalSettings) modalSettings.style.display = 'none';
           clearConfirmPending = false;
           btnClearAll.textContent = '清除全部資料';
-        }, 4000);
-      } else {
-        items = [];
-        saveItems();
-        renderAll();
-        modalSettings.style.display = 'none';
-        clearConfirmPending = false;
-        btnClearAll.textContent = '清除全部資料';
-        showToast('已清空所有任務資料');
-      }
-    });
+          showToast('已清空所有任務資料');
+        }
+      });
+    }
 
-    // Header 按鈕：跨裝置手動同步
-    const modalSync = document.getElementById('modalSync');
-    document.getElementById('btnOpenSync').addEventListener('click', () => {
+    // Header /選單按鈕：跨裝置手動同步
+    safeOn('btnOpenSync', 'click', () => {
       updateSyncModalStatus();
-      modalSync.style.display = 'flex';
+      const modalSync = document.getElementById('modalSync');
+      if (modalSync) modalSync.style.display = 'flex';
       checkRemoteGistStatus(false);
     });
 
-    const btnCheckRemote = document.getElementById('btnCheckRemoteGist');
-    if (btnCheckRemote) {
-      btnCheckRemote.addEventListener('click', () => checkRemoteGistStatus(true));
-    }
-
-    document.getElementById('btnCloseSync').addEventListener('click', () => {
-      modalSync.style.display = 'none';
+    safeOn('btnCheckRemoteGist', 'click', () => checkRemoteGistStatus(true));
+    safeOn('btnCloseSync', 'click', () => {
+      const modalSync = document.getElementById('modalSync');
+      if (modalSync) modalSync.style.display = 'none';
     });
-    document.getElementById('btnCloseSyncFooter').addEventListener('click', () => {
-      modalSync.style.display = 'none';
+    safeOn('btnCloseSyncFooter', 'click', () => {
+      const modalSync = document.getElementById('modalSync');
+      if (modalSync) modalSync.style.display = 'none';
     });
 
     // Gist 連線設定展開/收合
     const toggleConfigHeader = document.getElementById('syncToggleConfigHeader');
     const configBody = document.getElementById('syncConfigBody');
     const configChevron = document.getElementById('syncConfigChevron');
-    toggleConfigHeader.addEventListener('click', () => {
-      const isHidden = configBody.style.display === 'none' || !configBody.style.display;
-      configBody.style.display = isHidden ? 'flex' : 'none';
-      configChevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
-    });
+    if (toggleConfigHeader && configBody) {
+      toggleConfigHeader.addEventListener('click', () => {
+        const isHidden = configBody.style.display === 'none' || !configBody.style.display;
+        configBody.style.display = isHidden ? 'flex' : 'none';
+        if (configChevron) configChevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+      });
+    }
 
     // 顯示/隱藏 Token
-    document.getElementById('btnToggleSyncTokenShow').addEventListener('click', () => {
+    safeOn('btnToggleSyncTokenShow', 'click', () => {
       const input = document.getElementById('syncGithubToken');
       const btn = document.getElementById('btnToggleSyncTokenShow');
+      if (!input || !btn) return;
       if (input.type === 'password') {
         input.type = 'text';
         btn.textContent = '隱藏';
@@ -4304,66 +4368,65 @@
     });
 
     // 儲存 Gist 設定
-    document.getElementById('btnSaveSyncConfig').addEventListener('click', () => {
-      syncConfig.githubToken = document.getElementById('syncGithubToken').value.trim();
-      syncConfig.gistId = document.getElementById('syncGistId').value.trim();
+    safeOn('btnSaveSyncConfig', 'click', () => {
+      const tokenInput = document.getElementById('syncGithubToken');
+      const gistInput = document.getElementById('syncGistId');
+      if (tokenInput) syncConfig.githubToken = tokenInput.value.trim();
+      if (gistInput) syncConfig.gistId = gistInput.value.trim();
       saveSyncConfig();
       updateSyncModalStatus();
       showToast('Gist 連線設定已儲存');
     });
 
     // 自動搜尋 Gist 按鈕
-    const btnAutoFind = document.getElementById('btnAutoFindGist');
-    if (btnAutoFind) {
-      btnAutoFind.addEventListener('click', async () => {
-        if (!(await prepareGistAuth())) return;
-        showToast('正在搜尋您的 GitHub Gist…');
-        const found = await findUserExistingGist(syncConfig.githubToken.trim());
-        if (found) {
-          syncConfig.gistId = found;
-          saveSyncConfig();
-          updateSyncModalStatus();
-          showToast(`已成功找到並綁定 Gist (${found.substring(0, 8)}…)！`);
-        } else {
-          showToast('在您的帳號中未找到現有備份。請直接點擊「智慧雙向合併」進行初次建立');
-        }
-      });
-    }
+    safeOn('btnAutoFindGist', 'click', async () => {
+      if (!(await prepareGistAuth())) return;
+      showToast('正在搜尋您的 GitHub Gist…');
+      const found = await findUserExistingGist(syncConfig.githubToken.trim());
+      if (found) {
+        syncConfig.gistId = found;
+        saveSyncConfig();
+        updateSyncModalStatus();
+        showToast(`已成功找到並綁定 Gist (${found.substring(0, 8)}…)！`);
+      } else {
+        showToast('在您的帳號中未找到現有備份。請直接點擊「智慧雙向合併」進行初次建立');
+      }
+    });
 
     // 複製 Gist ID 按鈕
-    const btnCopyGist = document.getElementById('btnCopyGistId');
-    if (btnCopyGist) {
-      btnCopyGist.addEventListener('click', () => {
-        const gistId = syncConfig.gistId || document.getElementById('syncGistId').value.trim();
-        if (!gistId) {
-          showToast('目前尚無 Gist ID 可複製。請先點擊「上傳本機」或「智慧雙向合併」進行初次建立');
-          return;
-        }
-        navigator.clipboard.writeText(gistId).then(() => {
-          showToast('Gist ID 已複製！請在手機貼上此 ID 即可對齊同一雲端置物櫃');
-        }).catch(() => {
-          showToast(`Gist ID: ${gistId}`);
-        });
+    safeOn('btnCopyGistId', 'click', () => {
+      const gistInput = document.getElementById('syncGistId');
+      const gistId = syncConfig.gistId || (gistInput ? gistInput.value.trim() : '');
+      if (!gistId) {
+        showToast('目前尚無 Gist ID 可複製。請先點擊「上傳本機」或「智慧雙向合併」進行初次建立');
+        return;
+      }
+      navigator.clipboard.writeText(gistId).then(() => {
+        showToast('Gist ID 已複製！請在手機貼上此 ID 即可對齊同一雲端置物櫃');
+      }).catch(() => {
+        showToast(`Gist ID: ${gistId}`);
       });
-    }
+    });
 
     // 同步操作按鈕
-    document.getElementById('btnSyncMerge').addEventListener('click', mergeWithGist);
-    document.getElementById('btnSyncPush').addEventListener('click', pushToGist);
-    document.getElementById('btnSyncPull').addEventListener('click', pullFromGist);
+    safeOn('btnSyncMerge', 'click', mergeWithGist);
+    safeOn('btnSyncPush', 'click', pushToGist);
+    safeOn('btnSyncPull', 'click', pullFromGist);
 
     // 裝置直傳碼
-    document.getElementById('btnCopySyncCode').addEventListener('click', copySyncCode);
+    safeOn('btnCopySyncCode', 'click', copySyncCode);
     const pasteArea = document.getElementById('syncCodePasteArea');
-    document.getElementById('btnPasteSyncTrigger').addEventListener('click', () => {
-      pasteArea.style.display = 'flex';
-      document.getElementById('syncCodeInput').focus();
+    safeOn('btnPasteSyncTrigger', 'click', () => {
+      if (pasteArea) pasteArea.style.display = 'flex';
+      const input = document.getElementById('syncCodeInput');
+      if (input) input.focus();
     });
-    document.getElementById('btnCancelPasteSync').addEventListener('click', () => {
-      pasteArea.style.display = 'none';
+    safeOn('btnCancelPasteSync', 'click', () => {
+      if (pasteArea) pasteArea.style.display = 'none';
     });
-    document.getElementById('btnApplyPasteSync').addEventListener('click', () => {
-      const val = document.getElementById('syncCodeInput').value;
+    safeOn('btnApplyPasteSync', 'click', () => {
+      const input = document.getElementById('syncCodeInput');
+      const val = input ? input.value : '';
       applySyncCode(val);
     });
 

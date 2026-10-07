@@ -446,6 +446,89 @@ body::before {
     box-shadow: 0 -16px 40px rgba(0, 0, 0, 0.7);
     animation: menuSlideUp 0.24s cubic-bezier(0.16, 1, 0.3, 1);
   }
+
+  /* 主畫面按鈕防擁擠緊湊排版 (Compact Mobile Main Buttons) */
+  .card-triage-btns {
+    gap: 3px;
+  }
+
+  .btn-triage {
+    font-size: 0.70rem;
+    padding: 2px 7px;
+  }
+
+  .btn-now-toggle {
+    font-size: 0.70rem;
+    padding: 2px 8px;
+  }
+
+  .workbench-tab-btn {
+    padding: 6px 8px;
+    font-size: 0.84rem;
+    gap: 6px;
+  }
+
+  .capture-bottom {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .capture-selectors-group {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .capture-size-selector {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .capture-size-selector::-webkit-scrollbar {
+    display: none;
+  }
+
+  .size-btn {
+    padding: 3px 6px;
+    font-size: 0.70rem;
+    white-space: nowrap;
+  }
+
+  .desk-drawers-dock {
+    padding: 0 10px calc(max(8px, env(safe-area-inset-bottom, 8px))) 10px;
+  }
+
+  .dock-container {
+    padding: 5px 8px;
+    gap: 6px;
+  }
+
+  .dock-indicator {
+    display: none;
+  }
+
+  .dock-drawers-list {
+    width: 100%;
+    justify-content: space-between;
+    gap: 4px;
+  }
+
+  .dock-drawer-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 6px 3px;
+    font-size: 0.74rem;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
+  .dock-drawer-badge {
+    padding: 0 5px;
+    font-size: 0.66rem;
+  }
 }
 
 @keyframes menuSlideUp {
@@ -1085,7 +1168,7 @@ body::before {
 .card-triage-btns {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   flex-wrap: wrap;
 }
 
@@ -1094,12 +1177,13 @@ body::before {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-light);
   color: var(--text-main);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 600;
-  letter-spacing: 0.03em;
-  padding: 3px 9px;
-  border-radius: var(--radius-sm);
+  letter-spacing: 0.02em;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
   cursor: pointer;
+  white-space: nowrap;
   transition: all 0.18s ease;
 }
 
@@ -1120,12 +1204,13 @@ body::before {
   background: rgba(0, 240, 255, 0.05);
   border: 1px solid rgba(0, 240, 255, 0.25);
   color: var(--accent-primary);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   padding: 3px 9px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   cursor: pointer;
+  white-space: nowrap;
   transition: all 0.18s ease;
 }
 
