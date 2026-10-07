@@ -101,7 +101,9 @@
         <div class="capture-selectors-group">
           <div class="capture-size-selector" id="captureSizeSelector">
             <span class="capture-hint" style="margin-right: 2px;">大小：</span>
-            <button type="button" class="size-btn active" data-size="small" title="約 15-30 分鐘，如行政雜事、回信">小 15-30m</button>
+            <button type="button" class="size-btn active" data-size="auto" title="不確定時選自動：系統依內容判斷，若無法估算則自動設為 5-10m 試水溫">自動</button>
+            <button type="button" class="size-btn" data-size="micro" title="先做 5-10 分鐘試水溫，建立起步動能">試水溫 5-10m</button>
+            <button type="button" class="size-btn" data-size="small" title="約 15-30 分鐘，如行政雜事、回信">小 15-30m</button>
             <button type="button" class="size-btn" data-size="medium" title="約 1-2 小時，如特定模組、中度專注">中 1-2h</button>
             <button type="button" class="size-btn" data-size="large" title="2 小時以上，如重大專題、深度研讀">大 2h+</button>
           </div>
@@ -249,9 +251,8 @@
   <div class="modal-overlay" id="modalAutoDecide" style="display: none;">
     <div class="modal-sheet" style="max-width: 480px;">
       <div class="modal-header">
-        <h3 class="modal-title" style="display: flex; align-items: center; gap: 8px;">
-          <span>🎯</span>
-          <span>幫你決定好了！</span>
+        <h3 class="modal-title">
+          <span>推薦優先行動</span>
         </h3>
         <button class="modal-close" id="btnCloseAutoDecide">&times;</button>
       </div>
@@ -264,7 +265,6 @@
           </div>
           <div id="autoDecideTaskTitle" class="auto-decide-task-title">任務名稱載入中…</div>
           <div class="auto-decide-reason-box">
-            <div class="auto-decide-reason-icon">💡</div>
             <div id="autoDecideReasonText" class="auto-decide-reason-text">決策理由</div>
           </div>
           <div class="auto-decide-status-note">
@@ -565,10 +565,10 @@
           <div class="form-sublabel">在 Android 手機上安裝原生 Task Desk，支援離線執行與跨裝置手動同步。</div>
           <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
             <a href="https://github.com/Annie04082020/TaskDesk/releases/latest" target="_blank" rel="noopener" class="btn-primary" style="justify-content: center; text-decoration: none; padding: 10px 14px;">
-              <span>📱 前往 GitHub Releases 下載最新 APK (v1.0.6)</span>
+              <span>前往 GitHub Releases 下載最新 APK (v1.0.7)</span>
             </a>
             <div style="font-size: 0.74rem; color: var(--meta-text); line-height: 1.45;">
-              💡 <strong>APK 更新說明：</strong>手機端安裝的 APK 屬於獨立離線封裝。更新網頁原始碼後，GitHub 會自動打包新版本 APK，點擊上方按鈕下載安裝即可直接覆蓋更新！
+              <strong>APK 更新說明：</strong>手機端安裝的 APK 屬於獨立離線封裝。更新網頁原始碼後，GitHub 會自動打包新版本 APK，點擊上方按鈕下載安裝即可直接覆蓋更新！
             </div>
             <div style="display: flex; gap: 8px;">
               <a href="https://github.com/Annie04082020/TaskDesk/releases" target="_blank" rel="noopener" class="btn-secondary" style="flex: 1; text-align: center; text-decoration: none; padding: 7px 12px; font-size: 0.8rem;">

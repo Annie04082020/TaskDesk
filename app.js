@@ -198,9 +198,9 @@
     }
   }
 
-  // --- 任務大小與耗時預估 (小 15-30m / 中 1-2h / 大 2h+) ---
+  // --- 任務大小與耗時預估 (試水溫 5-10m / 小 15-30m / 中 1-2h / 大 2h+) ---
   function guessSize(text, typeId) {
-    if (!text) return 'small';
+    if (!text) return 'micro';
     const lower = text.toLowerCase();
 
     // 大任務關鍵詞 (2h+ 深度專案、論文、重大工作)
@@ -225,8 +225,19 @@
       return 'medium';
     }
 
-    // 預設為小任務 (15-30m 行政雜事、回信、繳費、整理)
-    return 'small';
+    // 常規小任務關鍵詞 (15-30m 具體行政瑣事、回信、繳費、打電話、採買)
+    const smallKeywords = [
+      '回信', '郵件', '繳費', '打電話', '聯絡', '通知', '採買', '買', '匯款', '填表', '預約', '洗衣服', '丟垃圾'
+    ];
+    for (const kw of smallKeywords) {
+      if (lower.includes(kw)) return 'small';
+    }
+    if (typeId === 'admin' || typeId === 'errand') {
+      return 'small';
+    }
+
+    // 若無法明確估算或內容模糊：自動設為「試水溫 5-10m」，零壓力破除起步阻力
+    return 'micro';
   }
 
   // 切換「今日」與「本週」工作桌
@@ -601,7 +612,8 @@
 
       // 立即使用本機關鍵字備案作為初值
       const keywordGuessedType = guessTypeByKeywords(text);
-      const itemSize = explicitSize || guessSize(text, keywordGuessedType);
+      const isAuto = (!explicitSize || explicitSize === 'auto');
+      const itemSize = isAuto ? guessSize(text, keywordGuessedType) : explicitSize;
       const item = {
         id: generateId(),
         text: text,
@@ -656,15 +668,15 @@
     const itemSize = item.size || guessSize(item.text, item.typeId);
 
     if (targetBucket === 'today') {
-      // 檢查「今日」小任務上限（母任務僅算一件頂層項目）
-      if (itemSize === 'small') {
+      // 檢查「今日」小任務與試水溫上限（母任務僅算一件頂層項目）
+      if (itemSize === 'small' || itemSize === 'micro') {
         const currentTodaySmallCount = items.filter(it => 
           it.bucket === 'today' && !it.parentId && !it.done && 
-          (it.size || guessSize(it.text, it.typeId)) === 'small'
+          ['small', 'micro'].includes(it.size || guessSize(it.text, it.typeId))
         ).length;
 
         if (item.bucket !== 'today' && currentTodaySmallCount >= settings.todaySmallLimit) {
-          showToast(`今日小任務已滿 ${settings.todaySmallLimit} 件，要先移走一件或完成一件`);
+          showToast(`今日小任務/試水溫已滿 ${settings.todaySmallLimit} 件，要先移走一件或完成一件`);
           return;
         }
       }
@@ -719,13 +731,13 @@
         const targetBucket = activeWorkbench === 'week' ? 'week' : 'today';
         const itemSize = item.size || guessSize(item.text, item.typeId);
 
-        if (targetBucket === 'today' && itemSize === 'small') {
+        if (targetBucket === 'today' && (itemSize === 'small' || itemSize === 'micro')) {
           const currentTodaySmallCount = items.filter(it => 
             it.bucket === 'today' && !it.parentId && !it.done && 
-            (it.size || guessSize(it.text, it.typeId)) === 'small'
+            ['small', 'micro'].includes(it.size || guessSize(it.text, it.typeId))
           ).length;
           if (currentTodaySmallCount >= settings.todaySmallLimit) {
-            showToast(`今日小任務已滿 ${settings.todaySmallLimit} 件，無法將此項目移至今日`);
+            showToast(`今日小任務/試水溫已滿 ${settings.todaySmallLimit} 件，無法將此項目移至今日`);
             item.isNow = false;
             saveItems();
             renderAll();
@@ -1039,11 +1051,12 @@
     const sizeChip = document.createElement('span');
     sizeChip.className = `chip chip-size chip-size-${itemSize}`;
     const sizeLabelMap = {
+      micro: '試水溫 5-10m',
       small: '小 15-30m',
       medium: '中 1-2h',
       large: '大 2h+'
     };
-    sizeChip.textContent = sizeLabelMap[itemSize] || '小 15-30m';
+    sizeChip.textContent = sizeLabelMap[itemSize] || '試水溫 5-10m';
     sizeChip.title = '點擊變更任務大小與耗時預估';
     sizeChip.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1323,18 +1336,18 @@
       return a.createdAt - b.createdAt;
     });
 
-    const smallCount = todayItems.filter(it => (it.size || guessSize(it.text, it.typeId)) === 'small').length;
+    const smallCount = todayItems.filter(it => ['small', 'micro'].includes(it.size || guessSize(it.text, it.typeId))).length;
 
     if (badgeEl) {
-      badgeEl.textContent = `${smallCount} / ${settings.todaySmallLimit} (小)`;
+      badgeEl.textContent = `${smallCount} / ${settings.todaySmallLimit} (小 / 試水溫)`;
     }
 
     if (noticeEl) {
       if (smallCount >= settings.todaySmallLimit) {
-        noticeEl.textContent = `小任務已達上限（${settings.todaySmallLimit} 件）`;
+        noticeEl.textContent = `小任務/試水溫已達上限（${settings.todaySmallLimit} 件）`;
         noticeEl.style.color = 'var(--accent-primary)';
       } else {
-        noticeEl.textContent = `小任務上限 ${settings.todaySmallLimit} 件（總計 ${todayItems.length} 件）`;
+        noticeEl.textContent = `小任務/試水溫上限 ${settings.todaySmallLimit} 件（總計 ${todayItems.length} 件）`;
         noticeEl.style.color = '';
       }
     }
@@ -1554,6 +1567,7 @@
     const currentSize = item ? (item.size || guessSize(item.text, item.typeId)) : 'small';
 
     const sizeOptions = [
+      { id: 'micro', title: '試水溫 (5-10m)', desc: '無法估算或模糊事項，先做 5-10 分鐘建立起步動能' },
       { id: 'small', title: '小 (15-30m)', desc: '微型任務、行政雜事、回信' },
       { id: 'medium', title: '中 (1-2h)', desc: '特定模組、中度專注時段' },
       { id: 'large', title: '大 (2h+)', desc: '重大專案、論文、深度研讀' }
@@ -1584,7 +1598,7 @@
     const dlOption = document.createElement('div');
     dlOption.className = 'type-picker-item';
     const dlText = item && item.deadline ? `截止死線：${item.deadline}` : '設定截止死線 (選填)';
-    dlOption.innerHTML = `<div style="font-weight: 500; font-size: 0.74rem; display: flex; align-items: center; gap: 5px; color: var(--text-color);"><span>📅</span><span>${dlText}</span></div>`;
+    dlOption.innerHTML = `<div style="font-weight: 500; font-size: 0.74rem; color: var(--text-color);">${dlText}</div>`;
     dlOption.addEventListener('click', () => {
       menu.remove();
       openDeadlinePicker(itemId, targetEl);
@@ -1660,8 +1674,8 @@
   function getQuadrantInfo(item) {
     const quadId = getComputedQuadrant(item);
     const size = item.size || guessSize(item.text, item.typeId) || 'small';
-    const sizeMap = { small: '小任務 (微型瑣事)', medium: '中型任務 (1-2h 專注)', large: '大型任務 (深度專案)' };
-    const sizeText = sizeMap[size] || '小任務';
+    const sizeMap = { micro: '試水溫 (5-10m 微步)', small: '小任務 (15-30m 瑣事)', medium: '中型任務 (1-2h 專注)', large: '大型任務 (深度專案)' };
+    const sizeText = sizeMap[size] || '試水溫';
 
     let dlStatus = '未設定死線';
     if (item.deadline) {
@@ -1679,7 +1693,7 @@
     if (quadId === 'q1') {
       return {
         id: 'q1',
-        badge: '⚡ 迫在眉睫',
+        badge: '迫在眉睫',
         title: '重要且緊急',
         color: '#f87171',
         desc: `系統判定理由：屬於${sizeText}且【${dlStatus}】，具備高核心價值與急迫時限，判定為優先處置焦點。`
@@ -1688,7 +1702,7 @@
     if (quadId === 'q2') {
       return {
         id: 'q2',
-        badge: '🎯 核心深耕',
+        badge: '核心深耕',
         title: '重要不急',
         color: '#38bdf8',
         desc: `系統判定理由：屬於${sizeText}且【${dlStatus}】，具備高核心價值但無急迫火燒眉毛壓力，是成長最重要的沉浸區。`
@@ -1697,7 +1711,7 @@
     if (quadId === 'q3') {
       return {
         id: 'q3',
-        badge: '⏳ 瑣事速辦',
+        badge: '瑣事速辦',
         title: '緊急瑣事',
         color: '#fbbf24',
         desc: `系統判定理由：屬於${sizeText}且【${dlStatus}】，行政瑣事期限逼近，花少許時間順手清空即可。`
@@ -1705,7 +1719,7 @@
     }
     return {
       id: 'q4',
-      badge: '🌱 順手雜項',
+      badge: '順手雜項',
       title: '低壓順手',
       color: '#94a3b8',
       desc: `系統判定理由：屬於${sizeText}且【${dlStatus}】，低精神負擔備用清單，有餘力或零碎空檔再執行。`
@@ -1931,10 +1945,10 @@
     }
 
     const quadrantConfig = [
-      { id: 'q1', title: '⚡ 重要且緊急', subtitle: '燃眉之急・危機處理・立即攻克', color: '#f87171', borderClass: 'box-q1' },
-      { id: 'q2', title: '🎯 重要不急', subtitle: '核心目標・長期價值・專注深耕', color: '#38bdf8', borderClass: 'box-q2' },
-      { id: 'q3', title: '⏳ 緊急瑣事', subtitle: '瑣碎突發・干擾事項・快速消化', color: '#fbbf24', borderClass: 'box-q3' },
-      { id: 'q4', title: '🌱 低壓順手', subtitle: '低價值干擾・順便進行・考慮放生', color: '#94a3b8', borderClass: 'box-q4' }
+      { id: 'q1', title: '重要且緊急', subtitle: '燃眉之急・危機處理・立即攻克', color: '#f87171', borderClass: 'box-q1' },
+      { id: 'q2', title: '重要不急', subtitle: '核心目標・長期價值・專注深耕', color: '#38bdf8', borderClass: 'box-q2' },
+      { id: 'q3', title: '緊急瑣事', subtitle: '瑣碎突發・干擾事項・快速消化', color: '#fbbf24', borderClass: 'box-q3' },
+      { id: 'q4', title: '低壓順手', subtitle: '低價值干擾・順便進行・考慮放生', color: '#94a3b8', borderClass: 'box-q4' }
     ];
 
     quadrantConfig.forEach(quad => {
@@ -2167,9 +2181,12 @@
         }
       } else {
         // 晚間/深夜 (18:00 - 05:00)：意志力遞減，避免心理壓力抗拒，優先推小任務
-        if (itemSize === 'small') {
+        if (itemSize === 'micro') {
+          score += 40;
+          reasons.push('晚間時段意志力有限，選 5-10m 試水溫起步阻力最低');
+        } else if (itemSize === 'small') {
           score += 35;
-          reasons.push('晚間時段意志力有限，選 15-30m 小任務最無壓力且容易起步');
+          reasons.push('晚間時段適合推進 15-30m 小任務');
         } else if (item.typeId === 'tidy' || item.typeId === 'admin') {
           score += 25;
           reasons.push('晚間適合做整理或行政雜務');
@@ -2229,11 +2246,11 @@
       quadBadge.textContent = quadInfo.badge;
     }
 
-    const itemSize = item.size || 'small';
-    const sizeLabels = { small: '小 15-30m', medium: '中 1-2h', large: '大 2h+' };
+    const itemSize = item.size || 'micro';
+    const sizeLabels = { micro: '試水溫 5-10m', small: '小 15-30m', medium: '中 1-2h', large: '大 2h+' };
     if (sizeBadge) {
       sizeBadge.className = `chip chip-size chip-size-${itemSize}`;
-      sizeBadge.textContent = sizeLabels[itemSize] || '小 15-30m';
+      sizeBadge.textContent = sizeLabels[itemSize] || '試水溫 5-10m';
     }
 
     const bucketLabels = { today: '今日工作桌', week: '本週工作桌', keep: '保溫', inbox: '收集箱' };
@@ -3309,9 +3326,8 @@
 
   // --- 事件監聽配置 ---
   function setupEventListeners() {
-    // 收集箱尺寸與象限選擇器
-    let selectedCaptureSize = 'small';
-    let selectedCaptureQuadrant = 'q2';
+    // 收集箱尺寸選擇器 (預設為 auto 自動推估，抓不準則自動歸為 5-10m 試水溫)
+    let selectedCaptureSize = 'auto';
     let selectedCaptureDeadline = null;
 
     const sizeSelector = document.getElementById('captureSizeSelector');
@@ -3320,7 +3336,7 @@
         btn.addEventListener('click', () => {
           sizeSelector.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
-          selectedCaptureSize = btn.dataset.size || 'small';
+          selectedCaptureSize = btn.dataset.size || 'auto';
         });
       });
     }

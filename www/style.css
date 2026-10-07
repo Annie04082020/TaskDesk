@@ -536,6 +536,24 @@ body::before {
   font-weight: 600;
 }
 
+.size-btn.active[data-size="micro"] {
+  background: rgba(168, 85, 247, 0.14);
+  border-color: #c084fc;
+  color: #c084fc;
+}
+
+.chip-size-micro {
+  background: rgba(168, 85, 247, 0.08);
+  color: #c084fc;
+  border-color: rgba(168, 85, 247, 0.3);
+}
+
+[data-theme="light"] .chip-size-micro {
+  background: rgba(168, 85, 247, 0.08);
+  color: #7e22ce;
+  border-color: rgba(168, 85, 247, 0.35);
+}
+
 /* ==========================================================================
    Main Sections & Cards
    ========================================================================== */
