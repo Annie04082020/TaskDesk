@@ -1051,21 +1051,15 @@
     });
     metaRow.appendChild(sizeChip);
 
-    // 四象限 Chip (主介面僅呈現簡約象限標籤，死線在後台運算不顯示在卡片上，減少焦慮)
-    const itemQuad = item.quadrant || 'q2';
+    // 四象限 Chip (系統客觀自動判定輕重緩急，免手動選擇；點擊僅供設定死線)
+    const quadInfo = getQuadrantInfo(item);
     const quadChip = document.createElement('span');
-    quadChip.className = `chip chip-quadrant chip-quadrant-${itemQuad}`;
-    const quadLabels = {
-      q1: 'Q1 重要緊急',
-      q2: 'Q2 重要核心',
-      q3: 'Q3 緊急瑣事',
-      q4: 'Q4 低優'
-    };
-    quadChip.textContent = quadLabels[itemQuad] || 'Q2 重要核心';
-    quadChip.title = '點擊設定四象限與截止死線 (死線僅供後台計算，主介面隱形)';
+    quadChip.className = `chip chip-quadrant chip-quadrant-${quadInfo.id}`;
+    quadChip.textContent = quadInfo.badge;
+    quadChip.title = `${quadInfo.title}（系統依任務大小與死線自動判定，點擊可設定死線）`;
     quadChip.addEventListener('click', (e) => {
       e.stopPropagation();
-      openQuadrantPicker(item.id, quadChip);
+      openDeadlinePicker(item.id, quadChip);
     });
     metaRow.appendChild(quadChip);
 
@@ -1625,125 +1619,258 @@
     }, 10);
   }
 
-  // --- 四象限分類與死線設定下拉選單 (全域浮動層，脫離卡片與資料夾層疊限制) ---
-  function openQuadrantPicker(itemId, targetEl) {
+  // --- 四象限輕重緩急客觀自動判定引擎 ---
+  // 使用者無需自行判斷 Q1/Q2/Q3/Q4，系統依「任務大小」與「截止死線」客觀自動分流
+  function getComputedQuadrant(item) {
+    if (!item) return 'q4';
+    const size = item.size || guessSize(item.text, item.typeId) || 'small';
+    const isImportant = (size === 'large' || size === 'medium');
+
+    let isUrgent = false;
+    if (item.deadline) {
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const deadlineDate = new Date(item.deadline + 'T23:59:59');
+      const diffMs = deadlineDate.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      // 2 天內到期或已過期皆為緊急
+      if (diffDays <= 2 || item.deadline <= todayStr) {
+        isUrgent = true;
+      }
+    } else {
+      // 若無死線，偵測任務標題是否有急迫字眼
+      const text = (item.text || '').toLowerCase();
+      if (text.includes('急') || text.includes('馬上') || text.includes('立刻') || text.includes('今天內') || text.includes('盡快') || text.includes('asap')) {
+        isUrgent = true;
+      }
+    }
+
+    if (isImportant && isUrgent) return 'q1';
+    if (isImportant && !isUrgent) return 'q2';
+    if (!isImportant && isUrgent) return 'q3';
+    return 'q4';
+  }
+
+  function getQuadrantInfo(item) {
+    const quadId = getComputedQuadrant(item);
+    const size = item.size || guessSize(item.text, item.typeId) || 'small';
+    const sizeMap = { small: '小任務 (微型瑣事)', medium: '中型任務 (1-2h 專注)', large: '大型任務 (深度專案)' };
+    const sizeText = sizeMap[size] || '小任務';
+
+    let dlStatus = '未設定死線';
+    if (item.deadline) {
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const diffMs = new Date(item.deadline + 'T23:59:59').getTime() - now.getTime();
+      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      if (diffDays <= 0 || item.deadline <= todayStr) {
+        dlStatus = `今日或已逾期 (${item.deadline})`;
+      } else {
+        dlStatus = `剩餘 ${diffDays} 天 (${item.deadline})`;
+      }
+    }
+
+    if (quadId === 'q1') {
+      return {
+        id: 'q1',
+        badge: '⚡ Q1 迫在眉睫',
+        title: 'Q1 重要且緊急',
+        color: '#f87171',
+        desc: `系統判定理由：屬於${sizeText}且【${dlStatus}】，具備高核心價值與急迫時限，判定為優先處置焦點。`
+      };
+    }
+    if (quadId === 'q2') {
+      return {
+        id: 'q2',
+        badge: '🎯 Q2 核心深耕',
+        title: 'Q2 重要不緊急',
+        color: '#38bdf8',
+        desc: `系統判定理由：屬於${sizeText}且【${dlStatus}】，具備高核心價值但無急迫火燒眉毛壓力，是成長最重要的沉浸區。`
+      };
+    }
+    if (quadId === 'q3') {
+      return {
+        id: 'q3',
+        badge: '⏳ Q3 瑣事速辦',
+        title: 'Q3 緊急不重要',
+        color: '#fbbf24',
+        desc: `系統判定理由：屬於${sizeText}且【${dlStatus}】，行政瑣事期限逼近，花少許時間順手清空即可。`
+      };
+    }
+    return {
+      id: 'q4',
+      badge: '🌱 Q4 順手雜項',
+      title: 'Q4 不重要不緊急',
+      color: '#94a3b8',
+      desc: `系統判定理由：屬於${sizeText}且【${dlStatus}】，低精神負擔備用清單，有餘力或零碎空檔再執行。`
+    };
+  }
+
+  // --- 截止死線設定浮動選單 (免自己選象限，系統依死線自動計算) ---
+  function openDeadlinePicker(itemId, targetEl) {
     const existing = document.querySelector('.quadrant-picker-menu');
     if (existing) existing.remove();
 
     const item = items.find(it => it.id === itemId);
     if (!item) return;
 
-    const currentQuad = item.quadrant || 'q2';
-    const currentDeadline = item.deadline || '';
-
     const menu = document.createElement('div');
     menu.className = 'quadrant-picker-menu';
 
+    // 標題列
+    const headerRow = document.createElement('div');
+    headerRow.style.display = 'flex';
+    headerRow.style.alignItems = 'center';
+    headerRow.style.justifyContent = 'space-between';
+
     const titleEl = document.createElement('div');
     titleEl.className = 'quadrant-picker-title';
-    titleEl.textContent = '四象限分類與死線設定';
-    menu.appendChild(titleEl);
+    titleEl.textContent = '📅 截止死線設定';
 
-    const optionsContainer = document.createElement('div');
-    optionsContainer.className = 'quadrant-picker-options';
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'btn-clear-deadline';
+    closeBtn.innerHTML = '&times;';
+    closeBtn.style.padding = '0 6px';
+    closeBtn.style.fontSize = '1.1rem';
+    closeBtn.addEventListener('click', () => menu.remove());
 
-    const quadOptions = [
-      { id: 'q1', title: 'Q1 重要且緊急', desc: '燃眉之急・即刻攻克・高優先級', color: '#f87171' },
-      { id: 'q2', title: 'Q2 重要不緊急', desc: '核心目標・長期價值・專注深耕 (推薦)', color: '#38bdf8' },
-      { id: 'q3', title: 'Q3 緊急不重要', desc: '突發瑣事・他人干擾・快速消化', color: '#fbbf24' },
-      { id: 'q4', title: 'Q4 不重要不緊急', desc: '低價值干擾・順便進行・考慮放生', color: '#94a3b8' }
+    headerRow.appendChild(titleEl);
+    headerRow.appendChild(closeBtn);
+    menu.appendChild(headerRow);
+
+    const hintEl = document.createElement('div');
+    hintEl.className = 'quadrant-picker-hint';
+    hintEl.textContent = '💡 不用您自己選象限！只要設定死線，系統會根據任務大小與剩餘天數自動判定輕重緩急。死線在主介面卡片隱藏不顯示。';
+    menu.appendChild(hintEl);
+
+    // 快捷日期標籤列
+    const quickChips = document.createElement('div');
+    quickChips.className = 'deadline-quick-chips';
+
+    function formatDate(d) {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    const todayDate = new Date();
+    const todayStr = formatDate(todayDate);
+
+    const tmrDate = new Date();
+    tmrDate.setDate(tmrDate.getDate() + 1);
+    const tmrStr = formatDate(tmrDate);
+
+    const friDate = new Date();
+    const currentDay = friDate.getDay();
+    const diffToFri = (5 - currentDay + 7) % 7;
+    friDate.setDate(friDate.getDate() + (diffToFri === 0 ? 7 : diffToFri));
+    const friStr = formatDate(friDate);
+
+    const nextMonDate = new Date();
+    const diffToNextMon = (1 - nextMonDate.getDay() + 7) % 7 || 7;
+    nextMonDate.setDate(nextMonDate.getDate() + diffToNextMon);
+    const monStr = formatDate(nextMonDate);
+
+    const quickOptions = [
+      { label: '今天', val: todayStr },
+      { label: '明天', val: tmrStr },
+      { label: '本週五', val: friStr },
+      { label: '下週一', val: monStr },
+      { label: '清除死線', val: null }
     ];
 
-    quadOptions.forEach(opt => {
-      const optEl = document.createElement('div');
-      optEl.className = `quadrant-picker-item ${currentQuad === opt.id ? 'active' : ''}`;
-      optEl.innerHTML = `
-        <div class="quadrant-item-head" style="color: ${opt.color};">
-          <span>${opt.title}</span>
-          ${currentQuad === opt.id ? '<span style="font-size:0.75rem;">✓</span>' : ''}
-        </div>
-        <div class="quadrant-item-desc">${opt.desc}</div>
-      `;
-      optEl.addEventListener('click', () => {
-        item.quadrant = opt.id;
-        item.updatedAt = Date.now();
-        saveItems();
-        renderAll();
-        const matrixModal = document.getElementById('modalMatrix');
-        if (matrixModal && matrixModal.style.display === 'flex') {
-          renderMatrixModal();
-        }
-        menu.remove();
-      });
-      optionsContainer.appendChild(optEl);
-    });
-    menu.appendChild(optionsContainer);
-
-    // 截止死線設定區塊 (主介面隱形不顯示，僅供背景權重運算)
-    const deadlineBox = document.createElement('div');
-    deadlineBox.className = 'quadrant-deadline-box';
-
-    const deadlineLabel = document.createElement('div');
-    deadlineLabel.className = 'quadrant-deadline-label';
-    deadlineLabel.innerHTML = `
-      <span>📅 截止死線 (主介面隱形不顯示)</span>
-      ${currentDeadline ? '<span style="color:#c084fc; font-weight:600;">已設定</span>' : '<span style="color:var(--meta-text);">未設定</span>'}
-    `;
-    deadlineBox.appendChild(deadlineLabel);
-
+    // 日期輸入列
     const deadlineRow = document.createElement('div');
     deadlineRow.className = 'quadrant-deadline-row';
 
     const dateInput = document.createElement('input');
     dateInput.type = 'date';
     dateInput.className = 'quadrant-date-input';
-    dateInput.value = currentDeadline;
-    dateInput.title = '選擇截止死線';
-    dateInput.addEventListener('change', (e) => {
-      item.deadline = e.target.value ? e.target.value : null;
+    dateInput.value = item.deadline || '';
+
+    // 即時系統診斷區塊
+    const infoBox = document.createElement('div');
+    infoBox.className = 'deadline-auto-info';
+
+    function updateInfoDisplay() {
+      const qInfo = getQuadrantInfo(item);
+      infoBox.innerHTML = `
+        <div class="deadline-auto-badge" style="color: ${qInfo.color};">
+          🤖 系統自動判定：${qInfo.badge}
+        </div>
+        <div class="deadline-auto-desc">${qInfo.desc}</div>
+      `;
+    }
+
+    function applyDeadline(newVal) {
+      item.deadline = newVal;
       item.updatedAt = Date.now();
+      dateInput.value = newVal || '';
       saveItems();
       renderAll();
+      updateInfoDisplay();
       const matrixModal = document.getElementById('modalMatrix');
       if (matrixModal && matrixModal.style.display === 'flex') {
         renderMatrixModal();
       }
+    }
+
+    quickOptions.forEach(opt => {
+      const chipBtn = document.createElement('button');
+      chipBtn.type = 'button';
+      chipBtn.className = 'deadline-chip-btn';
+      chipBtn.textContent = opt.label;
+      chipBtn.addEventListener('click', () => {
+        applyDeadline(opt.val);
+        if (!opt.val) showToast('已清除死線');
+        else showToast(`死線已設為 ${opt.label} (${opt.val})`);
+      });
+      quickChips.appendChild(chipBtn);
     });
 
-    const btnClearDeadline = document.createElement('button');
-    btnClearDeadline.type = 'button';
-    btnClearDeadline.className = 'btn-clear-deadline';
-    btnClearDeadline.textContent = '清除';
-    btnClearDeadline.title = '清除死線';
-    btnClearDeadline.addEventListener('click', () => {
-      dateInput.value = '';
-      item.deadline = null;
-      item.updatedAt = Date.now();
-      saveItems();
-      renderAll();
-      const matrixModal = document.getElementById('modalMatrix');
-      if (matrixModal && matrixModal.style.display === 'flex') {
-        renderMatrixModal();
-      }
-      showToast('已清除此項目的截止死線');
+    dateInput.addEventListener('change', (e) => {
+      applyDeadline(e.target.value ? e.target.value : null);
+    });
+
+    const btnClear = document.createElement('button');
+    btnClear.type = 'button';
+    btnClear.className = 'btn-clear-deadline';
+    btnClear.textContent = '清除';
+    btnClear.addEventListener('click', () => {
+      applyDeadline(null);
+      showToast('已清除死線');
     });
 
     deadlineRow.appendChild(dateInput);
-    deadlineRow.appendChild(btnClearDeadline);
-    deadlineBox.appendChild(deadlineRow);
+    deadlineRow.appendChild(btnClear);
 
-    const hintEl = document.createElement('div');
-    hintEl.className = 'quadrant-picker-hint';
-    hintEl.textContent = '💡 死線僅在後台供「幫我選」權重運算，不會出現在工作桌卡片上，守護專注心態。';
-    deadlineBox.appendChild(hintEl);
+    menu.appendChild(quickChips);
+    menu.appendChild(deadlineRow);
 
-    menu.appendChild(deadlineBox);
+    updateInfoDisplay();
+    menu.appendChild(infoBox);
+
+    // 完成按鈕
+    const finishRow = document.createElement('div');
+    finishRow.style.display = 'flex';
+    finishRow.style.justifyContent = 'flex-end';
+    finishRow.style.marginTop = '4px';
+
+    const btnDone = document.createElement('button');
+    btnDone.type = 'button';
+    btnDone.className = 'btn-secondary';
+    btnDone.style.padding = '4px 12px';
+    btnDone.style.fontSize = '0.78rem';
+    btnDone.textContent = '完成';
+    btnDone.addEventListener('click', () => menu.remove());
+    finishRow.appendChild(btnDone);
+    menu.appendChild(finishRow);
+
     document.body.appendChild(menu);
 
     // 視窗邊界定位
     const rect = targetEl.getBoundingClientRect();
-    const menuWidth = 270;
-    const menuHeight = menu.offsetHeight || 310;
+    const menuWidth = 295;
+    const menuHeight = menu.offsetHeight || 330;
 
     let top = rect.bottom + 4;
     let left = rect.left;
@@ -1805,7 +1932,7 @@
     ];
 
     quadrantConfig.forEach(quad => {
-      const qItems = filteredItems.filter(it => (it.quadrant || 'q2') === quad.id);
+      const qItems = filteredItems.filter(it => getComputedQuadrant(it) === quad.id);
 
       const box = document.createElement('div');
       box.className = `matrix-quadrant-box ${quad.borderClass}`;
@@ -1904,20 +2031,16 @@
           const actionsWrap = document.createElement('div');
           actionsWrap.className = 'matrix-item-actions';
 
-          // 快速切換象限按鈕
-          const nextQuadMap = { q1: 'q2', q2: 'q3', q3: 'q4', q4: 'q1' };
-          const btnShift = document.createElement('button');
-          btnShift.className = 'btn-matrix-shift';
-          btnShift.textContent = '切換象限';
-          btnShift.title = '輪換至下一象限';
-          btnShift.addEventListener('click', () => {
-            it.quadrant = nextQuadMap[quad.id];
-            it.updatedAt = Date.now();
-            saveItems();
-            renderAll();
-            renderMatrixModal();
+          // 調整死線按鈕 (代替手動切換象限，讓系統自動重算象限)
+          const btnDeadline = document.createElement('button');
+          btnDeadline.className = 'btn-matrix-shift';
+          btnDeadline.textContent = it.deadline ? `📅 ${it.deadline.substring(5)}` : '📅 設死線';
+          btnDeadline.title = '點擊設定或調整死線（系統會自動重新計算象限）';
+          btnDeadline.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openDeadlinePicker(it.id, btnDeadline);
           });
-          actionsWrap.appendChild(btnShift);
+          actionsWrap.appendChild(btnDeadline);
 
           const btnNow = document.createElement('button');
           btnNow.className = `btn-matrix-shift ${it.isNow ? 'is-active' : ''}`;
@@ -1972,20 +2095,20 @@
       let score = 0;
       const reasons = [];
 
-      // 1. 四象限基本權重
-      const quad = item.quadrant || 'q2';
+      // 1. 系統客觀判定四象限基本權重
+      const quad = getComputedQuadrant(item);
       if (quad === 'q1') {
         score += 100;
-        reasons.push('屬於【重要且緊急 (Q1)】核心焦點');
+        reasons.push('系統自動判定【Q1 迫在眉睫】核心焦點');
       } else if (quad === 'q2') {
         score += 70;
-        reasons.push('屬於【重要不緊急 (Q2)】長期價值推進');
+        reasons.push('系統自動判定【Q2 核心深耕】重要推進');
       } else if (quad === 'q3') {
         score += 40;
-        reasons.push('屬於【緊急不重要 (Q3)】待快速消化瑣事');
+        reasons.push('系統自動判定【Q3 瑣事速辦】待快速消化');
       } else {
         score += 15;
-        reasons.push('屬於【不重要不緊急 (Q4)】低優先級項目');
+        reasons.push('系統自動判定【Q4 順手雜項】備用項目');
       }
 
       // 2. 截止死線臨近度加權 (隱形死線)
@@ -2094,16 +2217,10 @@
 
     if (titleEl) titleEl.textContent = item.text;
 
-    const quad = item.quadrant || 'q2';
-    const quadLabels = {
-      q1: 'Q1 重要且緊急',
-      q2: 'Q2 重要不緊急',
-      q3: 'Q3 緊急不重要',
-      q4: 'Q4 不重要不緊急'
-    };
+    const quadInfo = getQuadrantInfo(item);
     if (quadBadge) {
-      quadBadge.className = `chip chip-quadrant chip-quadrant-${quad}`;
-      quadBadge.textContent = quadLabels[quad] || 'Q2 重要不緊急';
+      quadBadge.className = `chip chip-quadrant chip-quadrant-${quadInfo.id}`;
+      quadBadge.textContent = quadInfo.badge;
     }
 
     const itemSize = item.size || 'small';

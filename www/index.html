@@ -304,12 +304,15 @@
             <span>四象限矩陣總覽</span>
           </h3>
           <div class="modal-subtitle" style="font-size: 0.76rem; color: var(--meta-text); margin-top: 3px;">
-            依「重要性 × 緊急性」宏觀分配待辦項目與檢視死線，保持主畫面專注乾淨。
+            系統依「任務大小 × 截止死線」客觀自動分流四象限，無需自行決策輕重緩急。
           </div>
         </div>
         <button class="modal-close" id="btnCloseMatrix">&times;</button>
       </div>
       <div class="modal-body" style="padding-top: 10px;">
+        <div class="matrix-notice">
+          💡 <strong>免動腦分流：</strong>系統已根據任務大小（大/中/小）與截止死線客觀自動分配象限，告別決策疲勞。點擊各項目的「設死線」即可調整日期並即時自動重算。
+        </div>
         <div class="matrix-filter-bar">
           <span style="font-size: 0.76rem; color: var(--meta-text);">篩選範圍：</span>
           <div class="matrix-filter-chips" id="matrixFilterChips">
@@ -324,7 +327,7 @@
         </div>
       </div>
       <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-        <span style="font-size: 0.74rem; color: var(--meta-text);">💡 點擊項目可快速切換象限或設定死線；死線僅在後台運算，主畫面卡片維持零壓力。</span>
+        <span style="font-size: 0.74rem; color: var(--meta-text);">💡 死線在主介面卡片隱藏不顯示，維持專注零焦慮。</span>
         <button id="btnCloseMatrixFooter" class="btn-secondary">關閉總覽</button>
       </div>
     </div>
