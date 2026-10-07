@@ -170,81 +170,83 @@
         </div>
       </section>
 
-      <!-- Accordion: Inbox (收集箱) -->
-      <section class="accordion-folder" id="folderInbox">
-        <div class="folder-header" id="folderInboxHeader">
-          <div class="folder-title-left">
-            <span class="folder-name">收集箱</span>
-            <span class="folder-badge" id="inboxCountBadge">0</span>
-            <span class="folder-desc">新想法緩衝區</span>
-          </div>
-          <span class="folder-chevron">▼</span>
-        </div>
-        <div class="folder-content">
-          <div class="card-list" id="inboxCardList">
-            <!-- Dynamically Rendered Inbox Items -->
-          </div>
-        </div>
-      </section>
-
-      <!-- Accordion: Keep (保溫) -->
-      <section class="accordion-folder" id="folderKeep">
-        <div class="folder-header" id="folderKeepHeader">
-          <div class="folder-title-left">
-            <span class="folder-name">保溫</span>
-            <span class="folder-badge" id="keepCountBadge">0</span>
-            <span class="folder-desc">只維持不退化，不求進步</span>
-          </div>
-          <span class="folder-chevron">▼</span>
-        </div>
-        <div class="folder-content">
-          <div class="card-list" id="keepCardList">
-            <!-- Dynamically Rendered Keep Items -->
-          </div>
-        </div>
-      </section>
-
-      <!-- Accordion: Release (放生) -->
-      <section class="accordion-folder" id="folderRelease">
-        <div class="folder-header" id="folderReleaseHeader">
-          <div class="folder-title-left">
-            <span class="folder-name">放生</span>
-            <span class="folder-badge" id="releaseCountBadge">0</span>
-            <span class="folder-desc">有興趣但現在沒空</span>
-          </div>
-          <span class="folder-chevron">▼</span>
-        </div>
-        <div class="folder-content">
-          <div class="card-list" id="releaseCardList">
-            <!-- Dynamically Rendered Release Items -->
-          </div>
-        </div>
-      </section>
-
-      <!-- Folder: History Archive (歷史檔案庫 / 完成封存) -->
-      <section class="section folder-accordion" id="folderHistory">
-        <div class="folder-header" id="folderHistoryHeader">
-          <div class="folder-title-left">
-            <span class="folder-name">歷史檔案庫</span>
-            <span class="folder-badge" id="historyCountBadge">0</span>
-            <span class="folder-desc">完成任務永久封存於此，不直接刪除</span>
-          </div>
-          <span class="folder-chevron">▼</span>
-        </div>
-        <div class="folder-content">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px; flex-wrap: wrap;">
-            <span class="capture-hint">完成的任務自動歸檔於本機，可隨時復原或匯出備份</span>
-            <div style="display: flex; gap: 6px;">
-              <button type="button" class="btn-secondary" id="btnExportHistoryMd" style="padding: 3px 8px; font-size: 0.72rem;">匯出 Markdown</button>
-              <button type="button" class="btn-secondary" id="btnExportHistoryJson" style="padding: 3px 8px; font-size: 0.72rem;">匯出 JSON</button>
-            </div>
-          </div>
-          <div class="card-list" id="historyArchiveCardList">
-            <!-- Dynamically Rendered History Items -->
-          </div>
-        </div>
-      </section>
     </main>
+
+    <!-- Desk Drawers Dock (工作桌抽屜收納座) -->
+    <footer class="desk-drawers-dock" id="deskDrawersDock" role="navigation" aria-label="工作桌抽屜">
+      <div class="dock-container">
+        <div class="dock-indicator" id="dockIndicator">
+          <span class="dock-groove"></span>
+          <span class="dock-title">抽屜收納</span>
+        </div>
+        <div class="dock-drawers-list">
+          <button type="button" class="dock-drawer-btn" data-drawer="inbox" id="dockBtnInbox" title="拉開收集箱抽屜">
+            <span class="dock-drawer-name">收集箱</span>
+            <span class="dock-drawer-badge" id="dockBadgeInbox">0</span>
+          </button>
+          <button type="button" class="dock-drawer-btn" data-drawer="keep" id="dockBtnKeep" title="拉開保溫抽屜">
+            <span class="dock-drawer-name">保溫</span>
+            <span class="dock-drawer-badge" id="dockBadgeKeep">0</span>
+          </button>
+          <button type="button" class="dock-drawer-btn" data-drawer="release" id="dockBtnRelease" title="拉開放生抽屜">
+            <span class="dock-drawer-name">放生</span>
+            <span class="dock-drawer-badge" id="dockBadgeRelease">0</span>
+          </button>
+          <button type="button" class="dock-drawer-btn" data-drawer="history" id="dockBtnHistory" title="拉開歷史檔案抽屜">
+            <span class="dock-drawer-name">歷史檔案</span>
+            <span class="dock-drawer-badge" id="dockBadgeHistory">0</span>
+          </button>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Slide-up Desk Drawer Panel (拉開的抽屜面板) -->
+  <div class="drawer-overlay" id="drawerOverlay" style="display: none;">
+    <div class="drawer-backdrop" id="drawerBackdrop"></div>
+    <aside class="drawer-panel" id="drawerPanel" role="dialog" aria-modal="true" aria-label="工作桌抽屜">
+      <!-- Tactile Drawer Pull Handle -->
+      <div class="drawer-pull-bar" id="drawerPullBar" title="點擊推回抽屜">
+        <span class="drawer-pull-grip"></span>
+      </div>
+
+      <!-- Drawer Header with Tabs -->
+      <div class="drawer-header">
+        <div class="drawer-tabs">
+          <button type="button" class="drawer-tab active" data-drawer="inbox" id="drawerTabInbox">
+            <span class="drawer-tab-name">收集箱</span>
+            <span class="drawer-tab-badge" id="drawerBadgeInbox">0</span>
+          </button>
+          <button type="button" class="drawer-tab" data-drawer="keep" id="drawerTabKeep">
+            <span class="drawer-tab-name">保溫</span>
+            <span class="drawer-tab-badge" id="drawerBadgeKeep">0</span>
+          </button>
+          <button type="button" class="drawer-tab" data-drawer="release" id="drawerTabRelease">
+            <span class="drawer-tab-name">放生</span>
+            <span class="drawer-tab-badge" id="drawerBadgeRelease">0</span>
+          </button>
+          <button type="button" class="drawer-tab" data-drawer="history" id="drawerTabHistory">
+            <span class="drawer-tab-name">歷史檔案</span>
+            <span class="drawer-tab-badge" id="drawerBadgeHistory">0</span>
+          </button>
+        </div>
+        <button type="button" class="btn-drawer-close" id="btnCloseDrawer">推回抽屜</button>
+      </div>
+
+      <!-- Drawer Subbar -->
+      <div class="drawer-subbar">
+        <span class="drawer-hint" id="drawerHintText">新想法緩衝區・可將任務挑選移至今日或本週工作桌</span>
+        <div class="drawer-history-tools" id="drawerHistoryTools" style="display: none;">
+          <button type="button" class="btn-secondary" id="btnDrawerExportMd">匯出 Markdown</button>
+          <button type="button" class="btn-secondary" id="btnDrawerExportJson">匯出 JSON</button>
+        </div>
+      </div>
+
+      <!-- Drawer Card Content -->
+      <div class="drawer-body" id="drawerBody">
+        <div class="card-list" id="drawerCardList"></div>
+      </div>
+    </aside>
   </div>
 
   <!-- Modal: Auto-Decide Result (幫我選自動決策) -->
@@ -565,7 +567,7 @@
           <div class="form-sublabel">在 Android 手機上安裝原生 Task Desk，支援離線執行與跨裝置手動同步。</div>
           <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
             <a href="https://github.com/Annie04082020/TaskDesk/releases/latest" target="_blank" rel="noopener" class="btn-primary" style="justify-content: center; text-decoration: none; padding: 10px 14px;">
-              <span>前往 GitHub Releases 下載最新 APK (v1.0.7)</span>
+              <span>前往 GitHub Releases 下載最新 APK (v1.0.8)</span>
             </a>
             <div style="font-size: 0.74rem; color: var(--meta-text); line-height: 1.45;">
               <strong>APK 更新說明：</strong>手機端安裝的 APK 屬於獨立離線封裝。更新網頁原始碼後，GitHub 會自動打包新版本 APK，點擊上方按鈕下載安裝即可直接覆蓋更新！

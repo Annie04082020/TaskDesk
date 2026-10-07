@@ -969,10 +969,11 @@
     renderWorkbenchCounters();
     renderToday();
     renderWeek();
-    renderInbox();
-    renderKeep();
-    renderRelease();
-    renderHistoryArchive();
+    updateDockBadges();
+    const overlay = document.getElementById('drawerOverlay');
+    if (overlay && overlay.style.display !== 'none') {
+      renderDrawerContent();
+    }
   }
 
   function renderWeekCounter() {
@@ -1414,73 +1415,137 @@
     });
   }
 
-  // 渲染「收集箱」清單
-  function renderInbox() {
-    const listEl = document.getElementById('inboxCardList');
-    const badgeEl = document.getElementById('inboxCountBadge');
-    if (!listEl) return;
+  // --- 工作桌抽屜系統 (Desk Drawers: 收集箱 / 保溫 / 放生 / 歷史檔案) ---
+  let currentDrawer = 'inbox'; // 'inbox' | 'keep' | 'release' | 'history'
 
-    listEl.innerHTML = '';
-    const inboxItems = items.filter(it => it.bucket === 'inbox' && !it.parentId && !it.done);
-    badgeEl.textContent = inboxItems.length;
+  function openDrawer(drawerName) {
+    currentDrawer = drawerName || 'inbox';
+    const overlay = document.getElementById('drawerOverlay');
+    const panel = document.getElementById('drawerPanel');
+    if (!overlay || !panel) return;
 
-    if (inboxItems.length === 0) {
-      const emptyMsg = document.createElement('div');
-      emptyMsg.className = 'empty-neutral';
-      emptyMsg.textContent = '收集箱是空的。用上方輸入框記錄想法。';
-      listEl.appendChild(emptyMsg);
-      return;
-    }
-
-    inboxItems.forEach(item => {
-      listEl.appendChild(createCardElement(item, 'inbox'));
+    overlay.style.display = 'flex';
+    requestAnimationFrame(() => {
+      overlay.classList.add('is-open');
+      panel.classList.add('is-open');
     });
+
+    switchDrawerTab(currentDrawer);
   }
 
-  // 渲染「保溫」清單
-  function renderKeep() {
-    const listEl = document.getElementById('keepCardList');
-    const badgeEl = document.getElementById('keepCountBadge');
-    if (!listEl) return;
+  function closeDrawer() {
+    const overlay = document.getElementById('drawerOverlay');
+    const panel = document.getElementById('drawerPanel');
+    if (!overlay || !panel) return;
 
-    listEl.innerHTML = '';
-    const keepItems = items.filter(it => it.bucket === 'keep' && !it.parentId && !it.done);
-    badgeEl.textContent = keepItems.length;
-
-    if (keepItems.length === 0) {
-      const emptyMsg = document.createElement('div');
-      emptyMsg.className = 'empty-neutral';
-      emptyMsg.textContent = '目前沒有保溫項目。';
-      listEl.appendChild(emptyMsg);
-      return;
-    }
-
-    keepItems.forEach(item => {
-      listEl.appendChild(createCardElement(item, 'keep'));
-    });
+    overlay.classList.remove('is-open');
+    panel.classList.remove('is-open');
+    setTimeout(() => {
+      overlay.style.display = 'none';
+    }, 280);
   }
 
-  // 渲染「放生」清單
-  function renderRelease() {
-    const listEl = document.getElementById('releaseCardList');
-    const badgeEl = document.getElementById('releaseCountBadge');
-    if (!listEl) return;
+  function switchDrawerTab(drawerName) {
+    currentDrawer = drawerName;
 
-    listEl.innerHTML = '';
-    const releaseItems = items.filter(it => it.bucket === 'release' && !it.parentId && !it.done);
-    badgeEl.textContent = releaseItems.length;
-
-    if (releaseItems.length === 0) {
-      const emptyMsg = document.createElement('div');
-      emptyMsg.className = 'empty-neutral';
-      emptyMsg.textContent = '目前沒有放生項目。';
-      listEl.appendChild(emptyMsg);
-      return;
-    }
-
-    releaseItems.forEach(item => {
-      listEl.appendChild(createCardElement(item, 'release'));
+    const drawerKeys = ['inbox', 'keep', 'release', 'history'];
+    drawerKeys.forEach(d => {
+      const tab = document.getElementById(`drawerTab${d.charAt(0).toUpperCase() + d.slice(1)}`);
+      if (tab) {
+        if (d === drawerName) {
+          tab.classList.add('active');
+        } else {
+          tab.classList.remove('active');
+        }
+      }
     });
+
+    const hintEl = document.getElementById('drawerHintText');
+    const toolsEl = document.getElementById('drawerHistoryTools');
+    const hints = {
+      inbox: '新想法緩衝區・可將任務挑選移至今日或本週工作桌',
+      keep: '常規維持項目・只求維持不退化，不強求大幅進步',
+      release: '放生清單・有興趣但目前精力暫時放下的項目',
+      history: '歷史檔案庫・已完成任務永久封存於此，可隨時復原或匯出'
+    };
+    if (hintEl) hintEl.textContent = hints[drawerName] || '';
+    if (toolsEl) toolsEl.style.display = (drawerName === 'history') ? 'flex' : 'none';
+
+    renderDrawerContent();
+  }
+
+  function renderDrawerContent() {
+    const listEl = document.getElementById('drawerCardList');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    if (currentDrawer === 'inbox') {
+      const inboxItems = items.filter(it => it.bucket === 'inbox' && !it.parentId && !it.done);
+      if (inboxItems.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-neutral';
+        empty.textContent = '收集箱抽屜目前是空的。用上方輸入框記錄想法，會自動收納至此。';
+        listEl.appendChild(empty);
+      } else {
+        inboxItems.forEach(it => listEl.appendChild(createCardElement(it, 'inbox')));
+      }
+    } else if (currentDrawer === 'keep') {
+      const keepItems = items.filter(it => it.bucket === 'keep' && !it.parentId && !it.done);
+      if (keepItems.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-neutral';
+        empty.textContent = '保溫抽屜目前是空的。可將定期習慣或維持型事項移至此抽屜。';
+        listEl.appendChild(empty);
+      } else {
+        keepItems.forEach(it => listEl.appendChild(createCardElement(it, 'keep')));
+      }
+    } else if (currentDrawer === 'release') {
+      const releaseItems = items.filter(it => it.bucket === 'release' && !it.parentId && !it.done);
+      if (releaseItems.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-neutral';
+        empty.textContent = '放生抽屜目前是空的。暫時沒空執行的低優先事項可收納於此。';
+        listEl.appendChild(empty);
+      } else {
+        releaseItems.forEach(it => listEl.appendChild(createCardElement(it, 'release')));
+      }
+    } else if (currentDrawer === 'history') {
+      const doneItems = items.filter(it => it.done && !it.parentId);
+      doneItems.sort((a, b) => (b.doneAt || b.updatedAt || 0) - (a.doneAt || a.updatedAt || 0));
+      if (doneItems.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-neutral';
+        empty.textContent = '歷史檔案抽屜目前是空的。當在工作桌勾選完成任務時，會自動歸檔於此。';
+        listEl.appendChild(empty);
+      } else {
+        doneItems.forEach(it => listEl.appendChild(createHistoryCardElement(it)));
+      }
+    }
+  }
+
+  function updateDockBadges() {
+    const inboxCount = items.filter(it => it.bucket === 'inbox' && !it.parentId && !it.done).length;
+    const keepCount = items.filter(it => it.bucket === 'keep' && !it.parentId && !it.done).length;
+    const releaseCount = items.filter(it => it.bucket === 'release' && !it.parentId && !it.done).length;
+    const historyCount = items.filter(it => it.done && !it.parentId).length;
+
+    const dInbox = document.getElementById('dockBadgeInbox');
+    const dKeep = document.getElementById('dockBadgeKeep');
+    const dRelease = document.getElementById('dockBadgeRelease');
+    const dHist = document.getElementById('dockBadgeHistory');
+    if (dInbox) dInbox.textContent = inboxCount;
+    if (dKeep) dKeep.textContent = keepCount;
+    if (dRelease) dRelease.textContent = releaseCount;
+    if (dHist) dHist.textContent = historyCount;
+
+    const tInbox = document.getElementById('drawerBadgeInbox');
+    const tKeep = document.getElementById('drawerBadgeKeep');
+    const tRelease = document.getElementById('drawerBadgeRelease');
+    const tHist = document.getElementById('drawerBadgeHistory');
+    if (tInbox) tInbox.textContent = inboxCount;
+    if (tKeep) tKeep.textContent = keepCount;
+    if (tRelease) tRelease.textContent = releaseCount;
+    if (tHist) tHist.textContent = historyCount;
   }
 
   // --- 類型選擇下拉清單 (全域浮動層，脫離卡片與資料夾層疊限制) ---
@@ -2362,6 +2427,121 @@
     });
   }
 
+  // --- 歷史檔案卡片元素建構 ---
+  function createHistoryCardElement(item) {
+    const card = document.createElement('div');
+    card.className = 'task-card is-done';
+    card.dataset.cardId = item.id;
+    card.style.opacity = '0.88';
+    card.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+
+    const mainRow = document.createElement('div');
+    mainRow.className = 'card-main-row';
+
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.className = 'card-check';
+    check.checked = true;
+    check.title = '取消勾選可復原回工作桌';
+    check.addEventListener('change', () => {
+      toggleItemDone(item.id, false);
+      showToast(`已將「${item.text}」復原回工作桌`);
+    });
+
+    const body = document.createElement('div');
+    body.className = 'card-body';
+
+    const textEl = document.createElement('div');
+    textEl.className = 'card-text';
+    textEl.style.textDecoration = 'line-through';
+    textEl.style.color = 'var(--text-muted)';
+    textEl.textContent = item.text;
+
+    const metaRow = document.createElement('div');
+    metaRow.className = 'card-meta-row';
+
+    // 完成時間 Chip
+    const timeChip = document.createElement('span');
+    timeChip.className = 'chip';
+    const doneDate = item.doneAt ? new Date(item.doneAt) : null;
+    const timeStr = doneDate ? `${doneDate.getMonth() + 1}/${doneDate.getDate()} ${String(doneDate.getHours()).padStart(2, '0')}:${String(doneDate.getMinutes()).padStart(2, '0')} 完成` : '已完成';
+    timeChip.textContent = `✓ ${timeStr}`;
+    timeChip.style.color = 'var(--accent-secondary)';
+    metaRow.appendChild(timeChip);
+
+    // 尺寸 Chip
+    const itemSize = item.size || guessSize(item.text, item.typeId);
+    const sizeChip = document.createElement('span');
+    sizeChip.className = `chip chip-size chip-size-${itemSize}`;
+    const sizeMap = { micro: '試水溫 5-10m', small: '小 15-30m', medium: '中 1-2h', large: '大 2h+' };
+    sizeChip.textContent = sizeMap[itemSize] || '小';
+    metaRow.appendChild(sizeChip);
+
+    // 原始分堆來源標籤
+    const bucketChip = document.createElement('span');
+    bucketChip.className = 'chip';
+    const bucketMap = { today: '今日', week: '這週', inbox: '收集箱', keep: '保溫', release: '放生' };
+    bucketChip.textContent = bucketMap[item.bucket] || '工作桌';
+    metaRow.appendChild(bucketChip);
+
+    body.appendChild(textEl);
+    body.appendChild(metaRow);
+    mainRow.appendChild(check);
+    mainRow.appendChild(body);
+    card.appendChild(mainRow);
+
+    // 操作按鈕行
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'card-actions-row';
+
+    const triageBtns = document.createElement('div');
+    triageBtns.className = 'card-triage-btns';
+
+    const btnRestoreToday = document.createElement('button');
+    btnRestoreToday.className = 'btn-triage';
+    btnRestoreToday.textContent = '復原至今日';
+    btnRestoreToday.addEventListener('click', () => {
+      item.done = false;
+      item.doneAt = null;
+      item.bucket = 'today';
+      item.updatedAt = Date.now();
+      saveItems();
+      renderAll();
+      showToast(`已將「${item.text}」復原至今日工作桌`);
+    });
+    triageBtns.appendChild(btnRestoreToday);
+
+    const btnRestoreWeek = document.createElement('button');
+    btnRestoreWeek.className = 'btn-triage';
+    btnRestoreWeek.textContent = '復原至這週';
+    btnRestoreWeek.addEventListener('click', () => {
+      item.done = false;
+      item.doneAt = null;
+      item.bucket = 'week';
+      item.updatedAt = Date.now();
+      saveItems();
+      renderAll();
+      showToast(`已將「${item.text}」復原至這週工作桌`);
+    });
+    triageBtns.appendChild(btnRestoreWeek);
+
+    const btnDel = document.createElement('button');
+    btnDel.className = 'btn-delete-card';
+    btnDel.textContent = '刪除此紀錄';
+    btnDel.addEventListener('click', () => {
+      if (confirm(`確定要永久刪除「${item.text}」的紀錄嗎？`)) {
+        deleteItem(item.id);
+        showToast('已從歷史檔案中刪除');
+      }
+    });
+
+    actionsRow.appendChild(triageBtns);
+    actionsRow.appendChild(btnDel);
+    card.appendChild(actionsRow);
+
+    return card;
+  }
+
   // --- 歷史檔案庫渲染 ---
   function renderHistoryArchive() {
     const listEl = document.getElementById('historyArchiveCardList');
@@ -2384,117 +2564,7 @@
     completedItems.sort((a, b) => (b.doneAt || b.updatedAt || 0) - (a.doneAt || a.updatedAt || 0));
 
     completedItems.forEach(item => {
-      const card = document.createElement('div');
-      card.className = 'task-card is-done';
-      card.dataset.cardId = item.id;
-      card.style.opacity = '0.88';
-      card.style.borderColor = 'rgba(255, 255, 255, 0.08)';
-
-      const mainRow = document.createElement('div');
-      mainRow.className = 'card-main-row';
-
-      const check = document.createElement('input');
-      check.type = 'checkbox';
-      check.className = 'card-check';
-      check.checked = true;
-      check.title = '取消勾選可復原回工作桌';
-      check.addEventListener('change', () => {
-        toggleItemDone(item.id, false);
-        showToast(`已將「${item.text}」復原回工作桌`);
-      });
-
-      const body = document.createElement('div');
-      body.className = 'card-body';
-
-      const textEl = document.createElement('div');
-      textEl.className = 'card-text';
-      textEl.style.textDecoration = 'line-through';
-      textEl.style.color = 'var(--text-muted)';
-      textEl.textContent = item.text;
-
-      const metaRow = document.createElement('div');
-      metaRow.className = 'card-meta-row';
-
-      // 完成時間 Chip
-      const timeChip = document.createElement('span');
-      timeChip.className = 'chip';
-      const doneDate = item.doneAt ? new Date(item.doneAt) : null;
-      const timeStr = doneDate ? `${doneDate.getMonth() + 1}/${doneDate.getDate()} ${String(doneDate.getHours()).padStart(2, '0')}:${String(doneDate.getMinutes()).padStart(2, '0')} 完成` : '已完成';
-      timeChip.textContent = `✓ ${timeStr}`;
-      timeChip.style.color = 'var(--accent-secondary)';
-      metaRow.appendChild(timeChip);
-
-      // 尺寸 Chip
-      const itemSize = item.size || guessSize(item.text, item.typeId);
-      const sizeChip = document.createElement('span');
-      sizeChip.className = `chip chip-size chip-size-${itemSize}`;
-      const sizeMap = { small: '小 15-30m', medium: '中 1-2h', large: '大 2h+' };
-      sizeChip.textContent = sizeMap[itemSize] || '小';
-      metaRow.appendChild(sizeChip);
-
-      // 原始分堆來源標籤
-      const bucketChip = document.createElement('span');
-      bucketChip.className = 'chip';
-      const bucketMap = { today: '今日', week: '這週', inbox: '收集箱', keep: '保溫', release: '放生' };
-      bucketChip.textContent = bucketMap[item.bucket] || '工作桌';
-      metaRow.appendChild(bucketChip);
-
-      body.appendChild(textEl);
-      body.appendChild(metaRow);
-      mainRow.appendChild(check);
-      mainRow.appendChild(body);
-      card.appendChild(mainRow);
-
-      // 操作按鈕行
-      const actionsRow = document.createElement('div');
-      actionsRow.className = 'card-actions-row';
-
-      const triageBtns = document.createElement('div');
-      triageBtns.className = 'card-triage-btns';
-
-      const btnRestoreToday = document.createElement('button');
-      btnRestoreToday.className = 'btn-triage';
-      btnRestoreToday.textContent = '復原至今日';
-      btnRestoreToday.addEventListener('click', () => {
-        item.done = false;
-        item.doneAt = null;
-        item.bucket = 'today';
-        item.updatedAt = Date.now();
-        saveItems();
-        renderAll();
-        showToast(`已將「${item.text}」復原至今日工作桌`);
-      });
-      triageBtns.appendChild(btnRestoreToday);
-
-      const btnRestoreWeek = document.createElement('button');
-      btnRestoreWeek.className = 'btn-triage';
-      btnRestoreWeek.textContent = '復原至這週';
-      btnRestoreWeek.addEventListener('click', () => {
-        item.done = false;
-        item.doneAt = null;
-        item.bucket = 'week';
-        item.updatedAt = Date.now();
-        saveItems();
-        renderAll();
-        showToast(`已將「${item.text}」復原至這週工作桌`);
-      });
-      triageBtns.appendChild(btnRestoreWeek);
-
-      const btnDel = document.createElement('button');
-      btnDel.className = 'btn-delete-card';
-      btnDel.textContent = '刪除此紀錄';
-      btnDel.addEventListener('click', () => {
-        if (confirm(`確定要永久刪除「${item.text}」的紀錄嗎？`)) {
-          deleteItem(item.id);
-          showToast('已從歷史檔案庫中刪除');
-        }
-      });
-
-      actionsRow.appendChild(triageBtns);
-      actionsRow.appendChild(btnDel);
-      card.appendChild(actionsRow);
-
-      listEl.appendChild(card);
+      listEl.appendChild(createHistoryCardElement(item));
     });
   }
 
@@ -3383,7 +3453,7 @@
         selectedCaptureDeadline = null;
         if (btnToggleDeadline) btnToggleDeadline.classList.remove('has-deadline');
         if (deadlineBadgeText) deadlineBadgeText.textContent = '死線';
-        showToast(`已將 ${parsed.length} 件項目加入收集箱`);
+        showToast(`已將 ${parsed.length} 件項目收進「收集箱」抽屜`);
       }
     };
 
@@ -3404,22 +3474,47 @@
       tabWeek.addEventListener('click', () => switchWorkbench('week'));
     }
 
-    // 折疊區塊切換 (Inbox, Keep, Release, History)
-    ['folderInbox', 'folderKeep', 'folderRelease', 'folderHistory'].forEach(folderId => {
-      const folderEl = document.getElementById(folderId);
-      const headerEl = document.getElementById(folderId + 'Header');
-      if (folderEl && headerEl) {
-        headerEl.addEventListener('click', () => {
-          folderEl.classList.toggle('is-open');
-        });
+    // 工作桌抽屜底座 (Desk Drawers Dock)
+    const dockBtns = [
+      { id: 'dockBtnInbox', drawer: 'inbox' },
+      { id: 'dockBtnKeep', drawer: 'keep' },
+      { id: 'dockBtnRelease', drawer: 'release' },
+      { id: 'dockBtnHistory', drawer: 'history' }
+    ];
+    dockBtns.forEach(d => {
+      const btn = document.getElementById(d.id);
+      if (btn) {
+        btn.addEventListener('click', () => openDrawer(d.drawer));
       }
     });
 
-    // 歷史檔案匯出按鈕
-    const btnExpHistMd = document.getElementById('btnExportHistoryMd');
-    if (btnExpHistMd) btnExpHistMd.addEventListener('click', exportHistoryMarkdown);
-    const btnExpHistJson = document.getElementById('btnExportHistoryJson');
-    if (btnExpHistJson) btnExpHistJson.addEventListener('click', exportHistoryJson);
+    const dockIndicator = document.getElementById('dockIndicator');
+    if (dockIndicator) {
+      dockIndicator.addEventListener('click', () => openDrawer(currentDrawer || 'inbox'));
+    }
+
+    // 抽屜內標籤頁切換
+    ['inbox', 'keep', 'release', 'history'].forEach(drawerKey => {
+      const tabId = `drawerTab${drawerKey.charAt(0).toUpperCase() + drawerKey.slice(1)}`;
+      const tabEl = document.getElementById(tabId);
+      if (tabEl) {
+        tabEl.addEventListener('click', () => switchDrawerTab(drawerKey));
+      }
+    });
+
+    // 抽屜關閉 / 推回操作
+    const btnCloseDrawer = document.getElementById('btnCloseDrawer');
+    if (btnCloseDrawer) btnCloseDrawer.addEventListener('click', closeDrawer);
+    const drawerPullBar = document.getElementById('drawerPullBar');
+    if (drawerPullBar) drawerPullBar.addEventListener('click', closeDrawer);
+    const drawerBackdrop = document.getElementById('drawerBackdrop');
+    if (drawerBackdrop) drawerBackdrop.addEventListener('click', closeDrawer);
+
+    // 抽屜內歷史檔案匯出按鈕
+    const btnDrawerExpMd = document.getElementById('btnDrawerExportMd');
+    if (btnDrawerExpMd) btnDrawerExpMd.addEventListener('click', exportHistoryMarkdown);
+    const btnDrawerExpJson = document.getElementById('btnDrawerExportJson');
+    if (btnDrawerExpJson) btnDrawerExpJson.addEventListener('click', exportHistoryJson);
 
     // Header 按鈕：幫我選 (客觀直接自動決定並指派「現在做這個」)
     const btnOpenConsult = document.getElementById('btnOpenConsult');
@@ -3521,11 +3616,13 @@
 
     document.getElementById('btnRunConsult').addEventListener('click', executeConsultation);
 
-    // Header 按鈕：完成紀錄
-    document.getElementById('btnOpenHistory').addEventListener('click', () => {
-      renderHistoryModal();
-      document.getElementById('modalHistory').style.display = 'flex';
-    });
+    // Header 按鈕：完成紀錄 (開啟歷史檔案抽屜)
+    const btnOpenHist = document.getElementById('btnOpenHistory');
+    if (btnOpenHist) {
+      btnOpenHist.addEventListener('click', () => {
+        openDrawer('history');
+      });
+    }
     document.getElementById('btnCloseHistory').addEventListener('click', () => {
       document.getElementById('modalHistory').style.display = 'none';
     });
