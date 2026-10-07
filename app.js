@@ -2444,11 +2444,15 @@
     consultState.chatHistory = [];
 
     // 重設回點選表單狀態
-    document.getElementById('consultFormArea').style.display = 'block';
-    document.getElementById('consultResultArea').style.display = 'none';
-    document.getElementById('consultDialogArea').style.display = 'none';
-    document.getElementById('consultFooter').style.display = 'flex';
-    document.getElementById('modalConsult').style.display = 'flex';
+    const formArea = document.getElementById('consultFormArea');
+    const resultArea = document.getElementById('consultResultArea');
+    const footer = document.getElementById('consultFooter');
+    const modal = document.getElementById('modalConsult');
+
+    if (formArea) formArea.style.display = 'block';
+    if (resultArea) resultArea.style.display = 'none';
+    if (footer) footer.style.display = 'flex';
+    if (modal) modal.style.display = 'flex';
   }
 
   async function executeConsultation() {
@@ -2465,13 +2469,14 @@
 
     const formArea = document.getElementById('consultFormArea');
     const resultArea = document.getElementById('consultResultArea');
-    const dialogArea = document.getElementById('consultDialogArea');
     const footer = document.getElementById('consultFooter');
 
-    formArea.style.display = 'none';
-    footer.style.display = 'none';
-    resultArea.style.display = 'flex';
-    resultArea.innerHTML = '<div class="empty-neutral">正在依條件評估適合的選項…</div>';
+    if (formArea) formArea.style.display = 'none';
+    if (footer) footer.style.display = 'none';
+    if (resultArea) {
+      resultArea.style.display = 'flex';
+      resultArea.innerHTML = '<div class="empty-neutral">正在依條件評估適合的選項…</div>';
+    }
 
     // 若完全沒有符合的項目
     if (candidates.length === 0) {
@@ -3288,7 +3293,16 @@
     if (btnExpHistJson) btnExpHistJson.addEventListener('click', exportHistoryJson);
 
     // Header 按鈕：幫我選 (客觀直接自動決定並指派「現在做這個」)
-    document.getElementById('btnOpenConsult').addEventListener('click', runAutoDecideTask);
+    const btnOpenConsult = document.getElementById('btnOpenConsult');
+    if (btnOpenConsult) {
+      btnOpenConsult.addEventListener('click', runAutoDecideTask);
+    }
+
+    // Header 按鈕：狀態諮詢 (手動依 5 個問題評估條件推薦)
+    const btnOpenStatusConsult = document.getElementById('btnOpenStatusConsult');
+    if (btnOpenStatusConsult) {
+      btnOpenStatusConsult.addEventListener('click', openConsultModal);
+    }
 
     // Auto-Decide 結果視窗事件
     const btnCloseAutoDecide = document.getElementById('btnCloseAutoDecide');
@@ -3765,7 +3779,15 @@
       }
     });
 
+    const settingTheme = document.getElementById('settingTheme');
+    if (settingTheme) {
+      settingTheme.addEventListener('change', (e) => {
+        applyTheme(e.target.value);
+      });
+    }
+
     document.getElementById('btnCloseSettings').addEventListener('click', () => {
+      applyTheme(settings.theme);
       modalSettings.style.display = 'none';
     });
 
