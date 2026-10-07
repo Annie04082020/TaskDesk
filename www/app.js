@@ -2068,28 +2068,47 @@
   }
 
   // --- 跨裝置手動同步 (GitHub Gist & Direct Sync Code) ---
+  // --- 跨裝置手動同步 (GitHub Gist & Direct Sync Code) ---
   function updateSyncModalStatus() {
     const badge = document.getElementById('syncStatusBadge');
     const timeText = document.getElementById('syncLastTimeText');
     const tokenInput = document.getElementById('syncGithubToken');
     const gistIdInput = document.getElementById('syncGistId');
+    const configBody = document.getElementById('syncConfigBody');
+    const configChevron = document.getElementById('syncConfigChevron');
+    const gistLinkRow = document.getElementById('syncGistLinkRow');
+    const gistLink = document.getElementById('syncGistLink');
 
     if (tokenInput) tokenInput.value = syncConfig.githubToken || '';
     if (gistIdInput) gistIdInput.value = syncConfig.gistId || '';
 
     if (badge) {
       if (syncConfig.githubToken && syncConfig.gistId) {
-        badge.textContent = '已連接 Gist';
+        badge.textContent = '已連接 Gist (雙向同步就緒)';
         badge.style.color = 'var(--accent-primary)';
         badge.style.borderColor = 'var(--accent-primary)';
       } else if (syncConfig.githubToken) {
-        badge.textContent = '已填 Token (未綁定 Gist)';
+        badge.textContent = '已填 Token (首次同步將自動綁定)';
         badge.style.color = 'var(--accent-secondary)';
-        badge.style.borderColor = 'var(--border-light)';
+        badge.style.borderColor = 'var(--accent-secondary)';
       } else {
-        badge.textContent = '未設定';
+        badge.textContent = '尚未設定 Token';
         badge.style.color = 'var(--meta-text)';
         badge.style.borderColor = 'var(--border-light)';
+        // 若尚未設定 Token，預設自動展開連線設定供使用者輸入
+        if (configBody && (!configBody.style.display || configBody.style.display === 'none')) {
+          configBody.style.display = 'flex';
+          if (configChevron) configChevron.style.transform = 'rotate(180deg)';
+        }
+      }
+    }
+
+    if (gistLinkRow && gistLink) {
+      if (syncConfig.gistId) {
+        gistLink.href = `https://gist.github.com/${syncConfig.gistId}`;
+        gistLinkRow.style.display = 'block';
+      } else {
+        gistLinkRow.style.display = 'none';
       }
     }
 
@@ -2102,6 +2121,65 @@
       } else {
         timeText.textContent = '最後同步：尚無紀錄';
       }
+    }
+  }
+
+  // 檢查並預備 Gist 授權設定（自動從輸入框讀取、檢核 Token 格式）
+  async function prepareGistAuth() {
+    const tokenInput = document.getElementById('syncGithubToken');
+    const gistIdInput = document.getElementById('syncGistId');
+    if (tokenInput && tokenInput.value.trim()) {
+      syncConfig.githubToken = tokenInput.value.trim();
+    }
+    if (gistIdInput && gistIdInput.value.trim()) {
+      syncConfig.gistId = gistIdInput.value.trim();
+    }
+
+    const token = syncConfig.githubToken ? syncConfig.githubToken.trim() : '';
+    if (!token) {
+      const configBody = document.getElementById('syncConfigBody');
+      const configChevron = document.getElementById('syncConfigChevron');
+      if (configBody) configBody.style.display = 'flex';
+      if (configChevron) configChevron.style.transform = 'rotate(180deg)';
+      if (tokenInput) tokenInput.focus();
+      showToast('請先展開「Gist 連線設定」輸入 GitHub Token (可點選連結一鍵產生)');
+      return false;
+    }
+
+    if (token.startsWith('github_pat_')) {
+      showToast('⚠️ GitHub 細粒度 Token (github_pat_) 不支援 Gist，請使用 Classic Token (以 ghp_ 開頭)');
+      return false;
+    }
+
+    saveSyncConfig();
+    updateSyncModalStatus();
+    return true;
+  }
+
+  // 自動搜尋使用者 GitHub 帳號中現有的 Task Desk Gist
+  async function findUserExistingGist(token) {
+    if (!token) return null;
+    try {
+      const resp = await fetch('https://api.github.com/gists?per_page=30', {
+        headers: {
+          'Authorization': `token ${token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+      if (!resp.ok) return null;
+      const gists = await resp.json();
+      if (!Array.isArray(gists)) return null;
+
+      const found = gists.find(g => {
+        if (g.files && g.files['taskdesk-sync.json']) return true;
+        if (g.description && g.description.includes('Task Desk')) return true;
+        return false;
+      });
+
+      return found ? found.id : null;
+    } catch (e) {
+      console.warn('自動搜尋 Gist 失敗:', e);
+      return null;
     }
   }
 
@@ -2153,11 +2231,8 @@
 
   // GitHub Gist API: 上傳本機 (Push)
   async function pushToGist() {
-    const token = syncConfig.githubToken ? syncConfig.githubToken.trim() : '';
-    if (!token) {
-      showToast('請先展開「Gist 連線設定」輸入 GitHub Token');
-      return;
-    }
+    if (!(await prepareGistAuth())) return;
+    const token = syncConfig.githubToken.trim();
 
     const payload = {
       app: 'Task Desk',
@@ -2175,13 +2250,24 @@
 
     try {
       showToast('正在上傳至 GitHub Gist…');
+
+      // 若未指定 Gist ID，先搜尋是否已有現成 Gist，避免重複建立
+      if (!syncConfig.gistId || !syncConfig.gistId.trim()) {
+        const existingId = await findUserExistingGist(token);
+        if (existingId) {
+          syncConfig.gistId = existingId;
+          saveSyncConfig();
+          updateSyncModalStatus();
+        }
+      }
+
       let resp;
       if (!syncConfig.gistId || !syncConfig.gistId.trim()) {
         // 首次建立私人 Gist
         resp = await fetch('https://api.github.com/gists', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${token}`,
+            'Authorization': `token ${token}`,
             'Content-Type': 'application/json',
             'Accept': 'application/vnd.github.v3+json'
           },
@@ -2193,7 +2279,9 @@
         });
 
         if (!resp.ok) {
-          throw new Error(`建立 Gist 失敗 (${resp.status})，請確認 Token 具備 gist 權限`);
+          if (resp.status === 401) throw new Error('GitHub 認證失敗 (401)：Token 無效或過期，請確認為 Classic Token');
+          if (resp.status === 403) throw new Error('權限不足 (403)：請確認 Token 具備 gist 權限');
+          throw new Error(`建立 Gist 失敗 (${resp.status})`);
         }
         const data = await resp.json();
         syncConfig.gistId = data.id;
@@ -2202,7 +2290,7 @@
         resp = await fetch(`https://api.github.com/gists/${syncConfig.gistId.trim()}`, {
           method: 'PATCH',
           headers: {
-            'Authorization': `Bearer ${token}`,
+            'Authorization': `token ${token}`,
             'Content-Type': 'application/json',
             'Accept': 'application/vnd.github.v3+json'
           },
@@ -2213,7 +2301,9 @@
         });
 
         if (!resp.ok) {
-          throw new Error(`更新 Gist 失敗 (${resp.status})，請檢查 Token 或 Gist ID 是否正確`);
+          if (resp.status === 401) throw new Error('GitHub 認證失敗 (401)：Token 無效或過期');
+          if (resp.status === 404) throw new Error(`找不到 Gist (404)：Gist ID (${syncConfig.gistId}) 不存在或無權存取`);
+          throw new Error(`更新 Gist 失敗 (${resp.status})`);
         }
       }
 
@@ -2229,23 +2319,38 @@
 
   // GitHub Gist API: 從雲端拉取 (Pull)
   async function pullFromGist() {
-    const token = syncConfig.githubToken ? syncConfig.githubToken.trim() : '';
-    const gistId = syncConfig.gistId ? syncConfig.gistId.trim() : '';
-    if (!token || !gistId) {
-      showToast('請先輸入 GitHub Token 與 Gist ID');
-      return;
+    if (!(await prepareGistAuth())) return;
+    const token = syncConfig.githubToken.trim();
+    let gistId = syncConfig.gistId ? syncConfig.gistId.trim() : '';
+
+    // 若未填 Gist ID，自動在帳號中尋找現有 Task Desk Gist
+    if (!gistId) {
+      showToast('正在搜尋您 GitHub 上的備份 Gist…');
+      const foundId = await findUserExistingGist(token);
+      if (foundId) {
+        gistId = foundId;
+        syncConfig.gistId = foundId;
+        saveSyncConfig();
+        updateSyncModalStatus();
+        showToast(`已自動連線至現有 Gist (${foundId.substring(0, 8)}…)！正在下載…`);
+      } else {
+        showToast('找不到現有 Task Desk Gist。若為初次使用，請先點擊「智慧雙向合併」進行初次建立');
+        return;
+      }
     }
 
     try {
       showToast('正在從 GitHub Gist 下載…');
       const resp = await fetch(`https://api.github.com/gists/${gistId}`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `token ${token}`,
           'Accept': 'application/vnd.github.v3+json'
         }
       });
 
       if (!resp.ok) {
+        if (resp.status === 401) throw new Error('GitHub 認證失敗 (401)：Token 無效或已過期');
+        if (resp.status === 404) throw new Error(`找不到 Gist (404)：Gist ID (${gistId}) 不存在`);
         throw new Error(`獲取 Gist 失敗 (${resp.status})`);
       }
 
@@ -2280,25 +2385,39 @@
 
   // GitHub Gist API: 智慧雙向合併 (Merge)
   async function mergeWithGist() {
-    const token = syncConfig.githubToken ? syncConfig.githubToken.trim() : '';
-    const gistId = syncConfig.gistId ? syncConfig.gistId.trim() : '';
+    if (!(await prepareGistAuth())) return;
+    const token = syncConfig.githubToken.trim();
+    let gistId = syncConfig.gistId ? syncConfig.gistId.trim() : '';
 
-    // 若尚未建立 Gist，則直接進行 push
+    // 若未填 Gist ID，先檢查是否帳號已有現存的 TaskDesk Gist（避免跨裝置各自建出不同 Gist）
     if (!gistId) {
-      await pushToGist();
-      return;
+      showToast('正在偵測您 GitHub 上的現有備份…');
+      const foundId = await findUserExistingGist(token);
+      if (foundId) {
+        gistId = foundId;
+        syncConfig.gistId = foundId;
+        saveSyncConfig();
+        updateSyncModalStatus();
+        showToast(`已找到現有 Gist (${foundId.substring(0, 8)}…)！正在進行雙向合併…`);
+      } else {
+        // 帳號中確實無 Gist，進行初次建立上傳
+        await pushToGist();
+        return;
+      }
     }
 
     try {
       showToast('正在與雲端進行雙向合併…');
       const resp = await fetch(`https://api.github.com/gists/${gistId}`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `token ${token}`,
           'Accept': 'application/vnd.github.v3+json'
         }
       });
 
       if (!resp.ok) {
+        if (resp.status === 401) throw new Error('GitHub 認證失敗 (401)：Token 無效或過期');
+        if (resp.status === 404) throw new Error(`找不到 Gist (404)：Gist ID (${gistId}) 不存在`);
         throw new Error(`讀取遠端 Gist 失敗 (${resp.status})`);
       }
 
@@ -2325,10 +2444,10 @@
         settings: settings
       };
 
-      await fetch(`https://api.github.com/gists/${gistId}`, {
+      const patchResp = await fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `token ${token}`,
           'Content-Type': 'application/json',
           'Accept': 'application/vnd.github.v3+json'
         },
@@ -2341,6 +2460,10 @@
           }
         })
       });
+
+      if (!patchResp.ok) {
+        throw new Error(`回寫雲端失敗 (${patchResp.status})`);
+      }
 
       syncConfig.lastSyncTime = Date.now();
       saveSyncConfig();
@@ -3015,6 +3138,24 @@
       updateSyncModalStatus();
       showToast('Gist 連線設定已儲存');
     });
+
+    // 自動搜尋 Gist 按鈕
+    const btnAutoFind = document.getElementById('btnAutoFindGist');
+    if (btnAutoFind) {
+      btnAutoFind.addEventListener('click', async () => {
+        if (!(await prepareGistAuth())) return;
+        showToast('正在搜尋您的 GitHub Gist…');
+        const found = await findUserExistingGist(syncConfig.githubToken.trim());
+        if (found) {
+          syncConfig.gistId = found;
+          saveSyncConfig();
+          updateSyncModalStatus();
+          showToast(`已成功找到並綁定 Gist (${found.substring(0, 8)}…)！`);
+        } else {
+          showToast('在您的帳號中未找到現有備份。請直接點擊「智慧雙向合併」進行初次建立');
+        }
+      });
+    }
 
     // 同步操作按鈕
     document.getElementById('btnSyncMerge').addEventListener('click', mergeWithGist);

@@ -535,25 +535,37 @@
           <!-- Gist Token Configuration Form -->
           <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-light);">
             <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" id="syncToggleConfigHeader">
-              <span class="form-label" style="font-size: 0.82rem;">Gist 連線設定</span>
+              <span class="form-label" style="font-size: 0.82rem;">Gist 連線設定 (初次使用必填)</span>
               <span class="folder-chevron" id="syncConfigChevron">▼</span>
             </div>
             <div id="syncConfigBody" style="display: none; flex-direction: column; gap: 10px; margin-top: 10px;">
               <div class="form-group">
-                <label class="form-label" for="syncGithubToken">GitHub Personal Access Token</label>
-                <div class="form-sublabel">只需勾選 gist 權限，只儲存於本機。</div>
-                <div style="display: flex; gap: 6px;">
-                  <input type="password" id="syncGithubToken" class="form-input" style="flex: 1;" placeholder="ghp_xxxxxxxxxxxx">
+                <label class="form-label" for="syncGithubToken">GitHub Personal Access Token (Classic)</label>
+                <div class="form-sublabel">只需勾選 <code>gist</code> 權限即可，Token 100% 僅儲存在本機。</div>
+                <div style="margin-top: 3px;">
+                  <a href="https://github.com/settings/tokens/new?scopes=gist&description=TaskDesk+Sync" target="_blank" rel="noopener" style="color: var(--accent-primary); font-size: 0.76rem; text-decoration: underline;">👉 點此一鍵前往 GitHub 產生 Token (已自動預選 gist 權限)</a>
+                </div>
+                <div style="font-size: 0.72rem; color: #ffb86c; margin-top: 3px;">
+                  ⚠️ 請注意：必須是 Classic Token (以 <code>ghp_</code> 開頭)；GitHub 官方限制細粒度 Token (<code>github_pat_</code>) 無法存取 Gist。
+                </div>
+                <div style="display: flex; gap: 6px; margin-top: 6px;">
+                  <input type="password" id="syncGithubToken" class="form-input" style="flex: 1;" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
                   <button type="button" id="btnToggleSyncTokenShow" class="btn-secondary" style="padding: 6px 10px; font-size: 0.75rem;">顯示</button>
                 </div>
               </div>
               <div class="form-group">
-                <label class="form-label" for="syncGistId">Gist ID (選填)</label>
-                <div class="form-sublabel">若為空，首次點擊「上傳」會自動在您的 GitHub 建立專屬私人 Gist 並自動填入。</div>
-                <input type="text" id="syncGistId" class="form-input" placeholder="自動建立或貼上現有 Gist ID">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label class="form-label" for="syncGistId">Gist ID (選填)</label>
+                  <button type="button" id="btnAutoFindGist" class="btn-secondary" style="font-size: 0.72rem; padding: 2px 7px;">自動搜尋帳號 Gist</button>
+                </div>
+                <div class="form-sublabel">若為空，系統會自動在您的帳號中搜尋現有備份，或在初次上傳時自動建立並綁定。</div>
+                <input type="text" id="syncGistId" class="form-input" placeholder="留空自動偵測，或貼上 Gist ID">
+                <div id="syncGistLinkRow" style="display: none; font-size: 0.75rem; margin-top: 5px;">
+                  <a id="syncGistLink" href="" target="_blank" rel="noopener" style="color: var(--accent-primary); text-decoration: underline;">在 GitHub Gist 線上檢視同步檔案 ↗</a>
+                </div>
               </div>
-              <div style="display: flex; justify-content: flex-end;">
-                <button id="btnSaveSyncConfig" class="btn-secondary" style="font-size: 0.8rem;">儲存連線設定</button>
+              <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" id="btnSaveSyncConfig" class="btn-primary" style="font-size: 0.8rem; padding: 6px 14px;">儲存連線設定</button>
               </div>
             </div>
           </div>
