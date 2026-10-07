@@ -574,8 +574,11 @@
                   <label class="form-label" for="syncGistId">Gist ID (選填)</label>
                   <button type="button" id="btnAutoFindGist" class="btn-secondary" style="font-size: 0.72rem; padding: 2px 7px;">自動搜尋帳號 Gist</button>
                 </div>
-                <div class="form-sublabel">若為空，系統會自動在您的帳號中搜尋現有備份，或在初次上傳時自動建立並綁定。</div>
-                <input type="text" id="syncGistId" class="form-input" placeholder="留空自動偵測，或貼上 Gist ID">
+                <div class="form-sublabel">兩端裝置必須連接<b>同一組 Gist ID</b> 才能共享任務。在電腦建立後，可點「複製 ID」貼到手機。</div>
+                <div style="display: flex; gap: 6px;">
+                  <input type="text" id="syncGistId" class="form-input" style="flex: 1;" placeholder="留空自動偵測，或貼上 Gist ID">
+                  <button type="button" id="btnCopyGistId" class="btn-secondary" style="padding: 6px 10px; font-size: 0.75rem;">複製 ID</button>
+                </div>
                 <div id="syncGistLinkRow" style="display: none; font-size: 0.75rem; margin-top: 5px;">
                   <a id="syncGistLink" href="" target="_blank" rel="noopener" style="color: var(--accent-primary); text-decoration: underline;">在 GitHub Gist 線上檢視同步檔案 ↗</a>
                 </div>

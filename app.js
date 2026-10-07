@@ -2230,13 +2230,22 @@
       const gists = await resp.json();
       if (!Array.isArray(gists)) return null;
 
-      const found = gists.find(g => {
+      const candidates = gists.filter(g => {
         if (g.files && g.files['taskdesk-sync.json']) return true;
         if (g.description && g.description.includes('Task Desk')) return true;
         return false;
       });
 
-      return found ? found.id : null;
+      if (candidates.length === 0) return null;
+
+      // 依據 taskdesk-sync.json 的檔案大小降序排序（優先選取真正存有任務的 Gist，避免選到 0 筆空檔）
+      candidates.sort((a, b) => {
+        const sizeA = a.files && a.files['taskdesk-sync.json'] ? (a.files['taskdesk-sync.json'].size || 0) : 0;
+        const sizeB = b.files && b.files['taskdesk-sync.json'] ? (b.files['taskdesk-sync.json'].size || 0) : 0;
+        return sizeB - sizeA;
+      });
+
+      return candidates[0].id;
     } catch (e) {
       console.warn('自動搜尋 Gist 失敗:', e);
       return null;
@@ -3242,6 +3251,23 @@
         } else {
           showToast('在您的帳號中未找到現有備份。請直接點擊「智慧雙向合併」進行初次建立');
         }
+      });
+    }
+
+    // 複製 Gist ID 按鈕
+    const btnCopyGist = document.getElementById('btnCopyGistId');
+    if (btnCopyGist) {
+      btnCopyGist.addEventListener('click', () => {
+        const gistId = syncConfig.gistId || document.getElementById('syncGistId').value.trim();
+        if (!gistId) {
+          showToast('目前尚無 Gist ID 可複製。請先點擊「上傳本機」或「智慧雙向合併」進行初次建立');
+          return;
+        }
+        navigator.clipboard.writeText(gistId).then(() => {
+          showToast('Gist ID 已複製！請在手機貼上此 ID 即可對齊同一雲端置物櫃');
+        }).catch(() => {
+          showToast(`Gist ID: ${gistId}`);
+        });
       });
     }
 
