@@ -517,6 +517,22 @@
             最後同步：尚無紀錄
           </div>
 
+          <!-- Local vs Cloud Task Count Summary -->
+          <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-light); border-radius: 8px; padding: 10px 12px; margin-top: 10px; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div>本機任務：<b id="syncLocalCountText" style="color: var(--accent-primary);">0 筆</b></div>
+              <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;" id="syncRemoteCountText">雲端 Gist：尚未讀取</div>
+            </div>
+            <button type="button" id="btnCheckRemoteGist" class="btn-secondary" style="font-size: 0.72rem; padding: 3px 8px;">檢查雲端狀態</button>
+          </div>
+
+          <!-- Helpful workflow tip -->
+          <div id="syncFlowTip" style="font-size: 0.72rem; color: var(--text-muted); line-height: 1.4; margin-top: 8px; padding: 6px 10px; background: rgba(78, 136, 255, 0.06); border-radius: 6px; border-left: 3px solid var(--accent-primary);">
+            💡 <b>跨裝置同步流程：</b><br>
+            • 在<b>有任務的裝置</b>（如手機）點擊 <b>「⬆ 上傳本機」</b> 或 <b>「🔄 雙向合併」</b> 將任務推送到 Gist。<br>
+            • 在<b>要接收任務的裝置</b>（如電腦）點擊 <b>「🔄 雙向合併」</b> 即可無縫同步！
+          </div>
+
           <!-- Main Actions -->
           <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
             <button id="btnSyncMerge" class="btn-primary" style="justify-content: center; padding: 9px 14px;">

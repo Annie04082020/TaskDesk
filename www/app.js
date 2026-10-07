@@ -2068,7 +2068,6 @@
   }
 
   // --- 跨裝置手動同步 (GitHub Gist & Direct Sync Code) ---
-  // --- 跨裝置手動同步 (GitHub Gist & Direct Sync Code) ---
   function updateSyncModalStatus() {
     const badge = document.getElementById('syncStatusBadge');
     const timeText = document.getElementById('syncLastTimeText');
@@ -2078,9 +2077,11 @@
     const configChevron = document.getElementById('syncConfigChevron');
     const gistLinkRow = document.getElementById('syncGistLinkRow');
     const gistLink = document.getElementById('syncGistLink');
+    const localCountText = document.getElementById('syncLocalCountText');
 
     if (tokenInput) tokenInput.value = syncConfig.githubToken || '';
     if (gistIdInput) gistIdInput.value = syncConfig.gistId || '';
+    if (localCountText) localCountText.textContent = `${items.length} 筆`;
 
     if (badge) {
       if (syncConfig.githubToken && syncConfig.gistId) {
@@ -2121,6 +2122,65 @@
       } else {
         timeText.textContent = '最後同步：尚無紀錄';
       }
+    }
+  }
+
+  // 檢查雲端 Gist 上的目前任務筆數與狀態
+  async function checkRemoteGistStatus(showToastMsg = false) {
+    const remoteCountText = document.getElementById('syncRemoteCountText');
+    const token = syncConfig.githubToken ? syncConfig.githubToken.trim() : '';
+    let gistId = syncConfig.gistId ? syncConfig.gistId.trim() : '';
+
+    if (!token) {
+      if (remoteCountText) remoteCountText.textContent = '雲端 Gist：尚未設定 Token';
+      return;
+    }
+
+    if (!gistId) {
+      gistId = await findUserExistingGist(token);
+      if (gistId) {
+        syncConfig.gistId = gistId;
+        saveSyncConfig();
+        updateSyncModalStatus();
+      }
+    }
+
+    if (!gistId) {
+      if (remoteCountText) remoteCountText.textContent = '雲端 Gist：尚未建立備份檔';
+      if (showToastMsg) showToast('您的 GitHub 帳號尚未建立 Task Desk Gist，初次使用請點「智慧雙向合併」！');
+      return;
+    }
+
+    if (remoteCountText) remoteCountText.textContent = '雲端 Gist：正在讀取…';
+
+    try {
+      const resp = await fetch(`https://api.github.com/gists/${gistId}`, {
+        headers: {
+          'Authorization': `token ${token}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+      if (!resp.ok) {
+        if (remoteCountText) remoteCountText.textContent = `雲端 Gist：讀取失敗 (${resp.status})`;
+        return;
+      }
+      const data = await resp.json();
+      const fileData = data.files && data.files['taskdesk-sync.json'];
+      if (!fileData || !fileData.content) {
+        if (remoteCountText) remoteCountText.textContent = '雲端 Gist：無同步檔案';
+        return;
+      }
+      const remotePayload = JSON.parse(fileData.content);
+      const count = Array.isArray(remotePayload.items) ? remotePayload.items.length : 0;
+      const syncTimeStr = remotePayload.syncedAt ? new Date(remotePayload.syncedAt).toLocaleTimeString() : '未知';
+      if (remoteCountText) {
+        remoteCountText.textContent = `雲端 Gist：共 ${count} 筆任務 (${syncTimeStr})`;
+      }
+      if (showToastMsg) {
+        showToast(`雲端 Gist 目前儲存了 ${count} 筆任務`);
+      }
+    } catch (e) {
+      if (remoteCountText) remoteCountText.textContent = '雲端 Gist：連線失敗，請檢查網路';
     }
   }
 
@@ -2249,7 +2309,7 @@
     };
 
     try {
-      showToast('正在上傳至 GitHub Gist…');
+      showToast(`正在上傳本機 ${items.length} 筆任務至 GitHub Gist…`);
 
       // 若未指定 Gist ID，先搜尋是否已有現成 Gist，避免重複建立
       if (!syncConfig.gistId || !syncConfig.gistId.trim()) {
@@ -2310,7 +2370,8 @@
       syncConfig.lastSyncTime = Date.now();
       saveSyncConfig();
       updateSyncModalStatus();
-      showToast(`上傳同步成功！（已推送到 Gist）`);
+      checkRemoteGistStatus(false);
+      showToast(`上傳同步成功！已將本機 ${items.length} 筆任務推送到 Gist`);
     } catch (err) {
       console.error(err);
       showToast(err.message || '上傳失敗，請確認網路與 Token');
@@ -2365,6 +2426,15 @@
         throw new Error('Gist 中的資料格式不正確');
       }
 
+      // 安全防護：若本地有任務但遠端為 0 筆，防止誤按 Pull 覆蓋清空
+      if (items.length > 0 && remotePayload.items.length === 0) {
+        const proceed = confirm(`⚠️ 警告：雲端 Gist 目前儲存了 0 筆任務，但您本機有 ${items.length} 筆任務！\n\n若強制「下載」將會覆蓋清空本機任務。\n建議改用「智慧雙向合併」即可將本機任務同步至雲端並保留。\n\n您確定仍要從雲端下載並清空本機嗎？`);
+        if (!proceed) {
+          showToast('已取消下載，保留本機現有任務');
+          return;
+        }
+      }
+
       items = remotePayload.items;
       if (remotePayload.settings) {
         settings = Object.assign({}, settings, remotePayload.settings);
@@ -2376,7 +2446,13 @@
       saveSyncConfig();
       renderAll();
       updateSyncModalStatus();
-      showToast(`雲端下載成功！（共 ${items.length} 筆任務）`);
+      checkRemoteGistStatus(false);
+
+      if (items.length === 0) {
+        showToast('雲端下載成功，但該 Gist 目前內容為 0 筆任務。\n若任務在另一台裝置，請先在該裝置點擊「上傳本機 (Push)」！');
+      } else {
+        showToast(`雲端下載成功！（共 ${items.length} 筆任務）`);
+      }
     } catch (err) {
       console.error(err);
       showToast(err.message || '下載失敗，請確認網路與設定');
@@ -2469,7 +2545,13 @@
       saveSyncConfig();
       renderAll();
       updateSyncModalStatus();
-      showToast(`雙向合併完成！保留兩端最新狀態（共 ${items.length} 筆任務）`);
+      checkRemoteGistStatus(false);
+
+      if (items.length === 0) {
+        showToast('雙向合併完成，但兩端目前皆無任務（共 0 筆）。\n若任務在另一台裝置，請先在該裝置點擊「上傳本機 (Push)」！');
+      } else {
+        showToast(`雙向合併完成！保留兩端最新狀態（共 ${items.length} 筆任務）`);
+      }
     } catch (err) {
       console.error(err);
       showToast(err.message || '合併同步中斷，請檢查網路');
@@ -3098,7 +3180,13 @@
     document.getElementById('btnOpenSync').addEventListener('click', () => {
       updateSyncModalStatus();
       modalSync.style.display = 'flex';
+      checkRemoteGistStatus(false);
     });
+
+    const btnCheckRemote = document.getElementById('btnCheckRemoteGist');
+    if (btnCheckRemote) {
+      btnCheckRemote.addEventListener('click', () => checkRemoteGistStatus(true));
+    }
 
     document.getElementById('btnCloseSync').addEventListener('click', () => {
       modalSync.style.display = 'none';
