@@ -3554,10 +3554,57 @@
     }
 
     const btnCloseNavTools = document.getElementById('btnCloseNavTools');
-    if (btnCloseNavTools) btnCloseNavTools.addEventListener('click', closeNavTools);
+    if (btnCloseNavTools) {
+      ['click', 'touchend'].forEach(evt => {
+        btnCloseNavTools.addEventListener(evt, (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          closeNavTools();
+        });
+      });
+    }
+
+    const btnDismissNavTools = document.getElementById('btnDismissNavTools');
+    if (btnDismissNavTools) {
+      ['click', 'touchend'].forEach(evt => {
+        btnDismissNavTools.addEventListener(evt, (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          closeNavTools();
+        });
+      });
+    }
 
     const navToolsBackdrop = document.getElementById('navToolsBackdrop');
-    if (navToolsBackdrop) navToolsBackdrop.addEventListener('click', closeNavTools);
+    if (navToolsBackdrop) {
+      ['click', 'touchend', 'pointerdown'].forEach(evt => {
+        navToolsBackdrop.addEventListener(evt, (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          closeNavTools();
+        });
+      });
+    }
+
+    // 點擊選單外部區域隨時關閉防呆
+    document.addEventListener('pointerdown', (e) => {
+      const menu = document.getElementById('navToolsMenu');
+      const toggle = document.getElementById('btnNavToolsToggle');
+      if (!menu || menu.style.display === 'none') return;
+      if (!menu.contains(e.target) && !toggle.contains(e.target)) {
+        closeNavTools();
+      }
+    });
+
+    // 鍵盤 ESC 鍵關閉
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        const menu = document.getElementById('navToolsMenu');
+        if (menu && menu.style.display !== 'none') {
+          closeNavTools();
+        }
+      }
+    });
 
     // 工具選單項目事件
     const mItemMatrix = document.getElementById('menuItemMatrix');
