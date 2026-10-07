@@ -1594,3 +1594,544 @@ input:checked + .slider:before {
   border-left: 2px solid var(--accent-primary);
 }
 
+/* ==========================================================================
+   Eisenhower Matrix: 4 Quadrants & Hidden Deadline
+   ========================================================================== */
+
+/* Capture Selectors Bar */
+.capture-selectors-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.capture-quadrant-selector {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.quadrant-btn {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-light);
+  color: var(--text-main);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.quadrant-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text-color);
+}
+
+.quadrant-btn.active[data-quadrant="q1"] {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: #f87171;
+  color: #f87171;
+  font-weight: 700;
+}
+
+.quadrant-btn.active[data-quadrant="q2"] {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: #38bdf8;
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.quadrant-btn.active[data-quadrant="q3"] {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: #fbbf24;
+  color: #fbbf24;
+  font-weight: 700;
+}
+
+.quadrant-btn.active[data-quadrant="q4"] {
+  background: rgba(148, 163, 184, 0.16);
+  border-color: #94a3b8;
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.capture-deadline-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-capture-deadline {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-light);
+  color: var(--text-main);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.18s ease;
+}
+
+.btn-capture-deadline:hover {
+  border-color: var(--border-hover);
+  color: var(--text-color);
+}
+
+.btn-capture-deadline.has-deadline {
+  background: rgba(168, 85, 247, 0.16);
+  border-color: #c084fc;
+  color: #c084fc;
+  font-weight: 600;
+}
+
+.capture-deadline-picker {
+  background: #0b101c;
+  border: 1px solid var(--border-hover);
+  color: var(--text-color);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+/* Card Quadrant Chips (主介面僅呈現簡約象限標籤，死線不顯示) */
+.chip-quadrant {
+  font-family: var(--font-mono);
+  font-size: 0.70rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  padding: 1px 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  user-select: none;
+  transition: all 0.18s ease;
+}
+
+.chip-quadrant:hover {
+  transform: translateY(-1px);
+}
+
+.chip-quadrant-q1 {
+  background: rgba(239, 68, 68, 0.10);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.chip-quadrant-q2 {
+  background: rgba(56, 189, 248, 0.10);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+}
+
+.chip-quadrant-q3 {
+  background: rgba(245, 158, 11, 0.10);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.chip-quadrant-q4 {
+  background: rgba(148, 163, 184, 0.10);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.30);
+}
+
+/* Quadrant & Deadline Popover Picker (全域浮動選單) */
+.quadrant-picker-menu {
+  position: fixed;
+  z-index: 3500;
+  background: #0d1322;
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 25px rgba(0, 240, 255, 0.18), 0 16px 40px rgba(0, 0, 0, 0.85);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 270px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  animation: fadeIn 0.15s ease-out;
+}
+
+.quadrant-picker-title {
+  font-family: var(--font-heading);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--meta-text);
+  text-transform: uppercase;
+}
+
+.quadrant-picker-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.quadrant-picker-item {
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.quadrant-picker-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border-light);
+}
+
+.quadrant-picker-item.active {
+  border-color: var(--accent-primary);
+  background: rgba(0, 240, 255, 0.10);
+}
+
+.quadrant-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.quadrant-item-desc {
+  font-size: 0.70rem;
+  color: var(--meta-text);
+  line-height: 1.3;
+}
+
+.quadrant-deadline-box {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quadrant-deadline-label {
+  font-size: 0.72rem;
+  color: var(--meta-text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.quadrant-deadline-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quadrant-date-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  color: var(--text-color);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  padding: 4px 8px;
+  outline: none;
+}
+
+.quadrant-date-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.btn-clear-deadline {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-light);
+  color: var(--meta-text);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-clear-deadline:hover {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+.quadrant-picker-hint {
+  font-size: 0.69rem;
+  color: var(--meta-text);
+  line-height: 1.35;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+}
+
+/* Auto-Decide (幫我選自動決策) Modal Cards */
+.auto-decide-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-md);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 0 25px rgba(0, 240, 255, 0.12);
+}
+
+.auto-decide-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.auto-decide-task-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #f8fafc;
+  word-break: break-word;
+  padding: 4px 0;
+}
+
+.auto-decide-reason-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgba(0, 240, 255, 0.05);
+  border-left: 3px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.auto-decide-reason-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.auto-decide-reason-text {
+  font-size: 0.84rem;
+  color: var(--text-main);
+  line-height: 1.5;
+}
+
+.auto-decide-status-note {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: #34d399;
+  letter-spacing: 0.02em;
+}
+
+/* Eisenhower Matrix Modal View (四象限矩陣總覽) */
+.matrix-modal-sheet {
+  width: 95%;
+  max-width: 960px;
+}
+
+.matrix-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.matrix-filter-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.matrix-filter-btn {
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-light);
+  color: var(--text-main);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.matrix-filter-btn.active {
+  background: rgba(0, 240, 255, 0.12);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.matrix-grid-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 12px;
+  min-height: 480px;
+}
+
+@media (max-width: 768px) {
+  .matrix-grid-container {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+}
+
+.matrix-quadrant-box {
+  background: rgba(14, 20, 34, 0.85);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 220px;
+}
+
+.matrix-quadrant-box.box-q1 {
+  border-top: 3px solid #f87171;
+}
+
+.matrix-quadrant-box.box-q2 {
+  border-top: 3px solid #38bdf8;
+}
+
+.matrix-quadrant-box.box-q3 {
+  border-top: 3px solid #fbbf24;
+}
+
+.matrix-quadrant-box.box-q4 {
+  border-top: 3px solid #94a3b8;
+}
+
+.matrix-quadrant-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.matrix-quadrant-title {
+  font-family: var(--font-heading);
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.matrix-quadrant-count {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--meta-text);
+}
+
+.matrix-quadrant-desc {
+  font-size: 0.72rem;
+  color: var(--meta-text);
+  line-height: 1.3;
+}
+
+.matrix-quadrant-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  max-height: 260px;
+  flex: 1;
+  padding-right: 2px;
+}
+
+.matrix-item-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.matrix-item-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--border-hover);
+}
+
+.matrix-item-card.is-now {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.15);
+}
+
+.matrix-item-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.matrix-item-text {
+  flex: 1;
+  font-size: 0.86rem;
+  line-height: 1.4;
+  color: var(--text-color);
+  word-break: break-word;
+}
+
+.matrix-item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+  color: var(--meta-text);
+}
+
+.matrix-item-tags {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.matrix-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-matrix-shift {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-light);
+  color: var(--text-main);
+  padding: 2px 6px;
+  font-size: 0.70rem;
+  font-family: var(--font-mono);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-matrix-shift:hover {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+

@@ -27,8 +27,20 @@
         <div class="week-completed-badge" id="weekCompletedText">本週已完成 0 件</div>
       </div>
       <div class="header-actions">
-        <button id="btnOpenConsult" class="btn-pill-subtle" title="狀態諮詢">
+        <button id="btnOpenConsult" class="btn-pill-subtle" title="幫我選 (依象限、死線與時段直接決定「現在」)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
           <span>幫我選</span>
+        </button>
+        <button id="btnOpenMatrix" class="btn-icon" title="四象限矩陣總覽 (重要/緊急)" aria-label="四象限矩陣">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+            <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+            <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+            <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+          </svg>
         </button>
         <button id="btnOpenHistory" class="btn-icon" title="完成紀錄" aria-label="完成紀錄">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -80,11 +92,32 @@
         rows="2"
       ></textarea>
       <div class="capture-bottom">
-        <div class="capture-size-selector" id="captureSizeSelector">
-          <span class="capture-hint" style="margin-right: 2px;">大小：</span>
-          <button type="button" class="size-btn active" data-size="small" title="約 15-30 分鐘，如行政雜事、回信">小 15-30m</button>
-          <button type="button" class="size-btn" data-size="medium" title="約 1-2 小時，如特定模組、中度專注">中 1-2h</button>
-          <button type="button" class="size-btn" data-size="large" title="2 小時以上，如重大專題、深度研讀">大 2h+</button>
+        <div class="capture-selectors-group">
+          <div class="capture-size-selector" id="captureSizeSelector">
+            <span class="capture-hint" style="margin-right: 2px;">大小：</span>
+            <button type="button" class="size-btn active" data-size="small" title="約 15-30 分鐘，如行政雜事、回信">小 15-30m</button>
+            <button type="button" class="size-btn" data-size="medium" title="約 1-2 小時，如特定模組、中度專注">中 1-2h</button>
+            <button type="button" class="size-btn" data-size="large" title="2 小時以上，如重大專題、深度研讀">大 2h+</button>
+          </div>
+          <div class="capture-quadrant-selector" id="captureQuadrantSelector">
+            <span class="capture-hint" style="margin-right: 2px;">象限：</span>
+            <button type="button" class="quadrant-btn" data-quadrant="q1" title="重要且緊急 (燃眉之急)">Q1</button>
+            <button type="button" class="quadrant-btn active" data-quadrant="q2" title="重要不緊急 (預設核心)">Q2</button>
+            <button type="button" class="quadrant-btn" data-quadrant="q3" title="緊急不重要 (瑣碎雜務)">Q3</button>
+            <button type="button" class="quadrant-btn" data-quadrant="q4" title="不重要不緊急 (順手低優)">Q4</button>
+          </div>
+          <div class="capture-deadline-group" id="captureDeadlineGroup">
+            <button type="button" id="btnToggleCaptureDeadline" class="btn-capture-deadline" title="選填截止死線 (僅背景加權，主介面不顯示)">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+              <span id="captureDeadlineBadgeText">死線</span>
+            </button>
+            <input type="date" id="inputCaptureDeadline" class="capture-deadline-picker" style="display: none;" title="選填截止死線 (主介面不顯示)">
+          </div>
         </div>
         <div class="capture-actions">
           <button id="btnCaptureSubmit" class="btn-primary">放入收集箱</button>
@@ -213,7 +246,85 @@
     </main>
   </div>
 
-  <!-- Modal: Status Consultation (幫我選) -->
+  <!-- Modal: Auto-Decide Result (幫我選自動決策) -->
+  <div class="modal-overlay" id="modalAutoDecide" style="display: none;">
+    <div class="modal-sheet" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+          <span>🎯</span>
+          <span>幫你決定好了！</span>
+        </h3>
+        <button class="modal-close" id="btnCloseAutoDecide">&times;</button>
+      </div>
+      <div class="modal-body" id="autoDecideBody" style="padding-top: 14px;">
+        <div class="auto-decide-card">
+          <div class="auto-decide-badge-row">
+            <span id="autoDecideQuadrantBadge" class="chip chip-quadrant chip-quadrant-q1">Q1 重要且緊急</span>
+            <span id="autoDecideSizeBadge" class="chip chip-size chip-size-medium">中 1-2h</span>
+            <span id="autoDecideBucketBadge" class="chip" style="background: rgba(255,255,255,0.06); color: var(--text-main);">今日工作桌</span>
+          </div>
+          <div id="autoDecideTaskTitle" class="auto-decide-task-title">任務名稱載入中…</div>
+          <div class="auto-decide-reason-box">
+            <div class="auto-decide-reason-icon">💡</div>
+            <div id="autoDecideReasonText" class="auto-decide-reason-text">決策理由</div>
+          </div>
+          <div class="auto-decide-status-note">
+            ✓ 已自動指派為「現在做這個」，並在工作桌置頂高亮！
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <button id="btnAutoDecideManual" class="btn-secondary" style="font-size: 0.78rem;">微調情境條件…</button>
+        <div style="display: flex; gap: 8px;">
+          <button id="btnAutoDecideNext" class="btn-secondary">換一個</button>
+          <button id="btnAutoDecideAccept" class="btn-primary">開始專注</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Eisenhower Matrix (四象限矩陣總覽) -->
+  <div class="modal-overlay" id="modalMatrix" style="display: none;">
+    <div class="modal-sheet matrix-modal-sheet">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+              <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+              <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+              <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+            </svg>
+            <span>四象限矩陣總覽</span>
+          </h3>
+          <div class="modal-subtitle" style="font-size: 0.76rem; color: var(--meta-text); margin-top: 3px;">
+            依「重要性 × 緊急性」宏觀分配待辦項目與檢視死線，保持主畫面專注乾淨。
+          </div>
+        </div>
+        <button class="modal-close" id="btnCloseMatrix">&times;</button>
+      </div>
+      <div class="modal-body" style="padding-top: 10px;">
+        <div class="matrix-filter-bar">
+          <span style="font-size: 0.76rem; color: var(--meta-text);">篩選範圍：</span>
+          <div class="matrix-filter-chips" id="matrixFilterChips">
+            <button type="button" class="matrix-filter-btn active" data-scope="active">全部進行中</button>
+            <button type="button" class="matrix-filter-btn" data-scope="today">今日工作桌</button>
+            <button type="button" class="matrix-filter-btn" data-scope="week">本週工作桌</button>
+            <button type="button" class="matrix-filter-btn" data-scope="keep">保溫</button>
+          </div>
+        </div>
+        <div class="matrix-grid-container" id="matrixGridContainer">
+          <!-- 2x2 Quadrants dynamically rendered -->
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <span style="font-size: 0.74rem; color: var(--meta-text);">💡 點擊項目可快速切換象限或設定死線；死線僅在後台運算，主畫面卡片維持零壓力。</span>
+        <button id="btnCloseMatrixFooter" class="btn-secondary">關閉總覽</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Status Consultation (幫我選進階手動問卷) -->
   <div class="modal-overlay" id="modalConsult" style="display: none;">
     <div class="modal-sheet">
       <div class="modal-header">

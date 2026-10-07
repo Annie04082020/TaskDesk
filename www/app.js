@@ -267,10 +267,16 @@
       const saved = localStorage.getItem(STORAGE_KEY_ITEMS);
       if (saved) {
         items = JSON.parse(saved);
-        // 確保每個任務都有 size 屬性
+        // 確保每個任務都有 size, quadrant, deadline 屬性
         items.forEach(it => {
           if (!it.size) {
             it.size = guessSize(it.text, it.typeId);
+          }
+          if (!it.quadrant) {
+            it.quadrant = 'q2'; // 預設重要不緊急 (核心推進)
+          }
+          if (it.deadline === undefined) {
+            it.deadline = null;
           }
         });
       }
@@ -571,11 +577,28 @@
   }
 
   // --- 核心業務邏輯：新增項目 ---
-  async function addItemsToInbox(rawTexts, explicitSize) {
+  async function addItemsToInbox(rawTexts, explicitSize, explicitQuadrant, explicitDeadline) {
     if (!rawTexts || rawTexts.length === 0) return;
 
     const newItems = [];
-    for (const text of rawTexts) {
+    for (let text of rawTexts) {
+      let parsedQuadrant = explicitQuadrant || null;
+      let parsedDeadline = explicitDeadline || null;
+
+      // 支援文字中解析標籤如 #q1, #q2, #q3, #q4
+      const qMatch = text.match(/#(q[1-4])/i);
+      if (qMatch) {
+        parsedQuadrant = qMatch[1].toLowerCase();
+        text = text.replace(qMatch[0], '').trim();
+      }
+
+      // 支援文字中解析死線如 #deadline:2026-10-15 或 #2026-10-15
+      const dlMatch = text.match(/#deadline:(\d{4}-\d{2}-\d{2})/i) || text.match(/#(\d{4}-\d{2}-\d{2})/);
+      if (dlMatch) {
+        parsedDeadline = dlMatch[1];
+        text = text.replace(dlMatch[0], '').trim();
+      }
+
       // 立即使用本機關鍵字備案作為初值
       const keywordGuessedType = guessTypeByKeywords(text);
       const itemSize = explicitSize || guessSize(text, keywordGuessedType);
@@ -592,10 +615,32 @@
         typeId: keywordGuessedType,
         typeSource: keywordGuessedType ? 'rule' : 'ai',
         parentId: null,
-        aiGenerated: false
+        aiGenerated: false,
+        quadrant: parsedQuadrant || 'q2', // 預設重要不緊急 (核心推進)
+        deadline: parsedDeadline || null
       };
       items.push(item);
       newItems.push(item);
+    }
+
+    saveItems();
+    renderAll();
+  }
+
+  // 明確指定某項目為「現在做這個」（清除其他現在，並自動移入有效工作桌）
+  function setAsNow(itemId) {
+    const item = items.find(it => it.id === itemId);
+    if (!item) return;
+
+    items.forEach(it => {
+      it.isNow = false;
+    });
+    item.isNow = true;
+    item.updatedAt = Date.now();
+
+    // 若不在今日也不在週工作桌，自動移入目前開啟的工作桌
+    if (item.bucket !== 'today' && item.bucket !== 'week') {
+      item.bucket = activeWorkbench === 'week' ? 'week' : 'today';
     }
 
     saveItems();
@@ -1005,6 +1050,24 @@
       openSizePicker(item.id, sizeChip);
     });
     metaRow.appendChild(sizeChip);
+
+    // 四象限 Chip (主介面僅呈現簡約象限標籤，死線在後台運算不顯示在卡片上，減少焦慮)
+    const itemQuad = item.quadrant || 'q2';
+    const quadChip = document.createElement('span');
+    quadChip.className = `chip chip-quadrant chip-quadrant-${itemQuad}`;
+    const quadLabels = {
+      q1: 'Q1 重要緊急',
+      q2: 'Q2 重要核心',
+      q3: 'Q3 緊急瑣事',
+      q4: 'Q4 低優'
+    };
+    quadChip.textContent = quadLabels[itemQuad] || 'Q2 重要核心';
+    quadChip.title = '點擊設定四象限與截止死線 (死線僅供後台計算，主介面隱形)';
+    quadChip.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openQuadrantPicker(item.id, quadChip);
+    });
+    metaRow.appendChild(quadChip);
 
     // AI 協助中性標籤
     if (typeObj && typeObj.aiAssist) {
@@ -1560,6 +1623,506 @@
       window.addEventListener('scroll', closeHandler, true);
       window.addEventListener('resize', closeHandler);
     }, 10);
+  }
+
+  // --- 四象限分類與死線設定下拉選單 (全域浮動層，脫離卡片與資料夾層疊限制) ---
+  function openQuadrantPicker(itemId, targetEl) {
+    const existing = document.querySelector('.quadrant-picker-menu');
+    if (existing) existing.remove();
+
+    const item = items.find(it => it.id === itemId);
+    if (!item) return;
+
+    const currentQuad = item.quadrant || 'q2';
+    const currentDeadline = item.deadline || '';
+
+    const menu = document.createElement('div');
+    menu.className = 'quadrant-picker-menu';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'quadrant-picker-title';
+    titleEl.textContent = '四象限分類與死線設定';
+    menu.appendChild(titleEl);
+
+    const optionsContainer = document.createElement('div');
+    optionsContainer.className = 'quadrant-picker-options';
+
+    const quadOptions = [
+      { id: 'q1', title: 'Q1 重要且緊急', desc: '燃眉之急・即刻攻克・高優先級', color: '#f87171' },
+      { id: 'q2', title: 'Q2 重要不緊急', desc: '核心目標・長期價值・專注深耕 (推薦)', color: '#38bdf8' },
+      { id: 'q3', title: 'Q3 緊急不重要', desc: '突發瑣事・他人干擾・快速消化', color: '#fbbf24' },
+      { id: 'q4', title: 'Q4 不重要不緊急', desc: '低價值干擾・順便進行・考慮放生', color: '#94a3b8' }
+    ];
+
+    quadOptions.forEach(opt => {
+      const optEl = document.createElement('div');
+      optEl.className = `quadrant-picker-item ${currentQuad === opt.id ? 'active' : ''}`;
+      optEl.innerHTML = `
+        <div class="quadrant-item-head" style="color: ${opt.color};">
+          <span>${opt.title}</span>
+          ${currentQuad === opt.id ? '<span style="font-size:0.75rem;">✓</span>' : ''}
+        </div>
+        <div class="quadrant-item-desc">${opt.desc}</div>
+      `;
+      optEl.addEventListener('click', () => {
+        item.quadrant = opt.id;
+        item.updatedAt = Date.now();
+        saveItems();
+        renderAll();
+        const matrixModal = document.getElementById('modalMatrix');
+        if (matrixModal && matrixModal.style.display === 'flex') {
+          renderMatrixModal();
+        }
+        menu.remove();
+      });
+      optionsContainer.appendChild(optEl);
+    });
+    menu.appendChild(optionsContainer);
+
+    // 截止死線設定區塊 (主介面隱形不顯示，僅供背景權重運算)
+    const deadlineBox = document.createElement('div');
+    deadlineBox.className = 'quadrant-deadline-box';
+
+    const deadlineLabel = document.createElement('div');
+    deadlineLabel.className = 'quadrant-deadline-label';
+    deadlineLabel.innerHTML = `
+      <span>📅 截止死線 (主介面隱形不顯示)</span>
+      ${currentDeadline ? '<span style="color:#c084fc; font-weight:600;">已設定</span>' : '<span style="color:var(--meta-text);">未設定</span>'}
+    `;
+    deadlineBox.appendChild(deadlineLabel);
+
+    const deadlineRow = document.createElement('div');
+    deadlineRow.className = 'quadrant-deadline-row';
+
+    const dateInput = document.createElement('input');
+    dateInput.type = 'date';
+    dateInput.className = 'quadrant-date-input';
+    dateInput.value = currentDeadline;
+    dateInput.title = '選擇截止死線';
+    dateInput.addEventListener('change', (e) => {
+      item.deadline = e.target.value ? e.target.value : null;
+      item.updatedAt = Date.now();
+      saveItems();
+      renderAll();
+      const matrixModal = document.getElementById('modalMatrix');
+      if (matrixModal && matrixModal.style.display === 'flex') {
+        renderMatrixModal();
+      }
+    });
+
+    const btnClearDeadline = document.createElement('button');
+    btnClearDeadline.type = 'button';
+    btnClearDeadline.className = 'btn-clear-deadline';
+    btnClearDeadline.textContent = '清除';
+    btnClearDeadline.title = '清除死線';
+    btnClearDeadline.addEventListener('click', () => {
+      dateInput.value = '';
+      item.deadline = null;
+      item.updatedAt = Date.now();
+      saveItems();
+      renderAll();
+      const matrixModal = document.getElementById('modalMatrix');
+      if (matrixModal && matrixModal.style.display === 'flex') {
+        renderMatrixModal();
+      }
+      showToast('已清除此項目的截止死線');
+    });
+
+    deadlineRow.appendChild(dateInput);
+    deadlineRow.appendChild(btnClearDeadline);
+    deadlineBox.appendChild(deadlineRow);
+
+    const hintEl = document.createElement('div');
+    hintEl.className = 'quadrant-picker-hint';
+    hintEl.textContent = '💡 死線僅在後台供「幫我選」權重運算，不會出現在工作桌卡片上，守護專注心態。';
+    deadlineBox.appendChild(hintEl);
+
+    menu.appendChild(deadlineBox);
+    document.body.appendChild(menu);
+
+    // 視窗邊界定位
+    const rect = targetEl.getBoundingClientRect();
+    const menuWidth = 270;
+    const menuHeight = menu.offsetHeight || 310;
+
+    let top = rect.bottom + 4;
+    let left = rect.left;
+
+    if (top + menuHeight > window.innerHeight - 10) {
+      top = Math.max(10, rect.top - menuHeight - 4);
+    }
+    if (left + menuWidth > window.innerWidth - 10) {
+      left = Math.max(10, window.innerWidth - menuWidth - 10);
+    }
+
+    menu.style.top = `${top}px`;
+    menu.style.left = `${left}px`;
+
+    const closeHandler = (e) => {
+      if (!menu.contains(e.target) && e.target !== targetEl) {
+        menu.remove();
+        document.removeEventListener('click', closeHandler);
+        window.removeEventListener('scroll', closeHandler, true);
+        window.removeEventListener('resize', closeHandler);
+      }
+    };
+    setTimeout(() => {
+      document.addEventListener('click', closeHandler);
+      window.addEventListener('scroll', closeHandler, true);
+      window.addEventListener('resize', closeHandler);
+    }, 10);
+  }
+
+  // --- 四象限矩陣總覽 (Eisenhower Matrix) ---
+  let activeMatrixScope = 'active'; // 'active' | 'today' | 'week' | 'keep'
+
+  function openMatrixModal() {
+    renderMatrixModal();
+    const modal = document.getElementById('modalMatrix');
+    if (modal) modal.style.display = 'flex';
+  }
+
+  function renderMatrixModal() {
+    const container = document.getElementById('matrixGridContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    // 依篩選範圍挑選項目
+    let filteredItems = items.filter(it => !it.done && !it.parentId);
+    if (activeMatrixScope === 'today') {
+      filteredItems = filteredItems.filter(it => it.bucket === 'today');
+    } else if (activeMatrixScope === 'week') {
+      filteredItems = filteredItems.filter(it => it.bucket === 'week');
+    } else if (activeMatrixScope === 'keep') {
+      filteredItems = filteredItems.filter(it => it.bucket === 'keep');
+    }
+
+    const quadrantConfig = [
+      { id: 'q1', title: 'Q1 重要且緊急', subtitle: '燃眉之急・危機處理・立即攻克', color: '#f87171', borderClass: 'box-q1' },
+      { id: 'q2', title: 'Q2 重要不緊急', subtitle: '核心目標・長期價值・專注深耕', color: '#38bdf8', borderClass: 'box-q2' },
+      { id: 'q3', title: 'Q3 緊急不重要', subtitle: '瑣碎突發・干擾事項・快速消化', color: '#fbbf24', borderClass: 'box-q3' },
+      { id: 'q4', title: 'Q4 不重要不緊急', subtitle: '低價值干擾・順便進行・考慮放生', color: '#94a3b8', borderClass: 'box-q4' }
+    ];
+
+    quadrantConfig.forEach(quad => {
+      const qItems = filteredItems.filter(it => (it.quadrant || 'q2') === quad.id);
+
+      const box = document.createElement('div');
+      box.className = `matrix-quadrant-box ${quad.borderClass}`;
+
+      const header = document.createElement('div');
+      header.className = 'matrix-quadrant-header';
+
+      const title = document.createElement('div');
+      title.className = 'matrix-quadrant-title';
+      title.style.color = quad.color;
+      title.textContent = quad.title;
+
+      const count = document.createElement('span');
+      count.className = 'matrix-quadrant-count';
+      count.textContent = `${qItems.length} 件`;
+
+      header.appendChild(title);
+      header.appendChild(count);
+      box.appendChild(header);
+
+      const desc = document.createElement('div');
+      desc.className = 'matrix-quadrant-desc';
+      desc.textContent = quad.subtitle;
+      box.appendChild(desc);
+
+      const itemsList = document.createElement('div');
+      itemsList.className = 'matrix-quadrant-items';
+
+      if (qItems.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-neutral';
+        empty.style.padding = '24px 0';
+        empty.style.fontSize = '0.78rem';
+        empty.textContent = '此象限尚無待辦事項';
+        itemsList.appendChild(empty);
+      } else {
+        qItems.forEach(it => {
+          const card = document.createElement('div');
+          card.className = `matrix-item-card ${it.isNow ? 'is-now' : ''}`;
+
+          const mainRow = document.createElement('div');
+          mainRow.className = 'matrix-item-main';
+
+          const chk = document.createElement('input');
+          chk.type = 'checkbox';
+          chk.className = 'card-check';
+          chk.checked = !!it.done;
+          chk.addEventListener('change', (e) => {
+            toggleItemDone(it.id, e.target.checked);
+            renderMatrixModal();
+          });
+
+          const textEl = document.createElement('div');
+          textEl.className = 'matrix-item-text';
+          textEl.textContent = it.text;
+
+          mainRow.appendChild(chk);
+          mainRow.appendChild(textEl);
+          card.appendChild(mainRow);
+
+          // Meta Row
+          const metaRow = document.createElement('div');
+          metaRow.className = 'matrix-item-meta';
+
+          const tagsWrap = document.createElement('div');
+          tagsWrap.className = 'matrix-item-tags';
+
+          const bucketLabels = { today: '今日', week: '這週', keep: '保溫', inbox: '收集箱', release: '放生' };
+          const bucketTag = document.createElement('span');
+          bucketTag.className = 'chip';
+          bucketTag.style.background = 'rgba(255,255,255,0.05)';
+          bucketTag.textContent = bucketLabels[it.bucket] || it.bucket;
+          tagsWrap.appendChild(bucketTag);
+
+          const sizeTag = document.createElement('span');
+          const itSize = it.size || guessSize(it.text, it.typeId);
+          sizeTag.className = `chip chip-size chip-size-${itSize}`;
+          const sizeLabels = { small: '小', medium: '中', large: '大' };
+          sizeTag.textContent = sizeLabels[itSize] || '小';
+          tagsWrap.appendChild(sizeTag);
+
+          // 在矩陣總覽視圖中，因屬宏觀規劃，顯示死線供調配
+          if (it.deadline) {
+            const dlTag = document.createElement('span');
+            dlTag.className = 'chip';
+            dlTag.style.background = 'rgba(192, 132, 252, 0.12)';
+            dlTag.style.color = '#c084fc';
+            dlTag.style.border = '1px solid rgba(192, 132, 252, 0.3)';
+            dlTag.textContent = `📅 ${it.deadline.substring(5)}`;
+            tagsWrap.appendChild(dlTag);
+          }
+
+          metaRow.appendChild(tagsWrap);
+
+          // Actions
+          const actionsWrap = document.createElement('div');
+          actionsWrap.className = 'matrix-item-actions';
+
+          // 快速切換象限按鈕
+          const nextQuadMap = { q1: 'q2', q2: 'q3', q3: 'q4', q4: 'q1' };
+          const btnShift = document.createElement('button');
+          btnShift.className = 'btn-matrix-shift';
+          btnShift.textContent = '切換象限';
+          btnShift.title = '輪換至下一象限';
+          btnShift.addEventListener('click', () => {
+            it.quadrant = nextQuadMap[quad.id];
+            it.updatedAt = Date.now();
+            saveItems();
+            renderAll();
+            renderMatrixModal();
+          });
+          actionsWrap.appendChild(btnShift);
+
+          const btnNow = document.createElement('button');
+          btnNow.className = `btn-matrix-shift ${it.isNow ? 'is-active' : ''}`;
+          btnNow.style.color = it.isNow ? 'var(--accent-primary)' : 'inherit';
+          btnNow.textContent = it.isNow ? '取消「現在」' : '設為「現在」';
+          btnNow.addEventListener('click', () => {
+            toggleItemNow(it.id);
+            renderMatrixModal();
+          });
+          actionsWrap.appendChild(btnNow);
+
+          metaRow.appendChild(actionsWrap);
+          card.appendChild(metaRow);
+          itemsList.appendChild(card);
+        });
+      }
+
+      box.appendChild(itemsList);
+      container.appendChild(box);
+    });
+  }
+
+  // --- 幫我選：客觀自動決策引擎 (Auto-Decide) ---
+  let autoDecideCandidates = [];
+  let autoDecideCurrentIndex = 0;
+
+  function runAutoDecideTask() {
+    // 優先挑選未完成之活躍項目 (今日 > 這週 > 保溫)
+    const activeItems = items.filter(it => !it.done && !it.parentId);
+    if (activeItems.length === 0) {
+      showToast('工作桌目前沒有任何待辦任務，請先新增幾項任務！');
+      return;
+    }
+
+    const todayItems = activeItems.filter(it => it.bucket === 'today');
+    const weekItems = activeItems.filter(it => it.bucket === 'week');
+    const keepItems = activeItems.filter(it => it.bucket === 'keep');
+
+    let pool = [];
+    if (todayItems.length > 0) {
+      pool = todayItems;
+    } else if (weekItems.length > 0) {
+      pool = weekItems;
+    } else if (keepItems.length > 0) {
+      pool = keepItems;
+    } else {
+      pool = activeItems;
+    }
+
+    // 計算每個任務的加權分數與決策理由
+    const scoredList = pool.map(item => {
+      let score = 0;
+      const reasons = [];
+
+      // 1. 四象限基本權重
+      const quad = item.quadrant || 'q2';
+      if (quad === 'q1') {
+        score += 100;
+        reasons.push('屬於【重要且緊急 (Q1)】核心焦點');
+      } else if (quad === 'q2') {
+        score += 70;
+        reasons.push('屬於【重要不緊急 (Q2)】長期價值推進');
+      } else if (quad === 'q3') {
+        score += 40;
+        reasons.push('屬於【緊急不重要 (Q3)】待快速消化瑣事');
+      } else {
+        score += 15;
+        reasons.push('屬於【不重要不緊急 (Q4)】低優先級項目');
+      }
+
+      // 2. 截止死線臨近度加權 (隱形死線)
+      if (item.deadline) {
+        const now = new Date();
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const deadlineDate = new Date(item.deadline + 'T23:59:59');
+        const diffMs = deadlineDate.getTime() - now.getTime();
+        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+        if (diffDays <= 0 || item.deadline <= todayStr) {
+          score += 85;
+          reasons.push('截止死線就在今天（或已逾期），迫在眉睫');
+        } else if (diffDays <= 2) {
+          score += 50;
+          reasons.push(`死線將在 ${diffDays} 天內到期`);
+        } else if (diffDays <= 7) {
+          score += 25;
+          reasons.push('本週內有死線需要推進');
+        } else {
+          score += 10;
+        }
+      }
+
+      // 3. 生理節律與當前時段適配
+      const currentHour = (new Date()).getHours();
+      const itemSize = item.size || guessSize(item.text, item.typeId);
+
+      if (currentHour >= 6 && currentHour < 12) {
+        // 早晨/上午：專注力最佳
+        if (itemSize === 'large' && (quad === 'q1' || quad === 'q2')) {
+          score += 30;
+          reasons.push('早晨精神飽滿，是攻克大任務的最佳時機');
+        } else if (itemSize === 'medium') {
+          score += 20;
+          reasons.push('上午時段適合中度專注推進');
+        } else {
+          score += 10;
+        }
+      } else if (currentHour >= 12 && currentHour < 18) {
+        // 下午：穩定推進
+        if (itemSize === 'medium') {
+          score += 25;
+          reasons.push('下午適合穩定推進 1-2 小時專注任務');
+        } else if (itemSize === 'small') {
+          score += 20;
+          reasons.push('下午適合清理部分小任務');
+        } else {
+          score += 10;
+        }
+      } else {
+        // 晚間/深夜 (18:00 - 05:00)：意志力遞減，避免心理壓力抗拒，優先推小任務
+        if (itemSize === 'small') {
+          score += 35;
+          reasons.push('晚間時段意志力有限，選 15-30m 小任務最無壓力且容易起步');
+        } else if (item.typeId === 'tidy' || item.typeId === 'admin') {
+          score += 25;
+          reasons.push('晚間適合做整理或行政雜務');
+        } else if (itemSize === 'large') {
+          score -= 20; // 深夜降低大任務權重，防拖延崩潰
+        }
+      }
+
+      // 4. 工作桌池加成
+      if (item.bucket === 'today') {
+        score += 40;
+      } else if (item.bucket === 'week') {
+        score += 10;
+      }
+
+      return {
+        item,
+        score,
+        reasonSummary: reasons.slice(0, 2).join('，') + '。'
+      };
+    });
+
+    // 依分數降序排列
+    scoredList.sort((a, b) => b.score - a.score);
+
+    autoDecideCandidates = scoredList;
+    autoDecideCurrentIndex = 0;
+
+    applyAutoDecideCandidate(0);
+  }
+
+  function applyAutoDecideCandidate(index) {
+    if (!autoDecideCandidates || autoDecideCandidates.length === 0) return;
+    if (index >= autoDecideCandidates.length) {
+      index = 0;
+    }
+    autoDecideCurrentIndex = index;
+    const candidate = autoDecideCandidates[index];
+    const item = candidate.item;
+
+    // 直接在系統中將此任務指派為「現在做這個」
+    setAsNow(item.id);
+
+    // 填入彈窗內容
+    const modal = document.getElementById('modalAutoDecide');
+    const titleEl = document.getElementById('autoDecideTaskTitle');
+    const quadBadge = document.getElementById('autoDecideQuadrantBadge');
+    const sizeBadge = document.getElementById('autoDecideSizeBadge');
+    const bucketBadge = document.getElementById('autoDecideBucketBadge');
+    const reasonText = document.getElementById('autoDecideReasonText');
+
+    if (titleEl) titleEl.textContent = item.text;
+
+    const quad = item.quadrant || 'q2';
+    const quadLabels = {
+      q1: 'Q1 重要且緊急',
+      q2: 'Q2 重要不緊急',
+      q3: 'Q3 緊急不重要',
+      q4: 'Q4 不重要不緊急'
+    };
+    if (quadBadge) {
+      quadBadge.className = `chip chip-quadrant chip-quadrant-${quad}`;
+      quadBadge.textContent = quadLabels[quad] || 'Q2 重要不緊急';
+    }
+
+    const itemSize = item.size || 'small';
+    const sizeLabels = { small: '小 15-30m', medium: '中 1-2h', large: '大 2h+' };
+    if (sizeBadge) {
+      sizeBadge.className = `chip chip-size chip-size-${itemSize}`;
+      sizeBadge.textContent = sizeLabels[itemSize] || '小 15-30m';
+    }
+
+    const bucketLabels = { today: '今日工作桌', week: '本週工作桌', keep: '保溫', inbox: '收集箱' };
+    if (bucketBadge) {
+      bucketBadge.textContent = bucketLabels[item.bucket] || '工作桌';
+    }
+
+    if (reasonText) {
+      reasonText.textContent = `根據條件評估：${candidate.reasonSummary} 已為您直接設定為「現在」，即刻專注於此！`;
+    }
+
+    if (modal) modal.style.display = 'flex';
   }
 
   // --- 完成紀錄 Modal 渲染 ---
@@ -2618,8 +3181,11 @@
 
   // --- 事件監聽配置 ---
   function setupEventListeners() {
-    // 收集箱尺寸選擇器
+    // 收集箱尺寸與象限選擇器
     let selectedCaptureSize = 'small';
+    let selectedCaptureQuadrant = 'q2';
+    let selectedCaptureDeadline = null;
+
     const sizeSelector = document.getElementById('captureSizeSelector');
     if (sizeSelector) {
       sizeSelector.querySelectorAll('.size-btn').forEach(btn => {
@@ -2628,6 +3194,40 @@
           btn.classList.add('active');
           selectedCaptureSize = btn.dataset.size || 'small';
         });
+      });
+    }
+
+    const quadrantSelector = document.getElementById('captureQuadrantSelector');
+    if (quadrantSelector) {
+      quadrantSelector.querySelectorAll('.quadrant-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          quadrantSelector.querySelectorAll('.quadrant-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          selectedCaptureQuadrant = btn.dataset.quadrant || 'q2';
+        });
+      });
+    }
+
+    const btnToggleDeadline = document.getElementById('btnToggleCaptureDeadline');
+    const inputDeadline = document.getElementById('inputCaptureDeadline');
+    const deadlineBadgeText = document.getElementById('captureDeadlineBadgeText');
+
+    if (btnToggleDeadline && inputDeadline) {
+      btnToggleDeadline.addEventListener('click', () => {
+        const isHidden = inputDeadline.style.display === 'none';
+        inputDeadline.style.display = isHidden ? 'inline-block' : 'none';
+        if (isHidden) inputDeadline.focus();
+      });
+
+      inputDeadline.addEventListener('change', (e) => {
+        selectedCaptureDeadline = e.target.value || null;
+        if (selectedCaptureDeadline) {
+          btnToggleDeadline.classList.add('has-deadline');
+          if (deadlineBadgeText) deadlineBadgeText.textContent = selectedCaptureDeadline.substring(5);
+        } else {
+          btnToggleDeadline.classList.remove('has-deadline');
+          if (deadlineBadgeText) deadlineBadgeText.textContent = '死線';
+        }
       });
     }
 
@@ -2640,8 +3240,15 @@
       if (!raw || !raw.trim()) return;
       const parsed = parseBatchInput(raw);
       if (parsed.length > 0) {
-        addItemsToInbox(parsed, selectedCaptureSize);
+        addItemsToInbox(parsed, selectedCaptureSize, selectedCaptureQuadrant, selectedCaptureDeadline);
         inputCapture.value = '';
+        if (inputDeadline) {
+          inputDeadline.value = '';
+          inputDeadline.style.display = 'none';
+        }
+        selectedCaptureDeadline = null;
+        if (btnToggleDeadline) btnToggleDeadline.classList.remove('has-deadline');
+        if (deadlineBadgeText) deadlineBadgeText.textContent = '死線';
         showToast(`已將 ${parsed.length} 件項目加入收集箱`);
       }
     };
@@ -2680,8 +3287,72 @@
     const btnExpHistJson = document.getElementById('btnExportHistoryJson');
     if (btnExpHistJson) btnExpHistJson.addEventListener('click', exportHistoryJson);
 
-    // Header 按鈕：幫我選 (狀態諮詢)
-    document.getElementById('btnOpenConsult').addEventListener('click', openConsultModal);
+    // Header 按鈕：幫我選 (客觀直接自動決定並指派「現在做這個」)
+    document.getElementById('btnOpenConsult').addEventListener('click', runAutoDecideTask);
+
+    // Auto-Decide 結果視窗事件
+    const btnCloseAutoDecide = document.getElementById('btnCloseAutoDecide');
+    if (btnCloseAutoDecide) {
+      btnCloseAutoDecide.addEventListener('click', () => {
+        document.getElementById('modalAutoDecide').style.display = 'none';
+      });
+    }
+
+    const btnAutoDecideAccept = document.getElementById('btnAutoDecideAccept');
+    if (btnAutoDecideAccept) {
+      btnAutoDecideAccept.addEventListener('click', () => {
+        document.getElementById('modalAutoDecide').style.display = 'none';
+        showToast('🎯 已為您聚焦現在任務，開始專注！');
+      });
+    }
+
+    const btnAutoDecideNext = document.getElementById('btnAutoDecideNext');
+    if (btnAutoDecideNext) {
+      btnAutoDecideNext.addEventListener('click', () => {
+        applyAutoDecideCandidate(autoDecideCurrentIndex + 1);
+      });
+    }
+
+    const btnAutoDecideManual = document.getElementById('btnAutoDecideManual');
+    if (btnAutoDecideManual) {
+      btnAutoDecideManual.addEventListener('click', () => {
+        document.getElementById('modalAutoDecide').style.display = 'none';
+        openConsultModal();
+      });
+    }
+
+    // Header 按鈕：四象限矩陣總覽
+    const btnOpenMatrix = document.getElementById('btnOpenMatrix');
+    if (btnOpenMatrix) {
+      btnOpenMatrix.addEventListener('click', openMatrixModal);
+    }
+    const btnCloseMatrix = document.getElementById('btnCloseMatrix');
+    if (btnCloseMatrix) {
+      btnCloseMatrix.addEventListener('click', () => {
+        document.getElementById('modalMatrix').style.display = 'none';
+      });
+    }
+    const btnCloseMatrixFooter = document.getElementById('btnCloseMatrixFooter');
+    if (btnCloseMatrixFooter) {
+      btnCloseMatrixFooter.addEventListener('click', () => {
+        document.getElementById('modalMatrix').style.display = 'none';
+      });
+    }
+
+    // 矩陣範圍篩選頁籤
+    const matrixFilterChips = document.getElementById('matrixFilterChips');
+    if (matrixFilterChips) {
+      matrixFilterChips.querySelectorAll('.matrix-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          matrixFilterChips.querySelectorAll('.matrix-filter-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          activeMatrixScope = btn.dataset.scope || 'active';
+          renderMatrixModal();
+        });
+      });
+    }
+
+    // 狀態諮詢手動視窗關閉按鈕
     document.getElementById('btnCloseConsult').addEventListener('click', () => {
       document.getElementById('modalConsult').style.display = 'none';
     });
@@ -2786,6 +3457,12 @@
             let fullText = title;
             if (item.notes && typeof item.notes === 'string' && item.notes.trim()) {
               fullText += ` (${item.notes.trim()})`;
+            }
+            if (item.due && typeof item.due === 'string') {
+              const datePart = item.due.substring(0, 10);
+              if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+                fullText += ` #deadline:${datePart}`;
+              }
             }
             if (item.status === 'completed' || item.done === true) {
               completedTasks.push(fullText);
