@@ -1,6 +1,6 @@
 {
   "name": "taskdesk",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "個人任務工作桌 (Task Desk) - PWA & Android App",
   "main": "app.js",
   "scripts": {

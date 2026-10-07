@@ -105,13 +105,6 @@
             <button type="button" class="size-btn" data-size="medium" title="約 1-2 小時，如特定模組、中度專注">中 1-2h</button>
             <button type="button" class="size-btn" data-size="large" title="2 小時以上，如重大專題、深度研讀">大 2h+</button>
           </div>
-          <div class="capture-quadrant-selector" id="captureQuadrantSelector">
-            <span class="capture-hint" style="margin-right: 2px;">象限：</span>
-            <button type="button" class="quadrant-btn" data-quadrant="q1" title="重要且緊急 (燃眉之急)">Q1</button>
-            <button type="button" class="quadrant-btn active" data-quadrant="q2" title="重要不緊急 (預設核心)">Q2</button>
-            <button type="button" class="quadrant-btn" data-quadrant="q3" title="緊急不重要 (瑣碎雜務)">Q3</button>
-            <button type="button" class="quadrant-btn" data-quadrant="q4" title="不重要不緊急 (順手低優)">Q4</button>
-          </div>
           <div class="capture-deadline-group" id="captureDeadlineGroup">
             <button type="button" id="btnToggleCaptureDeadline" class="btn-capture-deadline" title="選填截止死線 (僅背景加權，主介面不顯示)">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -265,7 +258,7 @@
       <div class="modal-body" id="autoDecideBody" style="padding-top: 14px;">
         <div class="auto-decide-card">
           <div class="auto-decide-badge-row">
-            <span id="autoDecideQuadrantBadge" class="chip chip-quadrant chip-quadrant-q1">Q1 重要且緊急</span>
+            <span id="autoDecideQuadrantBadge" class="chip chip-quadrant" style="display: none;"></span>
             <span id="autoDecideSizeBadge" class="chip chip-size chip-size-medium">中 1-2h</span>
             <span id="autoDecideBucketBadge" class="chip" style="background: rgba(255,255,255,0.06); color: var(--text-main);">今日工作桌</span>
           </div>
@@ -572,7 +565,7 @@
           <div class="form-sublabel">在 Android 手機上安裝原生 Task Desk，支援離線執行與跨裝置手動同步。</div>
           <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
             <a href="https://github.com/Annie04082020/TaskDesk/releases/latest" target="_blank" rel="noopener" class="btn-primary" style="justify-content: center; text-decoration: none; padding: 10px 14px;">
-              <span>📱 前往 GitHub Releases 下載最新 APK (v1.0.5)</span>
+              <span>📱 前往 GitHub Releases 下載最新 APK (v1.0.6)</span>
             </a>
             <div style="font-size: 0.74rem; color: var(--meta-text); line-height: 1.45;">
               💡 <strong>APK 更新說明：</strong>手機端安裝的 APK 屬於獨立離線封裝。更新網頁原始碼後，GitHub 會自動打包新版本 APK，點擊上方按鈕下載安裝即可直接覆蓋更新！

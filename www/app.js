@@ -616,7 +616,7 @@
         typeSource: keywordGuessedType ? 'rule' : 'ai',
         parentId: null,
         aiGenerated: false,
-        quadrant: parsedQuadrant || 'q2', // 預設重要不緊急 (核心推進)
+        quadrant: parsedQuadrant || getComputedQuadrant({ text: text, size: itemSize, deadline: parsedDeadline }),
         deadline: parsedDeadline || null
       };
       items.push(item);
@@ -1051,17 +1051,7 @@
     });
     metaRow.appendChild(sizeChip);
 
-    // 四象限 Chip (系統客觀自動判定輕重緩急，免手動選擇；點擊僅供設定死線)
-    const quadInfo = getQuadrantInfo(item);
-    const quadChip = document.createElement('span');
-    quadChip.className = `chip chip-quadrant chip-quadrant-${quadInfo.id}`;
-    quadChip.textContent = quadInfo.badge;
-    quadChip.title = `${quadInfo.title}（系統依任務大小與死線自動判定，點擊可設定死線）`;
-    quadChip.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openDeadlinePicker(item.id, quadChip);
-    });
-    metaRow.appendChild(quadChip);
+    // 主介面卡片不顯示象限標籤與死線（避免造成輕重緩急焦慮，僅在總覽視窗與自動選演算法使用）
 
     // AI 協助中性標籤
     if (typeObj && typeObj.aiAssist) {
@@ -1585,6 +1575,22 @@
       menu.appendChild(optEl);
     });
 
+    // 截止死線設定項目 (從大小選單進入，卡片本身不呈現死線干擾)
+    const divider = document.createElement('div');
+    divider.style.borderTop = '1px solid var(--border-light)';
+    divider.style.margin = '5px 0';
+    menu.appendChild(divider);
+
+    const dlOption = document.createElement('div');
+    dlOption.className = 'type-picker-item';
+    const dlText = item && item.deadline ? `截止死線：${item.deadline}` : '設定截止死線 (選填)';
+    dlOption.innerHTML = `<div style="font-weight: 500; font-size: 0.74rem; display: flex; align-items: center; gap: 5px; color: var(--text-color);"><span>📅</span><span>${dlText}</span></div>`;
+    dlOption.addEventListener('click', () => {
+      menu.remove();
+      openDeadlinePicker(itemId, targetEl);
+    });
+    menu.appendChild(dlOption);
+
     document.body.appendChild(menu);
 
     const rect = targetEl.getBoundingClientRect();
@@ -1673,8 +1679,8 @@
     if (quadId === 'q1') {
       return {
         id: 'q1',
-        badge: '⚡ Q1 迫在眉睫',
-        title: 'Q1 重要且緊急',
+        badge: '⚡ 迫在眉睫',
+        title: '重要且緊急',
         color: '#f87171',
         desc: `系統判定理由：屬於${sizeText}且【${dlStatus}】，具備高核心價值與急迫時限，判定為優先處置焦點。`
       };
@@ -1682,8 +1688,8 @@
     if (quadId === 'q2') {
       return {
         id: 'q2',
-        badge: '🎯 Q2 核心深耕',
-        title: 'Q2 重要不緊急',
+        badge: '🎯 核心深耕',
+        title: '重要不急',
         color: '#38bdf8',
         desc: `系統判定理由：屬於${sizeText}且【${dlStatus}】，具備高核心價值但無急迫火燒眉毛壓力，是成長最重要的沉浸區。`
       };
@@ -1691,16 +1697,16 @@
     if (quadId === 'q3') {
       return {
         id: 'q3',
-        badge: '⏳ Q3 瑣事速辦',
-        title: 'Q3 緊急不重要',
+        badge: '⏳ 瑣事速辦',
+        title: '緊急瑣事',
         color: '#fbbf24',
         desc: `系統判定理由：屬於${sizeText}且【${dlStatus}】，行政瑣事期限逼近，花少許時間順手清空即可。`
       };
     }
     return {
       id: 'q4',
-      badge: '🌱 Q4 順手雜項',
-      title: 'Q4 不重要不緊急',
+      badge: '🌱 順手雜項',
+      title: '低壓順手',
       color: '#94a3b8',
       desc: `系統判定理由：屬於${sizeText}且【${dlStatus}】，低精神負擔備用清單，有餘力或零碎空檔再執行。`
     };
@@ -1925,10 +1931,10 @@
     }
 
     const quadrantConfig = [
-      { id: 'q1', title: 'Q1 重要且緊急', subtitle: '燃眉之急・危機處理・立即攻克', color: '#f87171', borderClass: 'box-q1' },
-      { id: 'q2', title: 'Q2 重要不緊急', subtitle: '核心目標・長期價值・專注深耕', color: '#38bdf8', borderClass: 'box-q2' },
-      { id: 'q3', title: 'Q3 緊急不重要', subtitle: '瑣碎突發・干擾事項・快速消化', color: '#fbbf24', borderClass: 'box-q3' },
-      { id: 'q4', title: 'Q4 不重要不緊急', subtitle: '低價值干擾・順便進行・考慮放生', color: '#94a3b8', borderClass: 'box-q4' }
+      { id: 'q1', title: '⚡ 重要且緊急', subtitle: '燃眉之急・危機處理・立即攻克', color: '#f87171', borderClass: 'box-q1' },
+      { id: 'q2', title: '🎯 重要不急', subtitle: '核心目標・長期價值・專注深耕', color: '#38bdf8', borderClass: 'box-q2' },
+      { id: 'q3', title: '⏳ 緊急瑣事', subtitle: '瑣碎突發・干擾事項・快速消化', color: '#fbbf24', borderClass: 'box-q3' },
+      { id: 'q4', title: '🌱 低壓順手', subtitle: '低價值干擾・順便進行・考慮放生', color: '#94a3b8', borderClass: 'box-q4' }
     ];
 
     quadrantConfig.forEach(quad => {
@@ -3319,17 +3325,7 @@
       });
     }
 
-    const quadrantSelector = document.getElementById('captureQuadrantSelector');
-    if (quadrantSelector) {
-      quadrantSelector.querySelectorAll('.quadrant-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          quadrantSelector.querySelectorAll('.quadrant-btn').forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-          selectedCaptureQuadrant = btn.dataset.quadrant || 'q2';
-        });
-      });
-    }
-
+    // 截止死線切換 (僅背景加權，主介面卡片不直接顯示)
     const btnToggleDeadline = document.getElementById('btnToggleCaptureDeadline');
     const inputDeadline = document.getElementById('inputCaptureDeadline');
     const deadlineBadgeText = document.getElementById('captureDeadlineBadgeText');
@@ -3362,7 +3358,7 @@
       if (!raw || !raw.trim()) return;
       const parsed = parseBatchInput(raw);
       if (parsed.length > 0) {
-        addItemsToInbox(parsed, selectedCaptureSize, selectedCaptureQuadrant, selectedCaptureDeadline);
+        addItemsToInbox(parsed, selectedCaptureSize, null, selectedCaptureDeadline);
         inputCapture.value = '';
         if (inputDeadline) {
           inputDeadline.value = '';
