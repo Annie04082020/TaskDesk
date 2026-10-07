@@ -377,11 +377,14 @@
 
   function checkLockOnStartup() {
     const btnLock = document.getElementById('btnLockApp');
+    const menuItemLock = document.getElementById('menuItemLock');
     if (settings.pinLock && settings.pinHash) {
       if (btnLock) btnLock.style.display = 'flex';
+      if (menuItemLock) menuItemLock.style.display = 'flex';
       lockApp();
     } else {
       if (btnLock) btnLock.style.display = 'none';
+      if (menuItemLock) menuItemLock.style.display = 'none';
     }
   }
 
@@ -3515,6 +3518,107 @@
     if (btnDrawerExpMd) btnDrawerExpMd.addEventListener('click', exportHistoryMarkdown);
     const btnDrawerExpJson = document.getElementById('btnDrawerExportJson');
     if (btnDrawerExpJson) btnDrawerExpJson.addEventListener('click', exportHistoryJson);
+
+    // --- 桌上工具選單 (Nav Tools Popover) ---
+    function openNavTools() {
+      const menu = document.getElementById('navToolsMenu');
+      const backdrop = document.getElementById('navToolsBackdrop');
+      const toggle = document.getElementById('btnNavToolsToggle');
+      if (!menu || !backdrop) return;
+      backdrop.style.display = 'block';
+      menu.style.display = 'flex';
+      if (toggle) toggle.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeNavTools() {
+      const menu = document.getElementById('navToolsMenu');
+      const backdrop = document.getElementById('navToolsBackdrop');
+      const toggle = document.getElementById('btnNavToolsToggle');
+      if (!menu || !backdrop) return;
+      backdrop.style.display = 'none';
+      menu.style.display = 'none';
+      if (toggle) toggle.setAttribute('aria-expanded', 'false');
+    }
+
+    const btnNavToolsToggle = document.getElementById('btnNavToolsToggle');
+    if (btnNavToolsToggle) {
+      btnNavToolsToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const menu = document.getElementById('navToolsMenu');
+        if (menu && menu.style.display !== 'none') {
+          closeNavTools();
+        } else {
+          openNavTools();
+        }
+      });
+    }
+
+    const btnCloseNavTools = document.getElementById('btnCloseNavTools');
+    if (btnCloseNavTools) btnCloseNavTools.addEventListener('click', closeNavTools);
+
+    const navToolsBackdrop = document.getElementById('navToolsBackdrop');
+    if (navToolsBackdrop) navToolsBackdrop.addEventListener('click', closeNavTools);
+
+    // 工具選單項目事件
+    const mItemMatrix = document.getElementById('menuItemMatrix');
+    if (mItemMatrix) {
+      mItemMatrix.addEventListener('click', () => {
+        closeNavTools();
+        openMatrixModal();
+      });
+    }
+
+    const mItemStatus = document.getElementById('menuItemStatusConsult');
+    if (mItemStatus) {
+      mItemStatus.addEventListener('click', () => {
+        closeNavTools();
+        openConsultModal();
+      });
+    }
+
+    const mItemSync = document.getElementById('menuItemSync');
+    if (mItemSync) {
+      mItemSync.addEventListener('click', () => {
+        closeNavTools();
+        updateSyncModalStatus();
+        document.getElementById('modalSync').style.display = 'flex';
+        checkRemoteGistStatus(false);
+      });
+    }
+
+    const mItemImport = document.getElementById('menuItemImport');
+    if (mItemImport) {
+      mItemImport.addEventListener('click', () => {
+        closeNavTools();
+        document.getElementById('modalImport').style.display = 'flex';
+        if (activeImportTab === 'text' && importTextArea) {
+          setTimeout(() => importTextArea.focus(), 80);
+        }
+      });
+    }
+
+    const mItemHistory = document.getElementById('menuItemHistory');
+    if (mItemHistory) {
+      mItemHistory.addEventListener('click', () => {
+        closeNavTools();
+        openDrawer('history');
+      });
+    }
+
+    const mItemLock = document.getElementById('menuItemLock');
+    if (mItemLock) {
+      mItemLock.addEventListener('click', () => {
+        closeNavTools();
+        lockApp();
+      });
+    }
+
+    const mItemDownloadApk = document.getElementById('menuItemDownloadApk');
+    if (mItemDownloadApk) {
+      mItemDownloadApk.addEventListener('click', () => {
+        closeNavTools();
+      });
+    }
 
     // Header 按鈕：幫我選 (客觀直接自動決定並指派「現在做這個」)
     const btnOpenConsult = document.getElementById('btnOpenConsult');

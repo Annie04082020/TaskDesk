@@ -27,67 +27,95 @@
         <div class="week-completed-badge" id="weekCompletedText">本週已完成 0 件</div>
       </div>
       <div class="header-actions">
+        <!-- 幫我選 (Primary Highlight Action - 全域常駐) -->
         <button id="btnOpenConsult" class="btn-pill-subtle" title="幫我選 (依條件直接自動決定「現在」)">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 3px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px;">
             <circle cx="12" cy="12" r="10"></circle>
             <polyline points="12 6 12 12 16 14"></polyline>
           </svg>
           <span>幫我選</span>
         </button>
-        <button id="btnOpenStatusConsult" class="btn-pill-subtle btn-pill-outline" title="狀態諮詢 (地點/體力/時間 5題問卷篩選)">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 3px;">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-          </svg>
-          <span>狀態諮詢</span>
-        </button>
-        <button id="btnOpenMatrix" class="btn-icon" title="四象限矩陣總覽 (重要/緊急)" aria-label="四象限矩陣">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+
+        <!-- 電腦版捷徑 (寬螢幕直接顯示，手機自動收納進更多工具) -->
+        <button id="btnOpenMatrix" class="btn-icon header-tool-desktop" title="四象限矩陣總覽 (重要/緊急)" aria-label="四象限矩陣">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
             <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
             <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
             <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
           </svg>
         </button>
-        <button id="btnOpenHistory" class="btn-icon" title="完成紀錄" aria-label="完成紀錄">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
-        </button>
-        <button id="btnOpenImport" class="btn-icon" title="文字匯入" aria-label="文字匯入">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-            <polyline points="14 2 14 8 20 8"></polyline>
-            <line x1="16" y1="13" x2="8" y2="13"></line>
-            <line x1="16" y1="17" x2="8" y2="17"></line>
-            <polyline points="10 9 9 9 8 9"></polyline>
-          </svg>
-        </button>
-        <button id="btnOpenSync" class="btn-icon" title="手動同步 (跨裝置)" aria-label="手動同步">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <button id="btnOpenSync" class="btn-icon header-tool-desktop" title="手動同步 (跨裝置)" aria-label="手動同步">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
           </svg>
         </button>
-        <button id="btnLockApp" class="btn-icon" title="立即鎖定工作桌" aria-label="鎖定" style="display: none;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+
+        <!-- 立即鎖定 (若有啟用 PIN 碼且為電腦版) -->
+        <button id="btnLockApp" class="btn-icon header-tool-desktop" title="立即鎖定工作桌" aria-label="鎖定" style="display: none;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
             <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
           </svg>
         </button>
-        <a href="https://github.com/Annie04082020/TaskDesk/releases/latest" id="btnDownloadApkHeader" class="btn-icon" target="_blank" rel="noopener" title="下載 Android APK" aria-label="下載 Android APK">
+
+        <!-- 更多工具選單按鈕 (手機/平板必備，電腦版可查看完整工具) -->
+        <button id="btnNavToolsToggle" class="btn-icon" title="桌上工具選單" aria-label="更多工具" aria-expanded="false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
-            <path d="M12 18h.01"></path>
-            <path d="M12 6v6m-2.5-2.5l2.5 2.5 2.5-2.5"></path>
+            <circle cx="12" cy="12" r="1.5"></circle>
+            <circle cx="19" cy="12" r="1.5"></circle>
+            <circle cx="5" cy="12" r="1.5"></circle>
           </svg>
-        </a>
+        </button>
+
+        <!-- 設定按鈕 (全域常駐) -->
         <button id="btnOpenSettings" class="btn-icon" title="設定" aria-label="設定">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"></circle>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
           </svg>
         </button>
       </div>
     </header>
+
+    <!-- 桌上工具選單 (Nav Tools Popover & Backdrop) -->
+    <div id="navToolsBackdrop" class="nav-tools-backdrop" style="display: none;"></div>
+    <div id="navToolsMenu" class="nav-tools-menu" style="display: none;">
+      <div class="nav-tools-header">
+        <div class="nav-tools-header-title">桌上工具</div>
+        <button type="button" class="nav-tools-close" id="btnCloseNavTools" aria-label="關閉工具選單">&times;</button>
+      </div>
+      <div class="nav-tools-grid">
+        <button type="button" class="nav-tool-card" id="menuItemMatrix">
+          <span class="nav-tool-card-title">四象限矩陣</span>
+          <span class="nav-tool-card-desc">依重要與緊急程度總覽分流</span>
+        </button>
+        <button type="button" class="nav-tool-card" id="menuItemStatusConsult">
+          <span class="nav-tool-card-title">狀態諮詢</span>
+          <span class="nav-tool-card-desc">地點、體力、時間 5 題評估</span>
+        </button>
+        <button type="button" class="nav-tool-card" id="menuItemSync">
+          <span class="nav-tool-card-title">跨裝置同步</span>
+          <span class="nav-tool-card-desc">GitHub Gist 與手動置物櫃對齊</span>
+        </button>
+        <button type="button" class="nav-tool-card" id="menuItemImport">
+          <span class="nav-tool-card-title">任務文字 / Google Tasks 匯入</span>
+          <span class="nav-tool-card-desc">批次解析文字或任務結構檔</span>
+        </button>
+        <button type="button" class="nav-tool-card" id="menuItemHistory">
+          <span class="nav-tool-card-title">歷史檔案庫</span>
+          <span class="nav-tool-card-desc">拉開歷史抽屜檢視與復原已完成任務</span>
+        </button>
+        <button type="button" class="nav-tool-card" id="menuItemLock" style="display: none;">
+          <span class="nav-tool-card-title">立即鎖定工作桌</span>
+          <span class="nav-tool-card-desc">需輸入 PIN 碼才能存取</span>
+        </button>
+        <a href="https://github.com/Annie04082020/TaskDesk/releases/latest" target="_blank" rel="noopener" class="nav-tool-card" id="menuItemDownloadApk">
+          <span class="nav-tool-card-title">下載 Android APK</span>
+          <span class="nav-tool-card-desc">前往 GitHub Releases 下載離線版</span>
+        </a>
+      </div>
+    </div>
 
     <!-- Top Input / Capture Area -->
     <section class="capture-box" id="captureSection">
@@ -567,7 +595,7 @@
           <div class="form-sublabel">在 Android 手機上安裝原生 Task Desk，支援離線執行與跨裝置手動同步。</div>
           <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
             <a href="https://github.com/Annie04082020/TaskDesk/releases/latest" target="_blank" rel="noopener" class="btn-primary" style="justify-content: center; text-decoration: none; padding: 10px 14px;">
-              <span>前往 GitHub Releases 下載最新 APK (v1.0.8)</span>
+              <span>前往 GitHub Releases 下載最新 APK (v1.0.9)</span>
             </a>
             <div style="font-size: 0.74rem; color: var(--meta-text); line-height: 1.45;">
               <strong>APK 更新說明：</strong>手機端安裝的 APK 屬於獨立離線封裝。更新網頁原始碼後，GitHub 會自動打包新版本 APK，點擊上方按鈕下載安裝即可直接覆蓋更新！
