@@ -95,6 +95,7 @@
   const STORAGE_KEY_ITEMS = 'taskdesk_items_v1';
   const STORAGE_KEY_SETTINGS = 'taskdesk_settings_v1';
   const STORAGE_KEY_SYNC = 'taskdesk_sync_v1';
+  const STORAGE_KEY_FOCUS_SESSIONS = 'taskdesk_focus_sessions_v1';
 
   let rules = DEFAULT_RULES;
   let items = [];
@@ -114,11 +115,18 @@
 
   let activeWorkbench = 'today'; // 'today' | 'week'
 
-  // 專注鎖定與 Kairos 本機連動狀態
+  // 專注鎖定與 Kairos 沉浸引擎狀態 (v2.0)
   let focusTimerInterval = null;
   let activeFocusTaskId = null;
   let focusRemainingSeconds = 25 * 60;
   let kairosOnline = false;
+  let kairosSession = {
+    status: 'IDLE', // 'IDLE' | 'FOCUSING' | 'PAUSED'
+    taskId: null,
+    elapsedSeconds: 0,
+    startedAt: null,
+    pauseResumeNote: ''
+  };
 
   let syncConfig = {
     githubToken: '',
@@ -1063,16 +1071,53 @@
     }
   }
 
-  function formatTimerSeconds(sec) {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  // --- Kairos 沉浸引擎日誌與工時記錄 (v2.0) ---
+  function getFocusSessions() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_FOCUS_SESSIONS);
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
   }
 
-  function updateFocusTimerDisplay() {
-    const el = document.getElementById('focusTimerDisplay');
+  function logFocusSession(item, elapsedSeconds, status, reason = '') {
+    try {
+      const logs = getFocusSessions();
+      const record = {
+        id: generateId(),
+        taskId: item ? item.id : null,
+        taskText: item ? item.text : '未知任務',
+        startedAt: kairosSession.startedAt || (Date.now() - (elapsedSeconds || 0) * 1000),
+        endedAt: Date.now(),
+        elapsedSeconds: Math.max(0, elapsedSeconds || 0),
+        elapsedMinutes: Math.round(((elapsedSeconds || 0) / 60) * 10) / 10,
+        status: status, // 'COMPLETED' | 'ABORTED_TOO_LARGE' | 'ABORTED_POSTPONE' | 'ABORTED_QUIT'
+        reason: reason || '',
+        note: kairosSession.pauseResumeNote || ''
+      };
+      logs.unshift(record);
+      if (logs.length > 500) logs.length = 500;
+      localStorage.setItem(STORAGE_KEY_FOCUS_SESSIONS, JSON.stringify(logs));
+    } catch (e) {
+      console.warn('儲存專注紀錄失敗:', e);
+    }
+  }
+
+  function formatElapsedMinutes(sec) {
+    const m = Math.floor(sec / 60);
+    return `${String(m).padStart(2, '0')}m`;
+  }
+
+  function updateKairosTimerDisplay() {
+    const el = document.getElementById('kairosTimerDisplay');
     if (el) {
-      el.textContent = formatTimerSeconds(focusRemainingSeconds);
+      el.textContent = formatElapsedMinutes(kairosSession.elapsedSeconds);
+    }
+    // 相容舊版 banner
+    const oldEl = document.getElementById('focusTimerDisplay');
+    if (oldEl) {
+      oldEl.textContent = formatElapsedMinutes(kairosSession.elapsedSeconds);
     }
   }
 
@@ -1096,27 +1141,84 @@
     }
   }
 
+  // Done 完成時的微慶祝動畫 (Web Audio + CSS Particles)
+  function triggerMicroCelebration() {
+    const container = document.getElementById('kairosCelebration');
+    if (!container) return;
+    container.innerHTML = '';
+    container.style.display = 'block';
+
+    const colors = ['#10b981', '#38bdf8', '#fbbf24', '#a855f7', '#ec4899', '#34d399', '#60a5fa'];
+    const count = 36;
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+
+    for (let i = 0; i < count; i++) {
+      const p = document.createElement('div');
+      p.className = 'kairos-celebration-particle';
+      const angle = (Math.PI * 2 * i) / count + (Math.random() * 0.4 - 0.2);
+      const dist = 120 + Math.random() * 260;
+      const dx = Math.cos(angle) * dist;
+      const dy = Math.sin(angle) * dist - (30 + Math.random() * 60);
+      p.style.left = `${cx}px`;
+      p.style.top = `${cy}px`;
+      p.style.setProperty('--dx', `${dx}px`);
+      p.style.setProperty('--dy', `${dy}px`);
+      p.style.background = colors[i % colors.length];
+      p.style.animationDuration = `${0.65 + Math.random() * 0.4}s`;
+      container.appendChild(p);
+    }
+
+    // Web Audio 柔和慶祝和弦
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+        notes.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.08);
+          gain.gain.setValueAtTime(0.08, ctx.currentTime + idx * 0.08);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.08 + 0.35);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(ctx.currentTime + idx * 0.08);
+          osc.stop(ctx.currentTime + idx * 0.08 + 0.36);
+        });
+      }
+    } catch (e) {}
+
+    setTimeout(() => {
+      container.style.display = 'none';
+      container.innerHTML = '';
+    }, 1200);
+  }
+
   function startFocusTimer(item) {
     if (focusTimerInterval) {
       clearInterval(focusTimerInterval);
       focusTimerInterval = null;
     }
     activeFocusTaskId = item.id;
-    const durMinutes = getTaskFocusDurationMinutes(item);
-    focusRemainingSeconds = durMinutes * 60;
-    updateFocusTimerDisplay();
+    kairosSession.status = 'FOCUSING';
+    kairosSession.taskId = item.id;
+    kairosSession.elapsedSeconds = 0;
+    kairosSession.startedAt = Date.now();
+    kairosSession.pauseResumeNote = '';
+
+    updateKairosTimerDisplay();
 
     if (settings.kairosEnabled) {
+      const durMinutes = getTaskFocusDurationMinutes(item);
       notifyKairosFocusStart(item, durMinutes);
     }
 
     focusTimerInterval = setInterval(() => {
-      if (focusRemainingSeconds > 0) {
-        focusRemainingSeconds--;
-        updateFocusTimerDisplay();
-        if (focusRemainingSeconds === 0) {
-          showToast(`「${item.text}」專注時間已達！做得好，可以完成任務或稍作休息。`);
-        }
+      if (kairosSession.status === 'FOCUSING') {
+        kairosSession.elapsedSeconds++;
+        updateKairosTimerDisplay();
       }
     }, 1000);
   }
@@ -1127,21 +1229,23 @@
       focusTimerInterval = null;
     }
     activeFocusTaskId = null;
+    kairosSession.status = 'IDLE';
+    kairosSession.taskId = null;
     if (settings.kairosEnabled) {
       notifyKairosFocusStop();
     }
   }
 
+  // 渲染 Kairos 全頁沉浸 Overlay
   function renderFocusLockBanner() {
-    const banner = document.getElementById('focusLockBanner');
+    const overlay = document.getElementById('kairosOverlay');
     const dock = document.getElementById('deskDrawersDock');
-    if (!banner) return;
-
     const nowItem = items.find(it => it.isNow && !it.done);
 
     if (nowItem && settings.focusLockEnabled) {
-      banner.style.display = 'flex';
+      if (overlay) overlay.style.display = 'flex';
       document.body.classList.add('body-focus-active');
+      document.body.classList.add('body-kairos-active');
       if (dock) dock.classList.add('locked-by-focus');
 
       const titleEl = document.getElementById('focusTaskTitle');
@@ -1157,19 +1261,211 @@
         metaEl.textContent = `${sizeText} (${durMinutes}m) · ${quadInfo ? quadInfo.badge : '核心深耕'} · ${typeObj ? typeObj.name : '未分類'}`;
       }
 
+      // 渲染子任務 Checklist
+      const subtasksWrap = document.getElementById('kairosSubtasksWrap');
+      if (subtasksWrap) {
+        const subtasks = getSubtasks(nowItem.id);
+        if (subtasks.length > 0) {
+          subtasksWrap.style.display = 'flex';
+          subtasksWrap.innerHTML = '';
+          subtasks.forEach(sub => {
+            const row = document.createElement('label');
+            row.className = `kairos-subtask-item ${sub.done ? 'done' : ''}`;
+            const chk = document.createElement('input');
+            chk.type = 'checkbox';
+            chk.className = 'kairos-subtask-check';
+            chk.checked = !!sub.done;
+            chk.addEventListener('change', () => {
+              toggleItemDone(sub.id, chk.checked);
+            });
+            const txt = document.createElement('span');
+            txt.className = 'kairos-subtask-title';
+            txt.textContent = sub.text;
+            row.appendChild(chk);
+            row.appendChild(txt);
+            subtasksWrap.appendChild(row);
+          });
+        } else {
+          subtasksWrap.style.display = 'none';
+        }
+      }
+
       if (activeFocusTaskId !== nowItem.id) {
         startFocusTimer(nowItem);
       }
       updateFocusGuardStatusBadge();
     } else {
-      banner.style.display = 'none';
+      if (overlay) overlay.style.display = 'none';
       document.body.classList.remove('body-focus-active');
+      document.body.classList.remove('body-kairos-active');
       if (dock) dock.classList.remove('locked-by-focus');
       if (activeFocusTaskId) {
         stopFocusTimer();
       }
     }
   }
+
+  // --- Kairos 沉浸模式動作處理器 (Done / Pause / Resume / Abort / Brain Dump) ---
+  function handleKairosDone() {
+    const nowItem = items.find(it => it.isNow && !it.done);
+    if (!nowItem) return;
+    const elapsed = kairosSession.elapsedSeconds;
+    logFocusSession(nowItem, elapsed, 'COMPLETED');
+    triggerMicroCelebration();
+    toggleItemDone(nowItem.id, true);
+
+    const overlay = document.getElementById('kairosOverlay');
+    if (overlay) {
+      overlay.classList.add('kairos-exiting');
+      setTimeout(() => {
+        overlay.classList.remove('kairos-exiting');
+        renderAll();
+      }, 280);
+    } else {
+      renderAll();
+    }
+    const minText = Math.floor(elapsed / 60);
+    showToast(`辛苦了！本次專注 ${minText > 0 ? minText + ' 分鐘' : elapsed + ' 秒'}。做得好！建議稍作休息伸展。`);
+  }
+
+  function handleKairosPause() {
+    kairosSession.status = 'PAUSED';
+    const overlay = document.getElementById('kairosOverlay');
+    const breathing = document.getElementById('kairosBreathingState');
+    const actions = document.getElementById('kairosActions');
+    const statusLabel = document.getElementById('kairosStatusLabel');
+    if (overlay) overlay.classList.add('is-paused');
+    if (breathing) breathing.style.display = 'flex';
+    if (actions) actions.style.display = 'none';
+    if (statusLabel) statusLabel.textContent = '暫停中';
+    const resumeNoteInput = document.getElementById('kairosResumeNote');
+    if (resumeNoteInput) {
+      resumeNoteInput.value = kairosSession.pauseResumeNote || '';
+      setTimeout(() => resumeNoteInput.focus(), 100);
+    }
+  }
+
+  function handleKairosResume() {
+    const resumeNoteInput = document.getElementById('kairosResumeNote');
+    const noteVal = resumeNoteInput ? resumeNoteInput.value.trim() : '';
+    kairosSession.pauseResumeNote = noteVal;
+
+    const overlay = document.getElementById('kairosOverlay');
+    const breathing = document.getElementById('kairosBreathingState');
+    const actions = document.getElementById('kairosActions');
+    const statusLabel = document.getElementById('kairosStatusLabel');
+
+    if (noteVal) {
+      const toast = document.createElement('div');
+      toast.className = 'kairos-resume-note-toast';
+      toast.textContent = `接關提醒：${noteVal}`;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 2800);
+    }
+
+    if (overlay) overlay.classList.remove('is-paused');
+    if (breathing) breathing.style.display = 'none';
+    if (actions) actions.style.display = 'flex';
+    if (statusLabel) statusLabel.textContent = '專注中';
+    kairosSession.status = 'FOCUSING';
+  }
+
+  function handleKairosAbort() {
+    const modal = document.getElementById('kairosAbortModal');
+    const elapsedEl = document.getElementById('kairosAbortElapsed');
+    if (elapsedEl) {
+      elapsedEl.textContent = Math.floor(kairosSession.elapsedSeconds / 60);
+    }
+    if (modal) modal.style.display = 'flex';
+  }
+
+  function closeKairosAbortModal() {
+    const modal = document.getElementById('kairosAbortModal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  function executeAbort(actionType) {
+    closeKairosAbortModal();
+    const nowItem = items.find(it => it.isNow && !it.done);
+    if (!nowItem) return;
+    const elapsed = kairosSession.elapsedSeconds;
+
+    if (actionType === 'TOO_LARGE') {
+      logFocusSession(nowItem, elapsed, 'ABORTED_TOO_LARGE', '任務過大需拆解');
+      nowItem.isNow = false;
+      nowItem.updatedAt = Date.now();
+      saveItems();
+      renderAll();
+      showToast('已退回看板，已保留進度，建議為此任務新增子步驟。');
+    } else if (actionType === 'POSTPONE') {
+      logFocusSession(nowItem, elapsed, 'ABORTED_POSTPONE', '延後先擱著');
+      nowItem.isNow = false;
+      nowItem.updatedAt = Date.now();
+      saveItems();
+      renderAll();
+      showToast('已暫停專注，任務保留在工作桌。');
+    } else if (actionType === 'QUIT') {
+      logFocusSession(nowItem, elapsed, 'ABORTED_QUIT', '不想做了退出');
+      nowItem.isNow = false;
+      nowItem.updatedAt = Date.now();
+      saveItems();
+      renderAll();
+      showToast('已退出專注，辛苦了，隨時可以回來。');
+    }
+  }
+
+  // 大腦暫存器 (Brain Dump)
+  function openBrainDump() {
+    const dump = document.getElementById('kairosbrainDump');
+    const input = document.getElementById('kairosbrainDumpInput');
+    if (!dump || !input) return;
+    dump.style.display = 'block';
+    input.value = '';
+    setTimeout(() => input.focus(), 50);
+  }
+
+  function closeBrainDump() {
+    const dump = document.getElementById('kairosbrainDump');
+    if (dump) dump.style.display = 'none';
+  }
+
+  function submitBrainDump() {
+    const input = document.getElementById('kairosbrainDumpInput');
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) {
+      closeBrainDump();
+      return;
+    }
+    const keywordGuessedType = guessTypeByKeywords(text);
+    const itemSize = guessSize(text, keywordGuessedType);
+    const newItem = {
+      id: generateId(),
+      text: text,
+      size: itemSize,
+      bucket: 'inbox',
+      isNow: false,
+      done: false,
+      doneAt: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      typeId: keywordGuessedType,
+      typeSource: 'rule',
+      parentId: null,
+      aiGenerated: false,
+      quadrant: getComputedQuadrant({ text: text, size: itemSize }),
+      deadline: null
+    };
+    items.unshift(newItem);
+    saveItems();
+    renderAll();
+    input.value = '';
+    closeBrainDump();
+    showToast('雜念已存入收集箱 ✓');
+  }
+
 
   // --- 畫面渲染 ---
   function renderAll() {
@@ -4770,14 +5066,70 @@
       }
     });
 
-    safeOn('btnFocusComplete', 'click', () => {
-      const nowItem = items.find(it => it.isNow && !it.done);
-      if (nowItem) {
-        toggleItemDone(nowItem.id, true);
-        showToast(`已完成「${nowItem.text}」！`);
+    // Kairos Mode v2.0 控制項綁定
+    safeOn('btnKairosDone', 'click', handleKairosDone);
+    safeOn('btnKairosPause', 'click', handleKairosPause);
+    safeOn('btnKairosResume', 'click', handleKairosResume);
+    safeOn('btnKairosAbort', 'click', handleKairosAbort);
+    safeOn('btnAbortTooLarge', 'click', () => executeAbort('TOO_LARGE'));
+    safeOn('btnAbortPostpone', 'click', () => executeAbort('POSTPONE'));
+    safeOn('btnAbortQuit', 'click', () => executeAbort('QUIT'));
+    safeOn('btnAbortCancel', 'click', closeKairosAbortModal);
+    safeOn('kairosbrainDumpClose', 'click', closeBrainDump);
+
+    const brainDumpInput = document.getElementById('kairosbrainDumpInput');
+    if (brainDumpInput) {
+      brainDumpInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          submitBrainDump();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          closeBrainDump();
+        }
+      });
+    }
+
+    const resumeNoteInput = document.getElementById('kairosResumeNote');
+    if (resumeNoteInput) {
+      resumeNoteInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleKairosResume();
+        }
+      });
+    }
+
+    // 全域大腦暫存器快捷鍵 (Ctrl/Cmd + K)
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+        const isEditingOther = (activeTag === 'input' || activeTag === 'textarea') &&
+          document.activeElement.id !== 'kairosbrainDumpInput';
+
+        if (!isEditingOther) {
+          e.preventDefault();
+          const dump = document.getElementById('kairosbrainDump');
+          if (dump && dump.style.display === 'block') {
+            closeBrainDump();
+          } else {
+            openBrainDump();
+          }
+        }
+      } else if (e.key === 'Escape') {
+        const dump = document.getElementById('kairosbrainDump');
+        if (dump && dump.style.display === 'block') {
+          closeBrainDump();
+        }
+        const modal = document.getElementById('kairosAbortModal');
+        if (modal && modal.style.display === 'flex') {
+          closeKairosAbortModal();
+        }
       }
     });
 
+    // 相容舊版按鈕
+    safeOn('btnFocusComplete', 'click', handleKairosDone);
     safeOn('btnFocusUnlock', 'click', () => {
       const nowItem = items.find(it => it.isNow && !it.done);
       if (nowItem) {

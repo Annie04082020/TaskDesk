@@ -3160,7 +3160,7 @@ input:checked + .slider:before {
 }
 
 /* =========================================================
-   Focus Lock Mode & Kairos Integration (專注鎖定與守護樣式)
+   Focus Lock Mode & Kairos Integration (v1.0 — 保留舊橫幅樣式，向後相容)
    ========================================================= */
 
 .focus-lock-banner {
@@ -3223,6 +3223,7 @@ input:checked + .slider:before {
   background: var(--accent-green);
   box-shadow: 0 0 10px var(--accent-green);
   animation: pulseNeon 1.6s infinite ease-in-out;
+  flex-shrink: 0;
 }
 
 @keyframes pulseNeon {
@@ -3369,3 +3370,659 @@ input:checked + .slider:before {
 }
 
 
+/* =========================================================
+   Kairos 沉浸引擎 Overlay — v2.0
+   ========================================================= */
+
+/* 全頁覆蓋層 */
+.kairos-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: kairosOverlayIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes kairosOverlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.kairos-overlay.kairos-exiting {
+  animation: kairosOverlayOut 0.3s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes kairosOverlayOut {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(1.01); }
+}
+
+/* 半透明模糊底層 */
+.kairos-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 10, 20, 0.78);
+  backdrop-filter: blur(18px) saturate(0.5);
+  -webkit-backdrop-filter: blur(18px) saturate(0.5);
+}
+
+[data-theme="light"] .kairos-backdrop {
+  background: rgba(240, 244, 255, 0.82);
+  backdrop-filter: blur(18px) saturate(0.8);
+  -webkit-backdrop-filter: blur(18px) saturate(0.8);
+}
+
+/* 主面板 */
+.kairos-panel {
+  position: relative;
+  z-index: 1;
+  width: min(560px, calc(100vw - 40px));
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  background: var(--card-bg, rgba(20, 24, 40, 0.96));
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 20px;
+  padding: 36px 32px 28px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  animation: kairosPanelIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes kairosPanelIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+[data-theme="light"] .kairos-panel {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(16, 185, 129, 0.3);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0,0,0,0.04);
+}
+
+/* 狀態列 */
+.kairos-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.kairos-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-green, #10b981);
+}
+
+/* 計時器（小、淡、角落）*/
+.kairos-timer-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.kairos-timer-elapsed {
+  font-family: var(--font-mono, monospace);
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--meta-text, #888);
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.kairos-timer-hint {
+  font-size: 0.65rem;
+  color: var(--meta-text, #888);
+  opacity: 0.6;
+}
+
+/* 暫停中計時器變色 */
+.kairos-overlay.is-paused .kairos-timer-elapsed {
+  color: var(--accent-amber, #f59e0b);
+}
+
+/* 任務資訊 */
+.kairos-task-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kairos-task-title {
+  font-family: var(--font-heading, sans-serif);
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--text-color, #f0f4ff);
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+@media (max-width: 480px) {
+  .kairos-task-title { font-size: 1.25rem; }
+  .kairos-panel {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 40px);
+    padding: 24px 18px 20px;
+    gap: 18px;
+    border-radius: 16px;
+  }
+  .kairos-actions {
+    flex-direction: row;
+    gap: 8px;
+  }
+  .btn-kairos-done {
+    flex: 2;
+    min-width: 0;
+    padding: 12px 12px;
+    font-size: 0.88rem;
+  }
+  .btn-kairos-pause {
+    flex: 1;
+    min-width: 0;
+    padding: 12px 8px;
+    font-size: 0.82rem;
+    text-align: center;
+  }
+  .btn-kairos-abort {
+    flex: 1;
+    min-width: 0;
+    padding: 12px 6px;
+    font-size: 0.8rem;
+    text-align: center;
+  }
+}
+
+.kairos-task-meta {
+  font-size: 0.78rem;
+  color: var(--meta-text, #888);
+}
+
+/* 子任務 Checklist */
+.kairos-subtasks-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kairos-subtask-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: var(--text-color);
+  padding: 6px 4px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.kairos-subtask-item:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+.kairos-subtask-item.done {
+  color: var(--meta-text);
+  text-decoration: line-through;
+}
+
+.kairos-subtask-check {
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--border-color);
+  border-radius: 5px;
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: var(--accent-green);
+}
+
+/* 三個核心按鈕 */
+.kairos-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.btn-kairos-done {
+  flex: 1;
+  min-width: 120px;
+  padding: 13px 20px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(16, 185, 129, 0.3);
+  transition: box-shadow 0.2s, transform 0.15s;
+  font-family: var(--font-heading);
+}
+
+.btn-kairos-done:hover {
+  box-shadow: 0 6px 24px rgba(16, 185, 129, 0.5);
+  transform: translateY(-1px);
+}
+
+.btn-kairos-done:active {
+  transform: translateY(1px);
+}
+
+.btn-kairos-pause {
+  padding: 12px 18px;
+  background: rgba(255,255,255,0.06);
+  color: var(--meta-text);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  font-family: var(--font-heading);
+}
+
+.btn-kairos-pause:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text-color);
+}
+
+.btn-kairos-abort {
+  padding: 12px 16px;
+  background: transparent;
+  color: var(--meta-text);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.2s, border-color 0.2s, color 0.2s;
+  font-family: var(--font-heading);
+}
+
+.btn-kairos-abort:hover {
+  opacity: 1;
+  border-color: var(--meta-text);
+  color: var(--text-color);
+}
+
+[data-theme="light"] .btn-kairos-pause {
+  background: rgba(0,0,0,0.04);
+  border-color: #d1d5db;
+}
+
+[data-theme="light"] .btn-kairos-abort {
+  border-color: #e5e7eb;
+}
+
+/* 呼吸態 */
+.kairos-breathing-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 8px 0;
+  animation: kairosBreathFadeIn 0.4s ease;
+}
+
+@keyframes kairosBreathFadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.kairos-breathing-ring {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 2.5px solid var(--accent-green, #10b981);
+  box-shadow: 0 0 20px rgba(16,185,129,0.3);
+  animation: breathingRing 8s ease-in-out infinite;
+}
+
+@keyframes breathingRing {
+  0%, 100% { transform: scale(0.85); opacity: 0.5; box-shadow: 0 0 8px rgba(16,185,129,0.2); }
+  50%       { transform: scale(1.1);  opacity: 1;   box-shadow: 0 0 28px rgba(16,185,129,0.5); }
+}
+
+.kairos-breathing-text {
+  font-size: 0.88rem;
+  color: var(--meta-text);
+  text-align: center;
+  margin: 0;
+}
+
+.kairos-pause-note-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kairos-pause-note-label {
+  font-size: 0.8rem;
+  color: var(--meta-text);
+  text-align: center;
+}
+
+.kairos-pause-note-input {
+  width: 100%;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-color);
+  padding: 10px 14px;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.kairos-pause-note-input:focus {
+  border-color: var(--accent-green);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+.kairos-pause-note-input::placeholder {
+  color: var(--meta-text);
+  opacity: 0.5;
+}
+
+[data-theme="light"] .kairos-pause-note-input {
+  background: #f8fafc;
+  border-color: #d1d5db;
+}
+
+.btn-kairos-resume {
+  padding: 13px 28px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--font-heading);
+  box-shadow: 0 4px 18px rgba(16, 185, 129, 0.3);
+  transition: box-shadow 0.2s, transform 0.15s;
+}
+
+.btn-kairos-resume:hover {
+  box-shadow: 0 6px 24px rgba(16, 185, 129, 0.5);
+  transform: translateY(-1px);
+}
+
+/* Brain Dump 快速捕捉 */
+.kairos-brain-dump {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9200;
+  width: min(480px, calc(100vw - 32px));
+  animation: brainDumpIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes brainDumpIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.kairos-brain-dump-inner {
+  background: var(--card-bg, rgba(20, 24, 40, 0.98));
+  border: 1px solid var(--accent-green);
+  border-radius: 14px;
+  padding: 16px 18px;
+  box-shadow: 0 8px 32px rgba(16, 185, 129, 0.2), 0 2px 8px rgba(0,0,0,0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+[data-theme="light"] .kairos-brain-dump-inner {
+  background: #fff;
+  box-shadow: 0 8px 32px rgba(16, 185, 129, 0.15), 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.kairos-brain-dump-label {
+  font-size: 0.78rem;
+  color: var(--accent-green);
+  font-weight: 600;
+}
+
+.kairos-brain-dump-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.kairos-brain-dump-input {
+  flex: 1;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-color);
+  padding: 9px 12px;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.kairos-brain-dump-input:focus {
+  border-color: var(--accent-green);
+}
+
+[data-theme="light"] .kairos-brain-dump-input {
+  background: #f8fafc;
+  border-color: #d1d5db;
+  color: #1e293b;
+}
+
+.kairos-brain-dump-close {
+  background: transparent;
+  border: none;
+  color: var(--meta-text);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.kairos-brain-dump-close:hover {
+  color: var(--text-color);
+  background: rgba(255,255,255,0.08);
+}
+
+/* 快捷鍵提示 */
+.kairos-shortcut-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  color: var(--meta-text);
+  opacity: 0.4;
+}
+
+.kairos-shortcut-hint kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+}
+
+[data-theme="light"] .kairos-shortcut-hint kbd {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+/* Abort 零羞恥 Modal */
+.kairos-abort-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: kairosOverlayIn 0.2s ease;
+}
+
+.kairos-abort-inner {
+  width: min(460px, calc(100vw - 40px));
+  background: var(--card-bg, rgba(20, 24, 40, 0.98));
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  padding: 32px 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  animation: kairosPanelIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-theme="light"] .kairos-abort-inner {
+  background: #fff;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+}
+
+.kairos-abort-title {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--text-color);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.kairos-abort-subtitle {
+  font-size: 0.82rem;
+  color: var(--meta-text);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.kairos-abort-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kairos-abort-option {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s;
+  width: 100%;
+}
+
+.kairos-abort-option:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.2);
+  transform: translateX(3px);
+}
+
+[data-theme="light"] .kairos-abort-option {
+  background: #f8fafc;
+  border-color: #e5e7eb;
+}
+
+[data-theme="light"] .kairos-abort-option:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.kairos-abort-option-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.kairos-abort-option-hint {
+  font-size: 0.75rem;
+  color: var(--meta-text);
+}
+
+.kairos-abort-cancel {
+  width: 100%;
+  padding: 11px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--meta-text);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  font-family: var(--font-heading);
+}
+
+.kairos-abort-cancel:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--text-color);
+}
+
+/* 完成慶祝粒子容器 */
+.kairos-celebration {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.kairos-celebration-particle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: particleFly 0.9s ease-out forwards;
+}
+
+@keyframes particleFly {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy)) scale(0.3);
+  }
+}
+
+/* Resume 便籤顯示提示 */
+.kairos-resume-note-toast {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  border-radius: 12px;
+  padding: 16px 20px;
+  text-align: center;
+  font-size: 0.95rem;
+  color: var(--text-color);
+  z-index: 10;
+  animation: resumeNoteIn 0.3s ease;
+}
+
+@keyframes resumeNoteIn {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)); }
+  to   { opacity: 1; transform: translate(-50%, -50%); }
+}

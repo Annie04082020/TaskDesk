@@ -166,31 +166,107 @@
       </div>
     </section>
 
-    <!-- Focus Lock Banner (專注鎖定橫幅：當啟動「現在做這個」時) -->
-    <div class="focus-lock-banner" id="focusLockBanner" style="display: none;">
-      <div class="focus-lock-top-row">
-        <div class="focus-lock-badge-wrap">
-          <span class="focus-pulse-dot"></span>
-          <span class="focus-lock-badge">● 現在專注中</span>
-          <span class="focus-guard-status" id="focusGuardStatusBadge">🛡️ 專注鎖定中</span>
+    <!-- Kairos 全頁沉浸引擎 Overlay (v2.0) -->
+    <div class="kairos-overlay" id="kairosOverlay" style="display: none;" aria-modal="true" role="dialog">
+      <!-- 模糊底層（讓 Desk 仍可感知，但不可互動）-->
+      <div class="kairos-backdrop" id="kairosBackdrop"></div>
+
+      <!-- 主體面板 -->
+      <div class="kairos-panel" id="kairosPanel">
+
+        <!-- 狀態指示列 -->
+        <div class="kairos-status-bar">
+          <div class="kairos-status-badge" id="kairosStatusBadge">
+            <span class="focus-pulse-dot"></span>
+            <span id="kairosStatusLabel">專注中</span>
+          </div>
+          <!-- 計時器：顯示已用時間（正數，每分鐘更新）-->
+          <div class="kairos-timer-wrap" id="kairosTimerWrap">
+            <span class="kairos-timer-elapsed" id="kairosTimerDisplay">00m</span>
+            <span class="kairos-timer-hint" id="kairosTimerHint">已專注</span>
+          </div>
         </div>
-        <div class="focus-lock-timer-wrap">
-          <span class="focus-timer-label">倒數計時</span>
-          <span class="focus-timer-display" id="focusTimerDisplay">25:00</span>
+
+        <!-- 任務資訊 -->
+        <div class="kairos-task-info">
+          <div class="kairos-task-title" id="focusTaskTitle">任務標題</div>
+          <div class="kairos-task-meta" id="focusTaskMeta"></div>
         </div>
+
+        <!-- 子任務 Checklist（Focus 中可打勾）-->
+        <div class="kairos-subtasks-wrap" id="kairosSubtasksWrap" style="display:none;"></div>
+
+        <!-- 呼吸態介面（Graceful Pause 時顯示）-->
+        <div class="kairos-breathing-state" id="kairosBreathingState" style="display:none;">
+          <div class="kairos-breathing-ring"></div>
+          <p class="kairos-breathing-text">保留進度中，隨時可以回來</p>
+          <div class="kairos-pause-note-wrap">
+            <label class="kairos-pause-note-label" for="kairosResumeNote">等一下回來，第一步要做什麼？</label>
+            <input type="text" class="kairos-pause-note-input" id="kairosResumeNote"
+              placeholder="例：回到第 3 頁改圖表標題（可跳過）" autocomplete="off" />
+          </div>
+          <button type="button" class="btn-kairos-resume" id="btnKairosResume">繼續專注</button>
+        </div>
+
+        <!-- 三個核心按鈕（Focusing 態顯示）-->
+        <div class="kairos-actions" id="kairosActions">
+          <button type="button" class="btn-kairos-done" id="btnKairosDone">完成任務</button>
+          <button type="button" class="btn-kairos-pause" id="btnKairosPause">暫停</button>
+          <button type="button" class="btn-kairos-abort" id="btnKairosAbort">放棄</button>
+        </div>
+
+        <!-- Brain Dump 快速捕捉（全域 Ctrl/Cmd+K 觸發）-->
+        <div class="kairos-brain-dump" id="kairosbrainDump" style="display:none;">
+          <div class="kairos-brain-dump-inner">
+            <label class="kairos-brain-dump-label">腦袋閃過什麼？先存起來 →</label>
+            <div class="kairos-brain-dump-row">
+              <input type="text" id="kairosbrainDumpInput" class="kairos-brain-dump-input"
+                placeholder="輸入後按 Enter，直接存入收集箱" autocomplete="off" />
+              <button type="button" class="kairos-brain-dump-close" id="kairosbrainDumpClose" aria-label="關閉">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Brain Dump 快捷鍵提示 -->
+        <div class="kairos-shortcut-hint" id="kairosShortcutHint">
+          <kbd>Ctrl</kbd><span>+</span><kbd>K</kbd> 隨手記錄雜念
+        </div>
+
+      </div><!-- /kairos-panel -->
+    </div><!-- /kairos-overlay -->
+
+    <!-- Abort 零羞恥確認 Modal -->
+    <div class="kairos-abort-modal" id="kairosAbortModal" style="display:none;" role="dialog" aria-modal="true">
+      <div class="kairos-abort-inner">
+        <h3 class="kairos-abort-title">需要調整方向嗎？</h3>
+        <p class="kairos-abort-subtitle">剛才的 <span id="kairosAbortElapsed">0</span> 分鐘有被記錄下來，沒有白費。</p>
+        <div class="kairos-abort-options">
+          <button type="button" class="kairos-abort-option" id="btnAbortTooLarge">
+            <span class="kairos-abort-option-title">這任務太大了，需要重新拆解</span>
+            <span class="kairos-abort-option-hint">退回看板，卡片自動保留為待辦</span>
+          </button>
+          <button type="button" class="kairos-abort-option" id="btnAbortPostpone">
+            <span class="kairos-abort-option-title">今天狀態不佳，先擱著</span>
+            <span class="kairos-abort-option-hint">任務留在工作桌，但移除「現在」標記</span>
+          </button>
+          <button type="button" class="kairos-abort-option" id="btnAbortQuit">
+            <span class="kairos-abort-option-title">純粹不想做了</span>
+            <span class="kairos-abort-option-hint">正常退出，無任何處罰</span>
+          </button>
+        </div>
+        <button type="button" class="kairos-abort-cancel" id="btnAbortCancel">繼續專注</button>
       </div>
-      <div class="focus-lock-content-row">
-        <div class="focus-task-title" id="focusTaskTitle">任務標題</div>
-        <div class="focus-task-meta" id="focusTaskMeta">試水溫 · Q2 核心深耕</div>
-      </div>
-      <div class="focus-lock-actions">
-        <button type="button" class="btn-primary btn-focus-complete" id="btnFocusComplete">
-          <span>✓ 完成此任務</span>
-        </button>
-        <button type="button" class="btn-secondary btn-focus-unlock" id="btnFocusUnlock">
-          <span>暫停專注 / 解除鎖定</span>
-        </button>
-      </div>
+    </div>
+
+    <!-- Done 完成慶祝粒子容器 -->
+    <div class="kairos-celebration" id="kairosCelebration" style="display:none;" aria-hidden="true"></div>
+
+    <!-- 以下保留 v1.0 相容用（id 保留但 display:none，避免 JS safeOn 報錯）-->
+    <div id="focusLockBanner" style="display:none;" aria-hidden="true">
+      <span id="focusGuardStatusBadge"></span>
+      <span id="focusTimerDisplay"></span>
+      <button id="btnFocusComplete" type="button" style="display:none;"></button>
+      <button id="btnFocusUnlock" type="button" style="display:none;"></button>
     </div>
 
     <!-- Main Content List -->
@@ -668,7 +744,7 @@
           <div class="form-sublabel">在 Android 手機上安裝原生 Task Desk，支援離線執行與跨裝置手動同步。</div>
           <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
             <a href="https://github.com/Annie04082020/TaskDesk/releases/latest" target="_blank" rel="noopener" class="btn-primary" style="justify-content: center; text-decoration: none; padding: 10px 14px;">
-              <span>前往 GitHub Releases 下載最新 APK (v1.0.13)</span>
+              <span>前往 GitHub Releases 下載最新 APK (v1.0.14)</span>
             </a>
             <div style="font-size: 0.74rem; color: var(--meta-text); line-height: 1.45;">
               <strong>APK 更新說明：</strong>手機端安裝的 APK 屬於獨立離線封裝。更新網頁原始碼後，GitHub 會自動打包新版本 APK，點擊上方按鈕下載安裝即可直接覆蓋更新！
