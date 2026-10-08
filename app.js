@@ -3338,57 +3338,114 @@
   // 智慧雙向合併演算法（無損雙向合併）
   function smartMergeItems(localList, remoteList) {
     const itemMap = new Map();
-    // 先載入本機所有項目
-    for (const it of localList) {
+
+    // 1. 先載入本機所有項目（深拷貝並確保完成狀態為嚴格布林值）
+    for (const it of (localList || [])) {
       if (it && it.id) {
-        itemMap.set(it.id, Object.assign({}, it));
+        itemMap.set(it.id, Object.assign({}, it, {
+          done: !!it.done,
+          doneAt: it.done ? (it.doneAt || it.updatedAt || Date.now()) : null
+        }));
       }
     }
-    // 依據時間戳記與狀態合併遠端項目
-    for (const rIt of remoteList) {
-      if (!rIt || !rIt.id) continue;
 
-      if (!itemMap.has(rIt.id)) {
-        itemMap.set(rIt.id, Object.assign({}, rIt));
-      } else {
-        const localIt = itemMap.get(rIt.id);
-        const localTime = localIt.updatedAt || localIt.createdAt || 0;
-        const remoteTime = rIt.updatedAt || rIt.createdAt || 0;
-
-        // 1. 完成狀態判定（保護完成狀態不因時鐘偏差而被覆蓋）
-        let resolvedDone = localIt.done;
-        let resolvedDoneAt = localIt.doneAt;
-
-        if (localIt.done !== rIt.done) {
-          if (rIt.done && !localIt.done) {
-            // 遠端標記已完成，本機為未完成：採納已完成
-            resolvedDone = true;
-            resolvedDoneAt = rIt.doneAt || Date.now();
-          } else if (localIt.done && !rIt.done) {
-            // 本機已完成，遠端為未完成：除非遠端有更新的明確動作，否則保留完成
-            if (remoteTime > (localIt.doneAt || 0) && (remoteTime - (localIt.doneAt || 0) > 60000)) {
-              resolvedDone = false;
-              resolvedDoneAt = null;
-            } else {
-              resolvedDone = true;
-              resolvedDoneAt = localIt.doneAt || Date.now();
-            }
+    // 輔助查找：比對 ID、rawId 或同名任務（防跨裝置重複建立且同步狀態丟失）
+    function findExistingMatch(rIt) {
+      if (!rIt) return null;
+      // 精準比對 ID
+      if (itemMap.has(rIt.id)) {
+        return { matchKey: rIt.id, item: itemMap.get(rIt.id) };
+      }
+      // 比對 rawId (Google Tasks 或外部 ID)
+      if (rIt.rawId) {
+        for (const [key, it] of itemMap.entries()) {
+          if (it.rawId === rIt.rawId || it.id === `gt_${rIt.rawId}` || rIt.id === `gt_${it.rawId}`) {
+            return { matchKey: key, item: it };
           }
+        }
+      }
+      // 比對標題（同為母任務且標題完全一致）
+      if (!rIt.parentId && rIt.text && rIt.text.trim()) {
+        const cleanRText = rIt.text.trim().toLowerCase();
+        for (const [key, it] of itemMap.entries()) {
+          if (!it.parentId && it.text && it.text.trim().toLowerCase() === cleanRText) {
+            return { matchKey: key, item: it };
+          }
+        }
+      }
+      return null;
+    }
+
+    // 2. 依據時間戳記與狀態合併遠端項目
+    for (const rIt of (remoteList || [])) {
+      if (!rIt || (!rIt.id && !rIt.text)) continue;
+
+      const normalizedRIt = Object.assign({}, rIt, {
+        done: !!rIt.done,
+        doneAt: rIt.done ? (rIt.doneAt || rIt.updatedAt || Date.now()) : null
+      });
+
+      const match = findExistingMatch(normalizedRIt);
+
+      if (!match) {
+        // 本機不存在此項目：直接新增
+        const newId = normalizedRIt.id || generateId();
+        itemMap.set(newId, Object.assign({}, normalizedRIt, { id: newId }));
+      } else {
+        // 本機已存在此項目：進行智慧狀態融合
+        const localIt = match.item;
+        const matchKey = match.matchKey;
+
+        // 計算兩端最後動作時間
+        const localTime = Math.max(localIt.updatedAt || 0, localIt.doneAt || 0, localIt.createdAt || 0);
+        const remoteTime = Math.max(normalizedRIt.updatedAt || 0, normalizedRIt.doneAt || 0, normalizedRIt.createdAt || 0);
+
+        // 1. 判定完成狀態 (done & doneAt)
+        let resolvedDone = false;
+        let resolvedDoneAt = null;
+
+        if (localIt.done === normalizedRIt.done) {
+          // 兩端完成狀態一致
+          resolvedDone = !!localIt.done;
+          resolvedDoneAt = localIt.done ? (localIt.doneAt || normalizedRIt.doneAt || Math.max(localTime, remoteTime)) : null;
         } else {
-          resolvedDone = localIt.done;
-          resolvedDoneAt = localIt.doneAt || rIt.doneAt;
+          // 兩端完成狀態不一致：比對完成發生的時間與另一端的修改時間
+          const doneItem = localIt.done ? localIt : normalizedRIt;
+          const undoneItem = localIt.done ? normalizedRIt : localIt;
+          const doneActionTime = Math.max(doneItem.doneAt || 0, doneItem.updatedAt || 0);
+          const undoneActionTime = Math.max(undoneItem.updatedAt || 0, undoneItem.createdAt || 0);
+
+          if (doneActionTime >= undoneActionTime) {
+            // 完成動作發生在未完成的最後異動之後（或同時間）：判定為已完成
+            resolvedDone = true;
+            resolvedDoneAt = doneItem.doneAt || doneActionTime;
+          } else {
+            // 未完成一端有明確晚於完成時間的異動（例如使用者重新勾除/反完成）：判定為未完成
+            resolvedDone = false;
+            resolvedDoneAt = null;
+          }
         }
 
         // 2. 各屬性無損合併（以較新變更為主，但確保欄位不丟失）
-        const newerObj = remoteTime >= localTime ? rIt : localIt;
-        const olderObj = remoteTime >= localTime ? localIt : rIt;
+        const newerObj = remoteTime >= localTime ? normalizedRIt : localIt;
+        const olderObj = remoteTime >= localTime ? localIt : normalizedRIt;
+
+        // 保留有效的工作桌桶子（若一方有明確分類，避免被預設 inbox 沖刷）
+        let resolvedBucket = newerObj.bucket || olderObj.bucket || 'inbox';
+        if (resolvedBucket === 'inbox' && (olderObj.bucket === 'today' || olderObj.bucket === 'week' || olderObj.bucket === 'keep' || olderObj.bucket === 'release')) {
+          if (remoteTime === localTime || !newerObj.updatedAt) {
+            resolvedBucket = olderObj.bucket;
+          }
+        }
+
+        const canonicalId = localIt.id || normalizedRIt.id;
 
         const mergedItem = Object.assign({}, olderObj, newerObj, {
-          id: localIt.id,
+          id: canonicalId,
           rawId: newerObj.rawId || olderObj.rawId || null,
           done: resolvedDone,
           doneAt: resolvedDoneAt,
-          updatedAt: Math.max(localTime, remoteTime, resolvedDoneAt || 0),
+          updatedAt: Math.max(localTime, remoteTime, resolvedDoneAt || 0, Date.now()),
           // 象限屬性 (手動指定與自動推估)
           manualQuadrant: (newerObj.manualQuadrant !== undefined) ? newerObj.manualQuadrant : olderObj.manualQuadrant,
           quadrant: newerObj.quadrant || olderObj.quadrant || getComputedQuadrant(newerObj),
@@ -3396,7 +3453,7 @@
           size: newerObj.size || olderObj.size || 'small',
           deadline: (newerObj.deadline !== undefined) ? newerObj.deadline : olderObj.deadline,
           // 工作桌桶子、文字、備註
-          bucket: newerObj.bucket || olderObj.bucket || 'inbox',
+          bucket: resolvedBucket,
           text: (newerObj.text && newerObj.text.trim()) ? newerObj.text : olderObj.text,
           notes: (newerObj.notes !== undefined) ? newerObj.notes : olderObj.notes,
           typeId: newerObj.typeId || olderObj.typeId || null,
@@ -3407,11 +3464,33 @@
           mergedItem.isNow = false;
         }
 
-        itemMap.set(rIt.id, mergedItem);
+        // 若 matchKey 與 canonicalId 不同，清除舊 key
+        if (matchKey !== canonicalId) {
+          itemMap.delete(matchKey);
+        }
+        itemMap.set(canonicalId, mergedItem);
       }
     }
 
     const merged = Array.from(itemMap.values());
+
+    // 確保子任務與母任務完成狀態聯動：
+    // 若母任務已完成，其所有子任務也一併標記為完成；若所有子任務皆完成，母任務也標記為完成
+    const parentMap = new Map();
+    for (const it of merged) {
+      if (!it.parentId) {
+        parentMap.set(it.id, it);
+      }
+    }
+    for (const it of merged) {
+      if (it.parentId && parentMap.has(it.parentId)) {
+        const parent = parentMap.get(it.parentId);
+        if (parent.done && !it.done) {
+          it.done = true;
+          it.doneAt = parent.doneAt || Date.now();
+        }
+      }
+    }
 
     // 確保全域最多只有一個 isNow
     let foundNow = false;
@@ -3574,7 +3653,10 @@
         }
       }
 
-      items = remotePayload.items;
+      items = (remotePayload.items || []).map(it => Object.assign({}, it, {
+        done: !!it.done,
+        doneAt: it.done ? (it.doneAt || it.updatedAt || Date.now()) : null
+      }));
       if (remotePayload.settings) {
         settings = Object.assign({}, settings, remotePayload.settings);
         saveSettings();
@@ -3640,9 +3722,10 @@
       const data = await resp.json();
       const fileData = data.files && data.files['taskdesk-sync.json'];
       let remoteItems = [];
+      let remotePayload = null;
       if (fileData && fileData.content) {
-        const remotePayload = JSON.parse(fileData.content);
-        if (Array.isArray(remotePayload.items)) {
+        remotePayload = JSON.parse(fileData.content);
+        if (remotePayload && Array.isArray(remotePayload.items)) {
           remoteItems = remotePayload.items;
         }
       }
