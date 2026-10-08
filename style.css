@@ -2453,6 +2453,52 @@ input:checked + .slider:before {
   border-radius: var(--radius-sm);
 }
 
+.quadrant-selector-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--box-bg);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+}
+
+.quadrant-selector-label {
+  font-size: 0.73rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.quadrant-chips-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.quadrant-chip-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  font-size: 0.72rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.quadrant-chip-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.quadrant-chip-btn.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #0b0f19;
+  font-weight: 700;
+}
+
 .matrix-notice {
   font-size: 0.76rem;
   color: var(--meta-text);

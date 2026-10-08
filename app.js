@@ -284,7 +284,7 @@
             it.size = guessSize(it.text, it.typeId);
           }
           if (!it.quadrant) {
-            it.quadrant = 'q2'; // 預設重要不緊急 (核心推進)
+            it.quadrant = getComputedQuadrant(it);
           }
           if (it.deadline === undefined) {
             it.deadline = null;
@@ -599,6 +599,12 @@
       let parsedQuadrant = explicitQuadrant || null;
       let parsedDeadline = explicitDeadline || null;
 
+      let isDone = false;
+      if (/^\[[xX✓]\]\s*/.test(text) || /#done\b/i.test(text)) {
+        isDone = true;
+        text = text.replace(/^\[[xX✓]\]\s*/, '').replace(/#done\b/i, '').trim();
+      }
+
       // 支援文字中解析標籤如 #q1, #q2, #q3, #q4
       const qMatch = text.match(/#(q[1-4])/i);
       if (qMatch) {
@@ -620,17 +626,18 @@
       const item = {
         id: generateId(),
         text: text,
-        size: itemSize, // 'small' | 'medium' | 'large'
+        size: itemSize, // 'micro' | 'small' | 'medium' | 'large'
         bucket: 'inbox',
         isNow: false,
-        done: false,
-        doneAt: null,
+        done: isDone,
+        doneAt: isDone ? Date.now() : null,
         createdAt: Date.now(),
         updatedAt: Date.now(),
         typeId: keywordGuessedType,
         typeSource: keywordGuessedType ? 'rule' : 'ai',
         parentId: null,
         aiGenerated: false,
+        manualQuadrant: parsedQuadrant,
         quadrant: parsedQuadrant || getComputedQuadrant({ text: text, size: itemSize, deadline: parsedDeadline }),
         deadline: parsedDeadline || null
       };
@@ -709,6 +716,7 @@
     const subtasks = getSubtasks(item.id);
     subtasks.forEach(sub => {
       sub.bucket = targetBucket;
+      sub.updatedAt = Date.now();
     });
 
     saveItems();
@@ -1022,6 +1030,7 @@
       const newText = prompt('修改任務內容：', item.text);
       if (newText !== null && newText.trim()) {
         item.text = newText.trim();
+        item.updatedAt = Date.now();
         saveItems();
         renderAll();
       }
@@ -1726,9 +1735,12 @@
   }
 
   // --- 四象限輕重緩急客觀自動判定引擎 ---
-  // 使用者無需自行判斷 Q1/Q2/Q3/Q4，系統依「任務大小」與「截止死線」客觀自動分流
+  // 支援手動指定與系統依「任務大小」與「截止死線」客觀自動分流
   function getComputedQuadrant(item) {
     if (!item) return 'q4';
+    if (item.manualQuadrant && ['q1', 'q2', 'q3', 'q4'].includes(item.manualQuadrant.toLowerCase())) {
+      return item.manualQuadrant.toLowerCase();
+    }
     const size = item.size || guessSize(item.text, item.typeId) || 'small';
     const isImportant = (size === 'large' || size === 'medium');
 
@@ -1759,6 +1771,7 @@
 
   function getQuadrantInfo(item) {
     const quadId = getComputedQuadrant(item);
+    const isManual = !!(item.manualQuadrant && ['q1', 'q2', 'q3', 'q4'].includes(item.manualQuadrant.toLowerCase()));
     const size = item.size || guessSize(item.text, item.typeId) || 'small';
     const sizeMap = { micro: '試水溫 (5-10m 微步)', small: '小任務 (15-30m 瑣事)', medium: '中型任務 (1-2h 專注)', large: '大型任務 (深度專案)' };
     const sizeText = sizeMap[size] || '試水溫';
@@ -1776,13 +1789,17 @@
       }
     }
 
+    const manualPrefix = isManual ? '【手動指定】' : '【系統判定】';
+
     if (quadId === 'q1') {
       return {
         id: 'q1',
         badge: '迫在眉睫',
         title: '重要且緊急',
         color: '#f87171',
-        desc: `系統判定理由：屬於${sizeText}且【${dlStatus}】，具備高核心價值與急迫時限，判定為優先處置焦點。`
+        desc: isManual
+          ? `${manualPrefix}已手動指定為 Q1 緊急重要，將同步至所有裝置。`
+          : `${manualPrefix}屬於${sizeText}且【${dlStatus}】，具備高核心價值與急迫時限，判定為優先處置焦點。`
       };
     }
     if (quadId === 'q2') {
@@ -1791,7 +1808,9 @@
         badge: '核心深耕',
         title: '重要不急',
         color: '#38bdf8',
-        desc: `系統判定理由：屬於${sizeText}且【${dlStatus}】，具備高核心價值但無急迫火燒眉毛壓力，是成長最重要的沉浸區。`
+        desc: isManual
+          ? `${manualPrefix}已手動指定為 Q2 核心深耕，將同步至所有裝置。`
+          : `${manualPrefix}屬於${sizeText}且【${dlStatus}】，具備高核心價值但無急迫壓力，是成長最重要的沉浸區。`
       };
     }
     if (quadId === 'q3') {
@@ -1800,7 +1819,9 @@
         badge: '瑣事速辦',
         title: '緊急瑣事',
         color: '#fbbf24',
-        desc: `系統判定理由：屬於${sizeText}且【${dlStatus}】，行政瑣事期限逼近，花少許時間順手清空即可。`
+        desc: isManual
+          ? `${manualPrefix}已手動指定為 Q3 瑣事速辦，將同步至所有裝置。`
+          : `${manualPrefix}屬於${sizeText}且【${dlStatus}】，行政瑣事期限逼近，花少許時間順手清空即可。`
       };
     }
     return {
@@ -1808,11 +1829,13 @@
       badge: '順手雜項',
       title: '低壓順手',
       color: '#94a3b8',
-      desc: `系統判定理由：屬於${sizeText}且【${dlStatus}】，低精神負擔備用清單，有餘力或零碎空檔再執行。`
+      desc: isManual
+        ? `${manualPrefix}已手動指定為 Q4 餘裕順手，將同步至所有裝置。`
+        : `${manualPrefix}屬於${sizeText}且【${dlStatus}】，低精神負擔備用清單，有餘力或零碎空檔再執行。`
     };
   }
 
-  // --- 截止死線設定浮動選單 (免自己選象限，系統依死線自動計算) ---
+  // --- 截止死線與象限設定浮動選單 ---
   function openDeadlinePicker(itemId, targetEl) {
     const existing = document.querySelector('.quadrant-picker-menu');
     if (existing) existing.remove();
@@ -1831,7 +1854,7 @@
 
     const titleEl = document.createElement('div');
     titleEl.className = 'quadrant-picker-title';
-    titleEl.textContent = '📅 截止死線設定';
+    titleEl.textContent = '📅 截止死線與象限設定';
 
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
@@ -1847,7 +1870,7 @@
 
     const hintEl = document.createElement('div');
     hintEl.className = 'quadrant-picker-hint';
-    hintEl.textContent = '💡 不用您自己選象限！只要設定死線，系統會根據任務大小與剩餘天數自動判定輕重緩急。死線在主介面卡片隱藏不顯示。';
+    hintEl.textContent = '💡 預設由系統自動判定輕重緩急。您亦可於下方直接指定象限或死線，所有屬性皆可跨裝置同步。';
     menu.appendChild(hintEl);
 
     // 快捷日期標籤列
@@ -1899,9 +1922,10 @@
 
     function updateInfoDisplay() {
       const qInfo = getQuadrantInfo(item);
+      const isManual = !!(item.manualQuadrant && ['q1', 'q2', 'q3', 'q4'].includes(item.manualQuadrant.toLowerCase()));
       infoBox.innerHTML = `
         <div class="deadline-auto-badge" style="color: ${qInfo.color};">
-          🤖 系統自動判定：${qInfo.badge}
+          ${isManual ? '✋ 手動指定' : '🤖 自動推估'}：${qInfo.badge} (${qInfo.title})
         </div>
         <div class="deadline-auto-desc">${qInfo.desc}</div>
       `;
@@ -1909,6 +1933,9 @@
 
     function applyDeadline(newVal) {
       item.deadline = newVal;
+      if (!item.manualQuadrant) {
+        item.quadrant = getComputedQuadrant(item);
+      }
       item.updatedAt = Date.now();
       dateInput.value = newVal || '';
       saveItems();
@@ -1951,6 +1978,57 @@
 
     menu.appendChild(quickChips);
     menu.appendChild(deadlineRow);
+
+    // 象限自訂或自動推估列
+    const quadRow = document.createElement('div');
+    quadRow.className = 'quadrant-selector-row';
+
+    const quadLabel = document.createElement('div');
+    quadLabel.className = 'quadrant-selector-label';
+    quadLabel.textContent = '輕重緩急象限設定：';
+    quadRow.appendChild(quadLabel);
+
+    const quadChips = document.createElement('div');
+    quadChips.className = 'quadrant-chips-wrap';
+
+    const quadOptions = [
+      { id: null, label: '🤖 自動推估' },
+      { id: 'q1', label: 'Q1 緊急重要' },
+      { id: 'q2', label: 'Q2 核心深耕' },
+      { id: 'q3', label: 'Q3 瑣事速辦' },
+      { id: 'q4', label: 'Q4 餘裕順手' }
+    ];
+
+    function renderQuadChips() {
+      quadChips.innerHTML = '';
+      const currentManual = item.manualQuadrant ? item.manualQuadrant.toLowerCase() : null;
+      quadOptions.forEach(qOpt => {
+        const qBtn = document.createElement('button');
+        qBtn.type = 'button';
+        const isActive = (qOpt.id === currentManual) || (!qOpt.id && !currentManual);
+        qBtn.className = `quadrant-chip-btn ${isActive ? 'active' : ''}`;
+        qBtn.textContent = qOpt.label;
+        qBtn.addEventListener('click', () => {
+          item.manualQuadrant = qOpt.id;
+          item.quadrant = getComputedQuadrant(item);
+          item.updatedAt = Date.now();
+          saveItems();
+          renderAll();
+          renderQuadChips();
+          updateInfoDisplay();
+          const matrixModal = document.getElementById('modalMatrix');
+          if (matrixModal && matrixModal.style.display === 'flex') {
+            renderMatrixModal();
+          }
+          showToast(qOpt.id ? `象限已手動指定為 ${qOpt.label}` : '已切換為系統自動推估象限');
+        });
+        quadChips.appendChild(qBtn);
+      });
+    }
+
+    renderQuadChips();
+    quadRow.appendChild(quadChips);
+    menu.appendChild(quadRow);
 
     updateInfoDisplay();
     menu.appendChild(infoBox);
@@ -3058,27 +3136,74 @@
     const itemMap = new Map();
     // 先載入本機所有項目
     for (const it of localList) {
-      itemMap.set(it.id, Object.assign({}, it));
+      if (it && it.id) {
+        itemMap.set(it.id, Object.assign({}, it));
+      }
     }
     // 依據時間戳記與狀態合併遠端項目
     for (const rIt of remoteList) {
+      if (!rIt || !rIt.id) continue;
+
       if (!itemMap.has(rIt.id)) {
         itemMap.set(rIt.id, Object.assign({}, rIt));
       } else {
         const localIt = itemMap.get(rIt.id);
         const localTime = localIt.updatedAt || localIt.createdAt || 0;
         const remoteTime = rIt.updatedAt || rIt.createdAt || 0;
-        // 遠端比本機新：採納遠端
-        if (remoteTime > localTime) {
-          itemMap.set(rIt.id, Object.assign({}, rIt));
-        } else if (remoteTime === localTime) {
-          // 時間相同時，已完成或設定 isNow 優先
+
+        // 1. 完成狀態判定（保護完成狀態不因時鐘偏差而被覆蓋）
+        let resolvedDone = localIt.done;
+        let resolvedDoneAt = localIt.doneAt;
+
+        if (localIt.done !== rIt.done) {
           if (rIt.done && !localIt.done) {
-            itemMap.set(rIt.id, Object.assign({}, rIt));
-          } else if (rIt.isNow && !localIt.isNow) {
-            itemMap.set(rIt.id, Object.assign({}, rIt));
+            // 遠端標記已完成，本機為未完成：採納已完成
+            resolvedDone = true;
+            resolvedDoneAt = rIt.doneAt || Date.now();
+          } else if (localIt.done && !rIt.done) {
+            // 本機已完成，遠端為未完成：除非遠端有更新的明確動作，否則保留完成
+            if (remoteTime > (localIt.doneAt || 0) && (remoteTime - (localIt.doneAt || 0) > 60000)) {
+              resolvedDone = false;
+              resolvedDoneAt = null;
+            } else {
+              resolvedDone = true;
+              resolvedDoneAt = localIt.doneAt || Date.now();
+            }
           }
+        } else {
+          resolvedDone = localIt.done;
+          resolvedDoneAt = localIt.doneAt || rIt.doneAt;
         }
+
+        // 2. 各屬性無損合併（以較新變更為主，但確保欄位不丟失）
+        const newerObj = remoteTime >= localTime ? rIt : localIt;
+        const olderObj = remoteTime >= localTime ? localIt : rIt;
+
+        const mergedItem = Object.assign({}, olderObj, newerObj, {
+          id: localIt.id,
+          rawId: newerObj.rawId || olderObj.rawId || null,
+          done: resolvedDone,
+          doneAt: resolvedDoneAt,
+          updatedAt: Math.max(localTime, remoteTime, resolvedDoneAt || 0),
+          // 象限屬性 (手動指定與自動推估)
+          manualQuadrant: (newerObj.manualQuadrant !== undefined) ? newerObj.manualQuadrant : olderObj.manualQuadrant,
+          quadrant: newerObj.quadrant || olderObj.quadrant || getComputedQuadrant(newerObj),
+          // 時間與尺寸設定 (大小、截止死線)
+          size: newerObj.size || olderObj.size || 'small',
+          deadline: (newerObj.deadline !== undefined) ? newerObj.deadline : olderObj.deadline,
+          // 工作桌桶子、文字、備註
+          bucket: newerObj.bucket || olderObj.bucket || 'inbox',
+          text: (newerObj.text && newerObj.text.trim()) ? newerObj.text : olderObj.text,
+          notes: (newerObj.notes !== undefined) ? newerObj.notes : olderObj.notes,
+          typeId: newerObj.typeId || olderObj.typeId || null,
+          parentId: (newerObj.parentId !== undefined) ? newerObj.parentId : olderObj.parentId
+        });
+
+        if (mergedItem.done && mergedItem.isNow) {
+          mergedItem.isNow = false;
+        }
+
+        itemMap.set(rIt.id, mergedItem);
       }
     }
 
@@ -3088,7 +3213,7 @@
     let foundNow = false;
     for (const it of merged) {
       if (it.isNow) {
-        if (foundNow) {
+        if (foundNow || it.done) {
           it.isNow = false;
         } else {
           foundNow = true;
@@ -3250,6 +3375,7 @@
         settings = Object.assign({}, settings, remotePayload.settings);
         saveSettings();
         applyTheme(settings.theme);
+        applySafeTop(settings.safeTop);
       }
       saveItems();
       syncConfig.lastSyncTime = Date.now();
@@ -3319,6 +3445,18 @@
 
       // 進行無失真時間戳雙向合併
       items = smartMergeItems(items, remoteItems);
+      if (remotePayload && remotePayload.settings) {
+        const localSettingsTime = settings.updatedAt || 0;
+        const remoteSettingsTime = remotePayload.settings.updatedAt || 0;
+        if (remoteSettingsTime >= localSettingsTime) {
+          settings = Object.assign({}, settings, remotePayload.settings);
+        } else {
+          settings = Object.assign({}, remotePayload.settings, settings);
+        }
+        saveSettings();
+        applyTheme(settings.theme);
+        applySafeTop(settings.safeTop);
+      }
       saveItems();
 
       // 將合併後的最新資料寫回 Gist
@@ -3405,6 +3543,7 @@
         settings = Object.assign({}, settings, data.settings);
         saveSettings();
         applyTheme(settings.theme);
+        applySafeTop(settings.safeTop);
       }
       saveItems();
       renderAll();
@@ -3859,52 +3998,85 @@
       }
       if (!data || typeof data !== 'object') return null;
 
-      if (data.kind === 'tasks#taskLists' || Array.isArray(data.items)) {
-        const lists = [];
-        const rawLists = Array.isArray(data.items) ? data.items : [];
-        rawLists.forEach((lst, idx) => {
-          if (!lst || typeof lst !== 'object') return;
-          const listTitle = lst.title || `清單 ${idx + 1}`;
-          const rawItems = Array.isArray(lst.items) ? lst.items : [];
-          const uncompletedTasks = [];
-          const completedTasks = [];
-
-          rawItems.forEach(item => {
-            if (!item || typeof item !== 'object') return;
-            const title = (item.title || item.text || item.summary || '').trim();
-            if (!title) return;
-            let fullText = title;
-            if (item.notes && typeof item.notes === 'string' && item.notes.trim()) {
-              fullText += ` (${item.notes.trim()})`;
-            }
-            if (item.due && typeof item.due === 'string') {
-              const datePart = item.due.substring(0, 10);
-              if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
-                fullText += ` #deadline:${datePart}`;
-              }
-            }
-            if (item.status === 'completed' || item.done === true) {
-              completedTasks.push(fullText);
-            } else {
-              uncompletedTasks.push(fullText);
-            }
-          });
-
-          lists.push({
-            id: lst.id || `list_${idx}`,
-            title: listTitle,
-            totalCount: rawItems.length,
-            uncompletedCount: uncompletedTasks.length,
-            completedCount: completedTasks.length,
-            uncompletedTasks: uncompletedTasks,
-            allTasks: uncompletedTasks.concat(completedTasks),
-            // 預設選取有待辦且非超龐大重複循環清單 (大於 500 件如 Daily Quest 預設不勾，保護流暢度)
-            selected: uncompletedTasks.length > 0 && uncompletedTasks.length <= 500
-          });
-        });
-        return lists;
+      let rawLists = [];
+      if (Array.isArray(data)) {
+        rawLists = [{ id: 'list_root', title: '匯入清單', items: data }];
+      } else if (data.kind === 'tasks#taskLists' || Array.isArray(data.items)) {
+        if (Array.isArray(data.items) && data.items.length > 0 && !data.items[0].items && (data.items[0].title || data.items[0].status)) {
+          rawLists = [{ id: data.id || 'list_root', title: data.title || '主要清單', items: data.items }];
+        } else {
+          rawLists = Array.isArray(data.items) ? data.items : [];
+        }
+      } else {
+        return null;
       }
-      return null;
+
+      const lists = [];
+      rawLists.forEach((lst, idx) => {
+        if (!lst || typeof lst !== 'object') return;
+        const listTitle = lst.title || `清單 ${idx + 1}`;
+        const rawItems = Array.isArray(lst.items) ? lst.items : [];
+        const uncompletedTasks = [];
+        const completedTasks = [];
+
+        rawItems.forEach((item, itemIdx) => {
+          if (!item || typeof item !== 'object') return;
+          const title = (item.title || item.text || item.summary || '').trim();
+          if (!title) return;
+          const isDone = (item.status === 'completed' || item.done === true);
+          let deadline = null;
+          if (item.due && typeof item.due === 'string') {
+            const datePart = item.due.substring(0, 10);
+            if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+              deadline = datePart;
+            }
+          }
+          const noteText = (item.notes && typeof item.notes === 'string') ? item.notes.trim() : '';
+          if (!deadline && noteText) {
+            const m = noteText.match(/#deadline:(\d{4}-\d{2}-\d{2})/i) || noteText.match(/#(\d{4}-\d{2}-\d{2})/);
+            if (m) deadline = m[1];
+          }
+
+          let doneAt = null;
+          if (isDone) {
+            if (item.completed) doneAt = new Date(item.completed).getTime();
+            else if (item.doneAt) doneAt = Number(item.doneAt);
+            else doneAt = Date.now();
+          }
+
+          const taskObj = {
+            id: item.id ? `gt_${item.id}` : `gt_${idx}_${itemIdx}`,
+            rawId: item.id || null,
+            text: title,
+            notes: noteText,
+            done: isDone,
+            doneAt: doneAt,
+            deadline: deadline,
+            listTitle: listTitle,
+            updatedAt: item.updated ? new Date(item.updated).getTime() : Date.now(),
+            starred: !!item.starred
+          };
+
+          if (isDone) {
+            completedTasks.push(taskObj);
+          } else {
+            uncompletedTasks.push(taskObj);
+          }
+        });
+
+        lists.push({
+          id: lst.id || `list_${idx}`,
+          title: listTitle,
+          totalCount: rawItems.length,
+          uncompletedCount: uncompletedTasks.length,
+          completedCount: completedTasks.length,
+          uncompletedTasks: uncompletedTasks,
+          completedTasks: completedTasks,
+          allTasks: uncompletedTasks.concat(completedTasks),
+          selected: uncompletedTasks.length > 0 && uncompletedTasks.length <= 500
+        });
+      });
+      return lists;
     }
 
     function renderGoogleTasksPreview() {
@@ -3957,7 +4129,9 @@
         badge.style.fontFamily = 'var(--font-mono)';
         badge.style.fontSize = '0.74rem';
         badge.style.color = lst.uncompletedCount > 0 ? 'var(--accent-primary)' : 'var(--meta-text)';
-        badge.textContent = `${count} 件${onlyUncompleted ? '待辦' : '任務'}`;
+        badge.textContent = onlyUncompleted
+          ? `${lst.uncompletedCount} 件待辦`
+          : `${lst.uncompletedCount} 待辦 / ${lst.completedCount} 完成`;
 
         const togglePreviewBtn = document.createElement('button');
         togglePreviewBtn.type = 'button';
@@ -3981,8 +4155,11 @@
         if (displayTasks.length === 0) {
           previewBox.textContent = '此清單無符合條件的任務。';
         } else {
-          previewBox.textContent = displayTasks.slice(0, 30).map((t, i) => `${i + 1}. ${t}`).join('\n') +
-            (displayTasks.length > 30 ? `\n... 等共 ${displayTasks.length} 件` : '');
+          previewBox.textContent = displayTasks.slice(0, 30).map((t, i) => {
+            const statusTag = t.done ? '[✓ 已完成] ' : '';
+            const dlTag = t.deadline ? ` #${t.deadline}` : '';
+            return `${i + 1}. ${statusTag}${t.text}${dlTag}`;
+          }).join('\n') + (displayTasks.length > 30 ? `\n... 等共 ${displayTasks.length} 件` : '');
         }
         card.appendChild(previewBox);
 
@@ -4114,6 +4291,81 @@
       if (modal) modal.style.display = 'none';
     });
 
+    // 智慧 Google Tasks 結構化匯入（保留完成狀態、所屬工作桌與屬性）
+    function importStructuredGoogleTasks(tasksToImport) {
+      if (!tasksToImport || tasksToImport.length === 0) return { added: 0, updated: 0 };
+
+      let updatedCount = 0;
+      let addedCount = 0;
+
+      tasksToImport.forEach(task => {
+        // 判定目標分類（若清單名稱對應工作桌，直接放置；否則放入收集箱）
+        let targetBucket = 'inbox';
+        const lt = (task.listTitle || '').toLowerCase();
+        if (lt.includes('今日') || lt.includes('今天') || lt.includes('today')) {
+          targetBucket = 'today';
+        } else if (lt.includes('這週') || lt.includes('本週') || lt.includes('week')) {
+          targetBucket = 'week';
+        } else if (lt.includes('保溫') || lt.includes('keep')) {
+          targetBucket = 'keep';
+        } else if (lt.includes('放生') || lt.includes('release')) {
+          targetBucket = 'release';
+        }
+
+        // 檢查是否已存在相同的任務（以 ID 或文字匹配）
+        let existing = null;
+        if (task.id) existing = items.find(it => it.id === task.id);
+        if (!existing && task.rawId) {
+          existing = items.find(it => it.rawId === task.rawId || it.id === `gt_${task.rawId}`);
+        }
+        if (!existing) {
+          // 同標題且非子任務比對防重複
+          existing = items.find(it => it.text && it.text.trim() === task.text.trim() && !it.parentId);
+        }
+
+        if (existing) {
+          // 更新現有項目的完成狀態與各項屬性
+          existing.done = !!task.done;
+          existing.doneAt = task.done ? (task.doneAt || Date.now()) : null;
+          if (task.deadline) existing.deadline = task.deadline;
+          if (task.notes && !existing.notes) existing.notes = task.notes;
+          existing.quadrant = getComputedQuadrant(existing);
+          existing.updatedAt = Math.max(existing.updatedAt || 0, task.updatedAt || Date.now());
+          updatedCount++;
+        } else {
+          // 新建項目
+          const keywordType = guessTypeByKeywords(task.text);
+          const itemSize = guessSize(task.text, keywordType);
+          const newItem = {
+            id: task.id || generateId(),
+            rawId: task.rawId || null,
+            text: task.text,
+            notes: task.notes || '',
+            size: itemSize,
+            bucket: targetBucket,
+            isNow: false,
+            done: !!task.done,
+            doneAt: task.done ? (task.doneAt || Date.now()) : null,
+            createdAt: task.updatedAt || Date.now(),
+            updatedAt: task.updatedAt || Date.now(),
+            typeId: keywordType,
+            typeSource: keywordType ? 'rule' : 'ai',
+            parentId: null,
+            aiGenerated: false,
+            deadline: task.deadline || null,
+            manualQuadrant: null
+          };
+          newItem.quadrant = getComputedQuadrant(newItem);
+          items.push(newItem);
+          addedCount++;
+        }
+      });
+
+      saveItems();
+      renderAll();
+      return { added: addedCount, updated: updatedCount };
+    }
+
     safeOn('btnDoImport', 'click', () => {
       if (activeImportTab === 'file' && currentParsedGoogleLists) {
         const onlyUncompleted = importFileOnlyUncompleted ? importFileOnlyUncompleted.checked : true;
@@ -4126,8 +4378,8 @@
         });
 
         if (selectedTasks.length > 0) {
-          addItemsToInbox(selectedTasks);
-          showToast(`已成功匯入 ${selectedTasks.length} 件任務至收集箱`);
+          const res = importStructuredGoogleTasks(selectedTasks);
+          showToast(`已成功匯入 ${res.added} 件新任務，同步更新 ${res.updated} 件狀態！`);
           const modal = document.getElementById('modalImport');
           if (modal) modal.style.display = 'none';
         } else {
@@ -4269,6 +4521,7 @@
         settings.pinLock = false;
       }
 
+      settings.updatedAt = Date.now();
       saveSettings();
       applyTheme(settings.theme);
       checkLockOnStartup();
