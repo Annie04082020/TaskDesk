@@ -166,6 +166,33 @@
       </div>
     </section>
 
+    <!-- Focus Lock Banner (專注鎖定橫幅：當啟動「現在做這個」時) -->
+    <div class="focus-lock-banner" id="focusLockBanner" style="display: none;">
+      <div class="focus-lock-top-row">
+        <div class="focus-lock-badge-wrap">
+          <span class="focus-pulse-dot"></span>
+          <span class="focus-lock-badge">● 現在專注中</span>
+          <span class="focus-guard-status" id="focusGuardStatusBadge">🛡️ 專注鎖定中</span>
+        </div>
+        <div class="focus-lock-timer-wrap">
+          <span class="focus-timer-label">倒數計時</span>
+          <span class="focus-timer-display" id="focusTimerDisplay">25:00</span>
+        </div>
+      </div>
+      <div class="focus-lock-content-row">
+        <div class="focus-task-title" id="focusTaskTitle">任務標題</div>
+        <div class="focus-task-meta" id="focusTaskMeta">試水溫 · Q2 核心深耕</div>
+      </div>
+      <div class="focus-lock-actions">
+        <button type="button" class="btn-primary btn-focus-complete" id="btnFocusComplete">
+          <span>✓ 完成此任務</span>
+        </button>
+        <button type="button" class="btn-secondary btn-focus-unlock" id="btnFocusUnlock">
+          <span>暫停專注 / 解除鎖定</span>
+        </button>
+      </div>
+    </div>
+
     <!-- Main Content List -->
     <main class="main-sections">
       <!-- Workbench Tabs: 今日 / 這週 -->
@@ -576,6 +603,40 @@
               <input type="checkbox" id="settingIncludeKeep">
               <span class="slider"></span>
             </label>
+          </div>
+        </div>
+
+        <div class="form-group" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+          <div class="form-toggle-row">
+            <div>
+              <div class="form-label">啟用「現在」站內防分心鎖定</div>
+              <div class="form-sublabel">開啟後，設為「現在」的任務將觸發沉浸鎖定，禁止操作其他抽屜與任務。</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="settingFocusLock" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+          <div class="form-toggle-row">
+            <div>
+              <div class="form-label">🛡️ 啟用 Kairos 本機專注守護連動 (Windows)</div>
+              <div class="form-sublabel">當啟動「現在」時，自動通知本機運行的 Kairos 啟動視窗攔截與防分心鎖定。</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="settingKairosEnabled">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div id="kairosConfigGroup" style="display: none; margin-top: 8px;">
+            <label class="form-label" for="settingKairosUrl">Kairos 本機 API 位址</label>
+            <div style="display: flex; gap: 6px; margin-top: 4px;">
+              <input type="text" id="settingKairosUrl" class="form-input" style="flex: 1;" placeholder="http://127.0.0.1:5050" value="http://127.0.0.1:5050">
+              <button type="button" id="btnTestKairosConn" class="btn-secondary" style="padding: 6px 10px; font-size: 0.75rem;">測試連線</button>
+            </div>
+            <div id="kairosConnStatusText" style="font-size: 0.72rem; color: var(--meta-text); margin-top: 4px;"></div>
           </div>
         </div>
 

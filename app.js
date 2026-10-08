@@ -106,10 +106,19 @@
     safeTop: 56,
     includeKeepInConsult: false,
     pinLock: false,
-    pinHash: ''
+    pinHash: '',
+    focusLockEnabled: true,
+    kairosEnabled: false,
+    kairosUrl: 'http://127.0.0.1:5050'
   };
 
   let activeWorkbench = 'today'; // 'today' | 'week'
+
+  // 專注鎖定與 Kairos 本機連動狀態
+  let focusTimerInterval = null;
+  let activeFocusTaskId = null;
+  let focusRemainingSeconds = 25 * 60;
+  let kairosOnline = false;
 
   let syncConfig = {
     githubToken: '',
@@ -164,6 +173,15 @@
         }
         if (typeof parsed.weekMediumLargeLimit !== 'number') {
           settings.weekMediumLargeLimit = typeof parsed.weekLimit === 'number' ? parsed.weekLimit : 3;
+        }
+        if (parsed.focusLockEnabled !== undefined) {
+          settings.focusLockEnabled = parsed.focusLockEnabled;
+        }
+        if (parsed.kairosEnabled !== undefined) {
+          settings.kairosEnabled = parsed.kairosEnabled;
+        }
+        if (parsed.kairosUrl) {
+          settings.kairosUrl = parsed.kairosUrl;
         }
       }
     } catch (e) {
@@ -974,8 +992,188 @@
     return matchedEntries;
   }
 
+  // --- 專注鎖定與 Kairos 本機專注守護系統 ---
+  function getTaskFocusDurationMinutes(item) {
+    if (!item) return 25;
+    if (typeof item.estimateMinutes === 'number' && item.estimateMinutes > 0) {
+      return item.estimateMinutes;
+    }
+    const size = item.size || guessSize(item.text, item.typeId);
+    if (size === 'micro') return 10;
+    if (size === 'small') return 25;
+    if (size === 'medium') return 50;
+    if (size === 'large') return 90;
+    return 25;
+  }
+
+  async function notifyKairosFocusStart(item, minutes) {
+    if (!settings.kairosEnabled || !settings.kairosUrl) return;
+    const targetUrl = settings.kairosUrl.replace(/\/$/, '');
+    try {
+      const resp = await fetch(`${targetUrl}/api/pomodoro/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'focus',
+          duration_minutes: minutes || 25,
+          task_name: item ? item.text : 'TaskDesk Focus'
+        })
+      });
+      if (resp.ok) {
+        kairosOnline = true;
+      } else {
+        kairosOnline = false;
+      }
+    } catch (err) {
+      console.warn('無法連線至 Kairos (可能未啟動或非本地環境):', err);
+      kairosOnline = false;
+    }
+    updateFocusGuardStatusBadge();
+  }
+
+  async function notifyKairosFocusStop() {
+    if (!settings.kairosEnabled || !settings.kairosUrl) return;
+    const targetUrl = settings.kairosUrl.replace(/\/$/, '');
+    try {
+      await fetch(`${targetUrl}/api/pomodoro/reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (err) {
+      console.warn('無法通知 Kairos 重設:', err);
+    }
+  }
+
+  async function testKairosConnection(url) {
+    const targetUrl = (url || settings.kairosUrl || 'http://127.0.0.1:5050').replace(/\/$/, '');
+    try {
+      const res = await fetch(`${targetUrl}/api/status`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(3000)
+      });
+      if (res.ok) {
+        kairosOnline = true;
+        return { success: true, message: '連線成功！Kairos 本機專注守護服務正常運行中。' };
+      }
+      return { success: false, message: `連線失敗 (HTTP ${res.status})，請確認 Kairos 狀態。` };
+    } catch (err) {
+      kairosOnline = false;
+      return { success: false, message: '無法連線至 Kairos。請確認本機已執行 Kairos (python api.py)。' };
+    }
+  }
+
+  function formatTimerSeconds(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  function updateFocusTimerDisplay() {
+    const el = document.getElementById('focusTimerDisplay');
+    if (el) {
+      el.textContent = formatTimerSeconds(focusRemainingSeconds);
+    }
+  }
+
+  function updateFocusGuardStatusBadge() {
+    const badge = document.getElementById('focusGuardStatusBadge');
+    if (!badge) return;
+    if (settings.kairosEnabled) {
+      if (kairosOnline) {
+        badge.textContent = '🛡️ Kairos 本機守護中';
+        badge.style.color = '#38bdf8';
+        badge.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+      } else {
+        badge.textContent = '⚠️ Kairos 連線中/離線';
+        badge.style.color = '#f59e0b';
+        badge.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+      }
+    } else {
+      badge.textContent = '🔒 站內專注鎖定中';
+      badge.style.color = 'var(--accent-primary)';
+      badge.style.borderColor = 'rgba(14, 165, 233, 0.3)';
+    }
+  }
+
+  function startFocusTimer(item) {
+    if (focusTimerInterval) {
+      clearInterval(focusTimerInterval);
+      focusTimerInterval = null;
+    }
+    activeFocusTaskId = item.id;
+    const durMinutes = getTaskFocusDurationMinutes(item);
+    focusRemainingSeconds = durMinutes * 60;
+    updateFocusTimerDisplay();
+
+    if (settings.kairosEnabled) {
+      notifyKairosFocusStart(item, durMinutes);
+    }
+
+    focusTimerInterval = setInterval(() => {
+      if (focusRemainingSeconds > 0) {
+        focusRemainingSeconds--;
+        updateFocusTimerDisplay();
+        if (focusRemainingSeconds === 0) {
+          showToast(`「${item.text}」專注時間已達！做得好，可以完成任務或稍作休息。`);
+        }
+      }
+    }, 1000);
+  }
+
+  function stopFocusTimer() {
+    if (focusTimerInterval) {
+      clearInterval(focusTimerInterval);
+      focusTimerInterval = null;
+    }
+    activeFocusTaskId = null;
+    if (settings.kairosEnabled) {
+      notifyKairosFocusStop();
+    }
+  }
+
+  function renderFocusLockBanner() {
+    const banner = document.getElementById('focusLockBanner');
+    const dock = document.getElementById('deskDrawersDock');
+    if (!banner) return;
+
+    const nowItem = items.find(it => it.isNow && !it.done);
+
+    if (nowItem && settings.focusLockEnabled) {
+      banner.style.display = 'flex';
+      document.body.classList.add('body-focus-active');
+      if (dock) dock.classList.add('locked-by-focus');
+
+      const titleEl = document.getElementById('focusTaskTitle');
+      const metaEl = document.getElementById('focusTaskMeta');
+      if (titleEl) titleEl.textContent = nowItem.text;
+
+      const typeObj = getTypeById(nowItem.typeId);
+      const quadInfo = getQuadrantInfo(nowItem);
+      const durMinutes = getTaskFocusDurationMinutes(nowItem);
+      const sizeLabels = { micro: '試水溫 5-10m', small: '小 15-30m', medium: '中 1-2h', large: '大 2h+' };
+      const sizeText = sizeLabels[nowItem.size || 'micro'] || '試水溫';
+      if (metaEl) {
+        metaEl.textContent = `${sizeText} (${durMinutes}m) · ${quadInfo ? quadInfo.badge : '核心深耕'} · ${typeObj ? typeObj.name : '未分類'}`;
+      }
+
+      if (activeFocusTaskId !== nowItem.id) {
+        startFocusTimer(nowItem);
+      }
+      updateFocusGuardStatusBadge();
+    } else {
+      banner.style.display = 'none';
+      document.body.classList.remove('body-focus-active');
+      if (dock) dock.classList.remove('locked-by-focus');
+      if (activeFocusTaskId) {
+        stopFocusTimer();
+      }
+    }
+  }
+
   // --- 畫面渲染 ---
   function renderAll() {
+    renderFocusLockBanner();
     renderWeekCounter();
     renderWorkbenchCounters();
     renderToday();
@@ -997,7 +1195,9 @@
   // 渲染卡片共用函式
   function createCardElement(item, bucketContext) {
     const card = document.createElement('div');
-    card.className = `task-card ${item.isNow ? 'is-now' : ''}`;
+    const hasActiveFocus = settings.focusLockEnabled && items.some(it => it.isNow && !it.done);
+    const isMuted = hasActiveFocus && !item.isNow;
+    card.className = `task-card ${item.isNow ? 'is-now' : ''} ${isMuted ? 'is-muted-by-focus' : ''}`;
     card.dataset.cardId = item.id;
 
     // 取得類型與資訊
@@ -1449,6 +1649,10 @@
   let currentDrawer = 'inbox'; // 'inbox' | 'keep' | 'release' | 'history'
 
   function openDrawer(drawerName) {
+    if (document.body.classList.contains('body-focus-active')) {
+      showToast('專注進行中：請先完成當前任務或解除鎖定再開啟抽屜');
+      return;
+    }
     currentDrawer = drawerName || 'inbox';
     const overlay = document.getElementById('drawerOverlay');
     const panel = document.getElementById('drawerPanel');
@@ -4419,6 +4623,22 @@
 
       const settingIncludeKeepEl = document.getElementById('settingIncludeKeep');
       if (settingIncludeKeepEl) settingIncludeKeepEl.checked = settings.includeKeepInConsult;
+
+      const settingFocusLockEl = document.getElementById('settingFocusLock');
+      if (settingFocusLockEl) settingFocusLockEl.checked = settings.focusLockEnabled !== false;
+
+      const settingKairosEl = document.getElementById('settingKairosEnabled');
+      if (settingKairosEl) settingKairosEl.checked = !!settings.kairosEnabled;
+
+      const kairosConfigGroup = document.getElementById('kairosConfigGroup');
+      if (kairosConfigGroup) kairosConfigGroup.style.display = settings.kairosEnabled ? 'block' : 'none';
+
+      const settingKairosUrlEl = document.getElementById('settingKairosUrl');
+      if (settingKairosUrlEl) settingKairosUrlEl.value = settings.kairosUrl || 'http://127.0.0.1:5050';
+
+      const kairosConnStatus = document.getElementById('kairosConnStatusText');
+      if (kairosConnStatus) kairosConnStatus.textContent = '';
+
       const settingPinLockEl = document.getElementById('settingPinLock');
       if (settingPinLockEl) settingPinLockEl.checked = !!settings.pinLock;
       const pinGroup = document.getElementById('pinInputGroup');
@@ -4445,6 +4665,46 @@
     safeOn('settingPinLock', 'change', (e) => {
       const pinGroup = document.getElementById('pinInputGroup');
       if (pinGroup) pinGroup.style.display = e.target.checked ? 'block' : 'none';
+    });
+
+    safeOn('settingKairosEnabled', 'change', (e) => {
+      const kairosConfigGroup = document.getElementById('kairosConfigGroup');
+      if (kairosConfigGroup) kairosConfigGroup.style.display = e.target.checked ? 'block' : 'none';
+    });
+
+    safeOn('btnTestKairosConn', 'click', async () => {
+      const urlInput = document.getElementById('settingKairosUrl');
+      const statusText = document.getElementById('kairosConnStatusText');
+      const testUrl = urlInput ? urlInput.value.trim() : '';
+      if (statusText) {
+        statusText.textContent = '連線測試中...';
+        statusText.style.color = 'var(--meta-text)';
+      }
+      const res = await testKairosConnection(testUrl);
+      if (statusText) {
+        statusText.textContent = res.message;
+        statusText.style.color = res.success ? '#10b981' : '#f87171';
+      }
+    });
+
+    safeOn('btnFocusComplete', 'click', () => {
+      const nowItem = items.find(it => it.isNow && !it.done);
+      if (nowItem) {
+        toggleItemDone(nowItem.id, true);
+        showToast(`已完成「${nowItem.text}」！`);
+      }
+    });
+
+    safeOn('btnFocusUnlock', 'click', () => {
+      const nowItem = items.find(it => it.isNow && !it.done);
+      if (nowItem) {
+        nowItem.isNow = false;
+        nowItem.updatedAt = Date.now();
+        stopFocusTimer();
+        saveItems();
+        renderAll();
+        showToast('已暫停專注，解除鎖定。');
+      }
     });
 
     safeOn('btnTogglePinShow', 'click', () => {
@@ -4501,6 +4761,15 @@
 
       const settingIncludeKeepEl = document.getElementById('settingIncludeKeep');
       if (settingIncludeKeepEl) settings.includeKeepInConsult = settingIncludeKeepEl.checked;
+
+      const settingFocusLockEl = document.getElementById('settingFocusLock');
+      if (settingFocusLockEl) settings.focusLockEnabled = settingFocusLockEl.checked;
+
+      const settingKairosEl = document.getElementById('settingKairosEnabled');
+      if (settingKairosEl) settings.kairosEnabled = settingKairosEl.checked;
+
+      const settingKairosUrlEl = document.getElementById('settingKairosUrl');
+      if (settingKairosUrlEl) settings.kairosUrl = settingKairosUrlEl.value.trim() || 'http://127.0.0.1:5050';
 
       const settingPinLockEl = document.getElementById('settingPinLock');
       const isPinLocked = settingPinLockEl ? settingPinLockEl.checked : false;

@@ -3159,4 +3159,213 @@ input:checked + .slider:before {
   color: #64748b;
 }
 
+/* =========================================================
+   Focus Lock Mode & Kairos Integration (專注鎖定與守護樣式)
+   ========================================================= */
+
+.focus-lock-banner {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(14, 165, 233, 0.08) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  box-shadow: 0 8px 32px rgba(16, 185, 129, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  position: relative;
+  overflow: hidden;
+  animation: focusBannerFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.focus-lock-banner::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--accent-green);
+  box-shadow: 0 0 12px var(--accent-green);
+}
+
+@keyframes focusBannerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.focus-lock-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.focus-lock-badge-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.focus-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: 0 0 10px var(--accent-green);
+  animation: pulseNeon 1.6s infinite ease-in-out;
+}
+
+@keyframes pulseNeon {
+  0%, 100% {
+    transform: scale(0.9);
+    opacity: 0.7;
+    box-shadow: 0 0 4px var(--accent-green);
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 1;
+    box-shadow: 0 0 14px var(--accent-green);
+  }
+}
+
+.focus-lock-badge {
+  font-family: var(--font-heading);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent-green);
+  text-transform: uppercase;
+}
+
+.focus-guard-status {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: rgba(14, 165, 233, 0.12);
+  color: var(--accent-primary);
+  border: 1px solid rgba(14, 165, 233, 0.3);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.focus-lock-timer-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+}
+
+.focus-timer-label {
+  font-size: 0.68rem;
+  color: var(--meta-text);
+}
+
+.focus-timer-display {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-color);
+}
+
+.focus-lock-content-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.focus-task-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-color);
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+}
+
+.focus-task-meta {
+  font-size: 0.75rem;
+  color: var(--meta-text);
+}
+
+.focus-lock-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.btn-focus-complete {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border: none;
+  color: #ffffff;
+  font-weight: 600;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);
+  cursor: pointer;
+}
+
+.btn-focus-complete:hover {
+  background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+}
+
+.btn-focus-unlock {
+  font-size: 0.8rem;
+  padding: 7px 14px;
+  border-color: var(--border-color);
+  color: var(--meta-text);
+  cursor: pointer;
+}
+
+.btn-focus-unlock:hover {
+  color: var(--text-color);
+  border-color: var(--text-color);
+}
+
+/* 專注中對其他卡片與抽屜的鎖定 (Muted by Focus) */
+.body-focus-active .card.is-muted-by-focus,
+.body-focus-active .task-card.is-muted-by-focus {
+  opacity: 0.28;
+  filter: grayscale(0.65);
+  pointer-events: none;
+  cursor: not-allowed;
+  transition: all 0.3s ease;
+}
+
+.body-focus-active .desk-drawers-dock.locked-by-focus {
+  opacity: 0.45;
+  filter: grayscale(0.5);
+  pointer-events: none;
+  cursor: not-allowed;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+/* 淺色模式適配 */
+[data-theme="light"] .focus-lock-banner {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(14, 165, 233, 0.08) 100%);
+  border-color: rgba(16, 185, 129, 0.4);
+  box-shadow: 0 8px 30px rgba(16, 185, 129, 0.1);
+}
+
+[data-theme="light"] .focus-lock-timer-wrap {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
 
