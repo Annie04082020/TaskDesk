@@ -1126,16 +1126,16 @@
     if (!badge) return;
     if (settings.kairosEnabled) {
       if (kairosOnline) {
-        badge.textContent = '🛡️ Kairos 本機守護中';
+        badge.textContent = 'Kairos 本機守護中';
         badge.style.color = '#38bdf8';
         badge.style.borderColor = 'rgba(56, 189, 248, 0.4)';
       } else {
-        badge.textContent = '⚠️ Kairos 連線中/離線';
+        badge.textContent = 'Kairos 離線/未連線';
         badge.style.color = '#f59e0b';
         badge.style.borderColor = 'rgba(245, 158, 11, 0.4)';
       }
     } else {
-      badge.textContent = '🔒 站內專注鎖定中';
+      badge.textContent = '站內專注鎖定中';
       badge.style.color = 'var(--accent-primary)';
       badge.style.borderColor = 'rgba(14, 165, 233, 0.3)';
     }
@@ -1463,8 +1463,522 @@
     renderAll();
     input.value = '';
     closeBrainDump();
-    showToast('雜念已存入收集箱 ✓');
+    showToast('雜念已存入收集箱');
   }
+
+  // --- 專注與工時分析儀表板 (Focus Analytics Dashboard) ---
+  let analyticsState = {
+    timeRange: 'today', // 'today' | 'week' | 'month' | 'all'
+    activeTab: 'overview' // 'overview' | 'intent' | 'friction' | 'logs'
+  };
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function openAnalyticsModal() {
+    const modal = document.getElementById('modalAnalytics');
+    if (modal) modal.style.display = 'flex';
+    renderAnalyticsDashboard();
+  }
+
+  function closeAnalyticsModal() {
+    const modal = document.getElementById('modalAnalytics');
+    if (modal) modal.style.display = 'none';
+  }
+
+  function setAnalyticsTimeRange(range) {
+    analyticsState.timeRange = range;
+    const filterBtns = document.querySelectorAll('#analyticsTimeFilter .analytics-filter-btn');
+    filterBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.range === range);
+    });
+    renderAnalyticsDashboard();
+  }
+
+  function switchAnalyticsTab(tabId) {
+    analyticsState.activeTab = tabId;
+    const tabBtns = document.querySelectorAll('.analytics-tabs-bar .analytics-tab-btn');
+    tabBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === tabId);
+    });
+    const panels = {
+      overview: document.getElementById('panelAnalyticsOverview'),
+      intent: document.getElementById('panelAnalyticsIntent'),
+      friction: document.getElementById('panelAnalyticsFriction'),
+      logs: document.getElementById('panelAnalyticsLogs')
+    };
+    Object.keys(panels).forEach(key => {
+      if (panels[key]) panels[key].style.display = key === tabId ? 'block' : 'none';
+    });
+  }
+
+  function getFilteredFocusSessions() {
+    const all = getFocusSessions();
+    const now = new Date();
+    const range = analyticsState.timeRange;
+
+    if (range === 'all') return all;
+
+    let startMs = 0;
+    if (range === 'today') {
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      startMs = todayStart.getTime();
+    } else if (range === 'week') {
+      const d = new Date(now);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday
+      const monday = new Date(d.setDate(diff));
+      monday.setHours(0, 0, 0, 0);
+      startMs = monday.getTime();
+    } else if (range === 'month') {
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      startMs = monthStart.getTime();
+    }
+
+    return all.filter(s => (s.startedAt || s.endedAt) >= startMs);
+  }
+
+  function formatDurationZh(totalSec) {
+    const m = Math.floor((totalSec || 0) / 60);
+    const h = Math.floor(m / 60);
+    const remainM = m % 60;
+    if (h > 0) {
+      return `${h}h ${remainM}m`;
+    }
+    return `${m}m`;
+  }
+
+  function renderAnalyticsDashboard() {
+    const sessions = getFilteredFocusSessions();
+    renderAnalyticsOverview(sessions);
+    renderAnalyticsIntent(sessions);
+    renderAnalyticsFriction(sessions);
+    renderAnalyticsLogs(sessions);
+  }
+
+  function renderAnalyticsOverview(sessions) {
+    const totalSec = sessions.reduce((acc, s) => acc + (s.elapsedSeconds || 0), 0);
+    const count = sessions.length;
+    const avgSec = count > 0 ? Math.round(totalSec / count) : 0;
+    const completedCount = sessions.filter(s => s.status === 'COMPLETED').length;
+    const adjustedCount = count - completedCount;
+
+    const elTotal = document.getElementById('kpiTotalTime');
+    const elCount = document.getElementById('kpiSessionCount');
+    const elAvg = document.getElementById('kpiAvgDuration');
+    const elRatio = document.getElementById('kpiCompletionRatio');
+
+    if (elTotal) elTotal.textContent = formatDurationZh(totalSec);
+    if (elCount) elCount.textContent = `${count} 次`;
+    if (elAvg) elAvg.textContent = formatDurationZh(avgSec);
+    if (elRatio) elRatio.textContent = `${completedCount} / ${adjustedCount}`;
+
+    // 每日趨勢長條圖
+    const chartContainer = document.getElementById('analyticsTrendChartContainer');
+    if (chartContainer) {
+      chartContainer.innerHTML = '';
+      if (sessions.length === 0) {
+        chartContainer.innerHTML = '<div class="analytics-empty-hint" style="width:100%;">此區間內尚無專注資料</div>';
+      } else {
+        const dailyMap = {};
+        sessions.forEach(s => {
+          const d = new Date(s.startedAt || s.endedAt);
+          const key = `${d.getMonth() + 1}/${d.getDate()}`;
+          dailyMap[key] = (dailyMap[key] || 0) + (s.elapsedSeconds || 0);
+        });
+
+        const dayKeys = Object.keys(dailyMap);
+        const maxDailySec = Math.max(...Object.values(dailyMap), 1);
+
+        dayKeys.forEach(k => {
+          const sec = dailyMap[k];
+          const pct = Math.min(100, Math.max(10, Math.round((sec / maxDailySec) * 100)));
+          const col = document.createElement('div');
+          col.className = 'analytics-bar-col';
+          col.title = `${k}: ${formatDurationZh(sec)}`;
+          col.innerHTML = `
+            <div class="analytics-bar-track">
+              <div class="analytics-bar-fill" style="height: ${pct}%;"></div>
+            </div>
+            <span class="analytics-bar-date">${k}</span>
+          `;
+          chartContainer.appendChild(col);
+        });
+      }
+    }
+
+    // 開工時段分佈
+    const todList = document.getElementById('analyticsTodList');
+    if (todList) {
+      todList.innerHTML = '';
+      const buckets = {
+        '早晨 (06:00 - 12:00)': 0,
+        '下午 (12:00 - 18:00)': 0,
+        '晚間 (18:00 - 24:00)': 0,
+        '深夜 (00:00 - 06:00)': 0
+      };
+
+      sessions.forEach(s => {
+        const hour = new Date(s.startedAt || s.endedAt).getHours();
+        if (hour >= 6 && hour < 12) buckets['早晨 (06:00 - 12:00)'] += (s.elapsedSeconds || 0);
+        else if (hour >= 12 && hour < 18) buckets['下午 (12:00 - 18:00)'] += (s.elapsedSeconds || 0);
+        else if (hour >= 18 && hour < 24) buckets['晚間 (18:00 - 24:00)'] += (s.elapsedSeconds || 0);
+        else buckets['深夜 (00:00 - 06:00)'] += (s.elapsedSeconds || 0);
+      });
+
+      const maxTodSec = Math.max(...Object.values(buckets), 1);
+      Object.keys(buckets).forEach(k => {
+        const sec = buckets[k];
+        const pct = Math.round((sec / maxTodSec) * 100);
+        const row = document.createElement('div');
+        row.className = 'analytics-bar-row';
+        row.innerHTML = `
+          <div class="analytics-bar-row-info">
+            <span class="analytics-bar-row-label">${k}</span>
+            <span class="analytics-bar-row-val">${formatDurationZh(sec)}</span>
+          </div>
+          <div class="analytics-progress-track">
+            <div class="analytics-progress-fill" style="width: ${pct}%;"></div>
+          </div>
+        `;
+        todList.appendChild(row);
+      });
+    }
+  }
+
+  function renderAnalyticsIntent(sessions) {
+    // 四象限
+    const quadBars = document.getElementById('analyticsQuadrantBars');
+    if (quadBars) {
+      quadBars.innerHTML = '';
+      const quadMap = {
+        q2: { label: 'Q2 核心深耕 (重要 / 不緊急)', sec: 0, color: 'var(--accent-primary)' },
+        q1: { label: 'Q1 緊急救火 (重要 / 緊急)', sec: 0, color: '#f87171' },
+        q3: { label: 'Q3 突發瑣事 (不重要 / 緊急)', sec: 0, color: '#fbbf24' },
+        q4: { label: 'Q4 閒置放鬆 (不重要 / 不緊急)', sec: 0, color: '#94a3b8' }
+      };
+
+      sessions.forEach(s => {
+        const item = items.find(it => it.id === s.taskId);
+        const qKey = (item && item.quadrant) ? item.quadrant.toLowerCase() : 'q2';
+        if (quadMap[qKey]) {
+          quadMap[qKey].sec += (s.elapsedSeconds || 0);
+        } else {
+          quadMap.q2.sec += (s.elapsedSeconds || 0);
+        }
+      });
+
+      const maxQuadSec = Math.max(...Object.values(quadMap).map(q => q.sec), 1);
+      Object.keys(quadMap).forEach(key => {
+        const q = quadMap[key];
+        const pct = Math.round((q.sec / maxQuadSec) * 100);
+        const row = document.createElement('div');
+        row.className = 'analytics-bar-row';
+        row.innerHTML = `
+          <div class="analytics-bar-row-info">
+            <span class="analytics-bar-row-label" style="color: ${q.color};">${q.label}</span>
+            <span class="analytics-bar-row-val">${formatDurationZh(q.sec)}</span>
+          </div>
+          <div class="analytics-progress-track">
+            <div class="analytics-progress-fill" style="width: ${pct}%; background: ${q.color};"></div>
+          </div>
+        `;
+        quadBars.appendChild(row);
+      });
+    }
+
+    // 任務類型
+    const typeBars = document.getElementById('analyticsTypeBars');
+    if (typeBars) {
+      typeBars.innerHTML = '';
+      const typeMap = {};
+      (rules.taskTypes || []).forEach(t => {
+        typeMap[t.id] = { name: t.name, sec: 0 };
+      });
+      typeMap['other'] = { name: '其他 / 未分類', sec: 0 };
+
+      sessions.forEach(s => {
+        const item = items.find(it => it.id === s.taskId);
+        const typeId = item && item.typeId ? item.typeId : 'other';
+        if (typeMap[typeId]) {
+          typeMap[typeId].sec += (s.elapsedSeconds || 0);
+        } else {
+          typeMap['other'].sec += (s.elapsedSeconds || 0);
+        }
+      });
+
+      const maxTypeSec = Math.max(...Object.values(typeMap).map(t => t.sec), 1);
+      Object.keys(typeMap).forEach(k => {
+        const t = typeMap[k];
+        if (t.sec === 0 && k === 'other') return;
+        const pct = Math.round((t.sec / maxTypeSec) * 100);
+        const row = document.createElement('div');
+        row.className = 'analytics-bar-row';
+        row.innerHTML = `
+          <div class="analytics-bar-row-info">
+            <span class="analytics-bar-row-label">${t.name}</span>
+            <span class="analytics-bar-row-val">${formatDurationZh(t.sec)}</span>
+          </div>
+          <div class="analytics-progress-track">
+            <div class="analytics-progress-fill" style="width: ${pct}%;"></div>
+          </div>
+        `;
+        typeBars.appendChild(row);
+      });
+    }
+
+    // 任務尺寸
+    const sizeBars = document.getElementById('analyticsSizeBars');
+    if (sizeBars) {
+      sizeBars.innerHTML = '';
+      const sizeMap = {
+        micro: { name: '試水溫 (5-10m)', sec: 0, count: 0 },
+        small: { name: '小任務 (15-30m)', sec: 0, count: 0 },
+        medium: { name: '中任務 (1-2h)', sec: 0, count: 0 },
+        large: { name: '大專案 (2h+)', sec: 0, count: 0 }
+      };
+
+      sessions.forEach(s => {
+        const item = items.find(it => it.id === s.taskId);
+        const sz = item && item.size ? item.size : 'micro';
+        if (sizeMap[sz]) {
+          sizeMap[sz].sec += (s.elapsedSeconds || 0);
+          sizeMap[sz].count += 1;
+        }
+      });
+
+      const maxSizeSec = Math.max(...Object.values(sizeMap).map(s => s.sec), 1);
+      Object.keys(sizeMap).forEach(k => {
+        const sz = sizeMap[k];
+        const pct = Math.round((sz.sec / maxSizeSec) * 100);
+        const row = document.createElement('div');
+        row.className = 'analytics-bar-row';
+        row.innerHTML = `
+          <div class="analytics-bar-row-info">
+            <span class="analytics-bar-row-label">${sz.name} (${sz.count} 次)</span>
+            <span class="analytics-bar-row-val">${formatDurationZh(sz.sec)}</span>
+          </div>
+          <div class="analytics-progress-track">
+            <div class="analytics-progress-fill" style="width: ${pct}%;"></div>
+          </div>
+        `;
+        sizeBars.appendChild(row);
+      });
+    }
+  }
+
+  function renderAnalyticsFriction(sessions) {
+    const frictionBars = document.getElementById('analyticsFrictionBars');
+    const reasons = {
+      ABORTED_TOO_LARGE: { label: '任務過大需拆解', count: 0, color: '#38bdf8' },
+      ABORTED_POSTPONE: { label: '狀態不佳先擱著', count: 0, color: '#fbbf24' },
+      ABORTED_QUIT: { label: '純粹不想做了退場', count: 0, color: '#94a3b8' }
+    };
+
+    sessions.forEach(s => {
+      if (reasons[s.status]) {
+        reasons[s.status].count += 1;
+      }
+    });
+
+    const totalAborts = Object.values(reasons).reduce((acc, r) => acc + r.count, 0);
+
+    if (frictionBars) {
+      frictionBars.innerHTML = '';
+      if (totalAborts === 0) {
+        frictionBars.innerHTML = '<div class="analytics-empty-hint">目前無中斷記錄，所有專注皆順暢完成。</div>';
+      } else {
+        Object.keys(reasons).forEach(k => {
+          const r = reasons[k];
+          const pct = Math.round((r.count / totalAborts) * 100);
+          const row = document.createElement('div');
+          row.className = 'analytics-bar-row';
+          row.innerHTML = `
+            <div class="analytics-bar-row-info">
+              <span class="analytics-bar-row-label" style="color: ${r.color};">${r.label}</span>
+              <span class="analytics-bar-row-val">${r.count} 次 (${pct}%)</span>
+            </div>
+            <div class="analytics-progress-track">
+              <div class="analytics-progress-fill" style="width: ${pct}%; background: ${r.color};"></div>
+            </div>
+          `;
+          frictionBars.appendChild(row);
+        });
+      }
+    }
+
+    // 智能溫和回饋
+    const insightText = document.getElementById('analyticsInsightText');
+    if (insightText) {
+      if (sessions.length === 0) {
+        insightText.textContent = '尚無足夠的專注樣本。開工一次即可在此處看見認知回饋。';
+      } else if (totalAborts === 0) {
+        insightText.textContent = '專注完成率極高（100%）！您的步調非常穩定，請繼續保持這份動能。';
+      } else if (reasons.ABORTED_TOO_LARGE.count >= reasons.ABORTED_POSTPONE.count && reasons.ABORTED_TOO_LARGE.count >= reasons.ABORTED_QUIT.count) {
+        const pct = Math.round((reasons.ABORTED_TOO_LARGE.count / totalAborts) * 100);
+        insightText.textContent = `近期中斷有 ${pct}% 源自任務拆解不足。建議在入桌專注前，先為卡片新增 2-3 個試水溫的微小步驟，有助於降低啟動阻力。`;
+      } else if (reasons.ABORTED_POSTPONE.count >= reasons.ABORTED_TOO_LARGE.count) {
+        const pct = Math.round((reasons.ABORTED_POSTPONE.count / totalAborts) * 100);
+        insightText.textContent = `近期中斷有 ${pct}% 源自身心能量告急。這段時間請容許自己放慢步調，優先安排低耗能任務，或給自己充足的睡眠與休息。`;
+      } else {
+        insightText.textContent = '每一次自覺性的退場都是健康的選擇，誠實認可已付出的工時，大腦隨時可以重新開始。';
+      }
+    }
+
+    // 接關筆記
+    const notesList = document.getElementById('analyticsNotesList');
+    if (notesList) {
+      notesList.innerHTML = '';
+      const notesWithText = sessions.filter(s => s.note && s.note.trim());
+      if (notesWithText.length === 0) {
+        notesList.innerHTML = '<div class="analytics-empty-hint">尚無接關便籤紀錄（在專注中點擊暫停即可留下筆記）。</div>';
+      } else {
+        notesWithText.forEach(s => {
+          const d = new Date(s.endedAt || s.startedAt);
+          const timeStr = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+          const item = document.createElement('div');
+          item.className = 'analytics-note-item';
+          item.innerHTML = `
+            <div class="analytics-note-header">
+              <span class="analytics-note-task">${escapeHtml(s.taskText || '任務')}</span>
+              <span>${timeStr}</span>
+            </div>
+            <div class="analytics-note-content">${escapeHtml(s.note)}</div>
+          `;
+          notesList.appendChild(item);
+        });
+      }
+    }
+  }
+
+  function renderAnalyticsLogs(sessions) {
+    const tbody = document.getElementById('analyticsSessionsTbody');
+    const emptyHint = document.getElementById('analyticsEmptyLogs');
+    const countEl = document.getElementById('analyticsLogsCount');
+
+    if (countEl) countEl.textContent = `共 ${sessions.length} 筆紀錄`;
+
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (sessions.length === 0) {
+      if (emptyHint) emptyHint.style.display = 'block';
+      return;
+    }
+
+    if (emptyHint) emptyHint.style.display = 'none';
+
+    sessions.forEach(s => {
+      const d = new Date(s.startedAt || s.endedAt);
+      const timeStr = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      const durStr = formatDurationZh(s.elapsedSeconds || 0);
+
+      let statusPillClass = 'status-completed';
+      let statusLabel = '完成';
+      if (s.status === 'ABORTED_TOO_LARGE') {
+        statusPillClass = 'status-too-large';
+        statusLabel = '過大拆解';
+      } else if (s.status === 'ABORTED_POSTPONE') {
+        statusPillClass = 'status-postpone';
+        statusLabel = '狀態延後';
+      } else if (s.status === 'ABORTED_QUIT') {
+        statusPillClass = 'status-quit';
+        statusLabel = '退場';
+      }
+
+      const item = items.find(it => it.id === s.taskId);
+      const quadInfo = item ? getQuadrantInfo(item) : null;
+      const catLabel = quadInfo ? quadInfo.badge : '核心深耕';
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-family: var(--font-mono); white-space: nowrap;">${timeStr}</td>
+        <td style="font-weight: 600;">${escapeHtml(s.taskText || '未命名任務')}</td>
+        <td style="font-family: var(--font-mono); white-space: nowrap;">${durStr}</td>
+        <td><span class="analytics-status-pill ${statusPillClass}">${statusLabel}</span></td>
+        <td style="font-size: 0.75rem; color: var(--meta-text); white-space: nowrap;">${catLabel}</td>
+        <td><button type="button" class="btn-session-delete" data-id="${s.id}">刪除</button></td>
+      `;
+
+      const btnDel = tr.querySelector('.btn-session-delete');
+      if (btnDel) {
+        btnDel.addEventListener('click', () => {
+          deleteFocusSession(s.id);
+        });
+      }
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  function deleteFocusSession(sessionId) {
+    const logs = getFocusSessions();
+    const filtered = logs.filter(s => s.id !== sessionId);
+    localStorage.setItem(STORAGE_KEY_FOCUS_SESSIONS, JSON.stringify(filtered));
+    renderAnalyticsDashboard();
+    showToast('已刪除該筆專注紀錄');
+  }
+
+  function clearAllFocusSessions() {
+    if (!confirm('確定要清空所有專注歷史紀錄嗎？此動作無法復原。')) return;
+    localStorage.removeItem(STORAGE_KEY_FOCUS_SESSIONS);
+    renderAnalyticsDashboard();
+    showToast('已清空專注紀錄');
+  }
+
+  function exportFocusSessionsCsv() {
+    const logs = getFocusSessions();
+    if (logs.length === 0) {
+      showToast('目前無任何專注紀錄可匯出');
+      return;
+    }
+    const headers = ['ID', '任務名稱', '開始時間', '結束時間', '專注秒數', '專注分鐘', '結束狀態', '接關便籤'];
+    const rows = logs.map(s => [
+      `"${s.id || ''}"`,
+      `"${(s.taskText || '').replace(/"/g, '""')}"`,
+      `"${s.startedAt ? new Date(s.startedAt).toISOString() : ''}"`,
+      `"${s.endedAt ? new Date(s.endedAt).toISOString() : ''}"`,
+      s.elapsedSeconds || 0,
+      s.elapsedMinutes || 0,
+      `"${s.status || ''}"`,
+      `"${(s.note || '').replace(/"/g, '""')}"`
+    ]);
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `TaskDesk_Focus_Sessions_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('已匯出專注日誌 CSV');
+  }
+
+  function exportFocusSessionsJson() {
+    const logs = getFocusSessions();
+    if (logs.length === 0) {
+      showToast('目前無任何專注紀錄可匯出');
+      return;
+    }
+    const jsonStr = JSON.stringify(logs, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `TaskDesk_Focus_Sessions_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('已匯出專注日誌 JSON');
+  }
+
 
 
   // --- 畫面渲染 ---
@@ -2354,7 +2868,7 @@
 
     const titleEl = document.createElement('div');
     titleEl.className = 'quadrant-picker-title';
-    titleEl.textContent = '📅 截止死線與象限設定';
+    titleEl.textContent = '截止死線與象限設定';
 
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
@@ -2370,7 +2884,7 @@
 
     const hintEl = document.createElement('div');
     hintEl.className = 'quadrant-picker-hint';
-    hintEl.textContent = '💡 預設由系統自動判定輕重緩急。您亦可於下方直接指定象限或死線，所有屬性皆可跨裝置同步。';
+    hintEl.textContent = '預設由系統自動判定輕重緩急。您亦可於下方直接指定象限或死線，所有屬性皆可跨裝置同步。';
     menu.appendChild(hintEl);
 
     // 快捷日期標籤列
@@ -2425,7 +2939,7 @@
       const isManual = !!(item.manualQuadrant && ['q1', 'q2', 'q3', 'q4'].includes(item.manualQuadrant.toLowerCase()));
       infoBox.innerHTML = `
         <div class="deadline-auto-badge" style="color: ${qInfo.color};">
-          ${isManual ? '✋ 手動指定' : '🤖 自動推估'}：${qInfo.badge} (${qInfo.title})
+          ${isManual ? '手動指定' : '自動推估'}：${qInfo.badge} (${qInfo.title})
         </div>
         <div class="deadline-auto-desc">${qInfo.desc}</div>
       `;
@@ -2492,7 +3006,7 @@
     quadChips.className = 'quadrant-chips-wrap';
 
     const quadOptions = [
-      { id: null, label: '🤖 自動推估' },
+      { id: null, label: '自動推估' },
       { id: 'q1', label: 'Q1 緊急重要' },
       { id: 'q2', label: 'Q2 核心深耕' },
       { id: 'q3', label: 'Q3 瑣事速辦' },
@@ -2705,7 +3219,7 @@
             dlTag.style.background = 'rgba(192, 132, 252, 0.12)';
             dlTag.style.color = '#c084fc';
             dlTag.style.border = '1px solid rgba(192, 132, 252, 0.3)';
-            dlTag.textContent = `📅 ${it.deadline.substring(5)}`;
+            dlTag.textContent = it.deadline.substring(5);
             tagsWrap.appendChild(dlTag);
           }
 
@@ -2718,7 +3232,7 @@
           // 調整死線按鈕 (代替手動切換象限，讓系統自動重算象限)
           const btnDeadline = document.createElement('button');
           btnDeadline.className = 'btn-matrix-shift';
-          btnDeadline.textContent = it.deadline ? `📅 ${it.deadline.substring(5)}` : '📅 設死線';
+          btnDeadline.textContent = it.deadline ? it.deadline.substring(5) : '設死線';
           btnDeadline.title = '點擊設定或調整死線（系統會自動重新計算象限）';
           btnDeadline.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -3064,7 +3578,7 @@
     timeChip.className = 'chip';
     const doneDate = item.doneAt ? new Date(item.doneAt) : null;
     const timeStr = doneDate ? `${doneDate.getMonth() + 1}/${doneDate.getDate()} ${String(doneDate.getHours()).padStart(2, '0')}:${String(doneDate.getMinutes()).padStart(2, '0')} 完成` : '已完成';
-    timeChip.textContent = `✓ ${timeStr}`;
+    timeChip.textContent = timeStr;
     timeChip.style.color = 'var(--accent-secondary)';
     metaRow.appendChild(timeChip);
 
@@ -3586,7 +4100,7 @@
     }
 
     if (token.startsWith('github_pat_')) {
-      showToast('⚠️ GitHub 細粒度 Token (github_pat_) 不支援 Gist，請使用 Classic Token (以 ghp_ 開頭)');
+      showToast('GitHub 細粒度 Token (github_pat_) 不支援 Gist，請使用 Classic Token (以 ghp_ 開頭)');
       return false;
     }
 
@@ -3942,7 +4456,7 @@
 
       // 安全防護：若本地有任務但遠端為 0 筆，防止誤按 Pull 覆蓋清空
       if (items.length > 0 && remotePayload.items.length === 0) {
-        const proceed = confirm(`⚠️ 警告：雲端 Gist 目前儲存了 0 筆任務，但您本機有 ${items.length} 筆任務！\n\n若強制「下載」將會覆蓋清空本機任務。\n建議改用「智慧雙向合併」即可將本機任務同步至雲端並保留。\n\n您確定仍要從雲端下載並清空本機嗎？`);
+        const proceed = confirm(`警告：雲端 Gist 目前儲存了 0 筆任務，但您本機有 ${items.length} 筆任務！\n\n若強制「下載」將會覆蓋清空本機任務。\n建議改用「智慧雙向合併」即可將本機任務同步至雲端並保留。\n\n您確定仍要從雲端下載並清空本機嗎？`);
         if (!proceed) {
           showToast('已取消下載，保留本機現有任務');
           return;
@@ -4349,6 +4863,36 @@
     });
 
     // 工具選單項目事件
+    const mItemAnalytics = document.getElementById('menuItemAnalytics');
+    if (mItemAnalytics) {
+      mItemAnalytics.addEventListener('click', () => {
+        closeNavTools();
+        openAnalyticsModal();
+      });
+    }
+
+    safeOn('btnCloseAnalytics', 'click', closeAnalyticsModal);
+    safeOn('btnCloseAnalyticsFooter', 'click', closeAnalyticsModal);
+
+    const timeFilter = document.getElementById('analyticsTimeFilter');
+    if (timeFilter) {
+      timeFilter.querySelectorAll('.analytics-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          setAnalyticsTimeRange(btn.dataset.range);
+        });
+      });
+    }
+
+    document.querySelectorAll('.analytics-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        switchAnalyticsTab(btn.dataset.tab);
+      });
+    });
+
+    safeOn('btnExportSessionsCsv', 'click', exportFocusSessionsCsv);
+    safeOn('btnExportSessionsJson', 'click', exportFocusSessionsJson);
+    safeOn('btnClearSessions', 'click', clearAllFocusSessions);
+
     const mItemMatrix = document.getElementById('menuItemMatrix');
     if (mItemMatrix) {
       mItemMatrix.addEventListener('click', () => {
@@ -4441,7 +4985,7 @@
     if (btnAutoDecideAccept) {
       btnAutoDecideAccept.addEventListener('click', () => {
         document.getElementById('modalAutoDecide').style.display = 'none';
-        showToast('🎯 已為您聚焦現在任務，開始專注！');
+        showToast('已為您聚焦現在任務，開始專注！');
       });
     }
 
@@ -4739,7 +5283,7 @@
           previewBox.textContent = '此清單無符合條件的任務。';
         } else {
           previewBox.textContent = displayTasks.slice(0, 30).map((t, i) => {
-            const statusTag = t.done ? '[✓ 已完成] ' : '';
+            const statusTag = t.done ? '[已完成] ' : '';
             const dlTag = t.deadline ? ` #${t.deadline}` : '';
             return `${i + 1}. ${statusTag}${t.text}${dlTag}`;
           }).join('\n') + (displayTasks.length > 30 ? `\n... 等共 ${displayTasks.length} 件` : '');

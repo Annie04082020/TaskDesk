@@ -91,6 +91,10 @@
         </button>
       </div>
       <div class="nav-tools-grid">
+        <button type="button" class="nav-tool-card" id="menuItemAnalytics">
+          <span class="nav-tool-card-title">專注與工時分析</span>
+          <span class="nav-tool-card-desc">工時統計、象限分佈與摩擦力診斷</span>
+        </button>
         <button type="button" class="nav-tool-card" id="menuItemMatrix">
           <span class="nav-tool-card-title">四象限矩陣</span>
           <span class="nav-tool-card-desc">依重要與緊急程度總覽分流</span>
@@ -222,7 +226,7 @@
             <div class="kairos-brain-dump-row">
               <input type="text" id="kairosbrainDumpInput" class="kairos-brain-dump-input"
                 placeholder="輸入後按 Enter，直接存入收集箱" autocomplete="off" />
-              <button type="button" class="kairos-brain-dump-close" id="kairosbrainDumpClose" aria-label="關閉">✕</button>
+              <button type="button" class="kairos-brain-dump-close" id="kairosbrainDumpClose" aria-label="關閉"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
           </div>
         </div>
@@ -413,7 +417,7 @@
             <div id="autoDecideReasonText" class="auto-decide-reason-text">決策理由</div>
           </div>
           <div class="auto-decide-status-note">
-            ✓ 已自動指派為「現在做這個」，並在工作桌置頂高亮！
+            已自動指派為「現在做這個」，並在工作桌置頂高亮！
           </div>
         </div>
       </div>
@@ -449,7 +453,7 @@
       </div>
       <div class="modal-body" style="padding-top: 10px;">
         <div class="matrix-notice">
-          💡 <strong>免動腦分流：</strong>系統已根據任務大小（大/中/小）與截止死線客觀自動分配象限，告別決策疲勞。點擊各項目的「設死線」即可調整日期並即時自動重算。
+          <strong>客觀分流說明：</strong>系統已根據任務大小（大/中/小）與截止死線客觀自動分配象限，告別決策疲勞。點擊各項目的「設死線」即可調整日期並即時自動重算。
         </div>
         <div class="matrix-filter-bar">
           <span style="font-size: 0.76rem; color: var(--meta-text);">篩選範圍：</span>
@@ -465,7 +469,7 @@
         </div>
       </div>
       <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-        <span style="font-size: 0.74rem; color: var(--meta-text);">💡 死線在主介面卡片隱藏不顯示，維持專注零焦慮。</span>
+        <span style="font-size: 0.74rem; color: var(--meta-text);">死線在主介面卡片隱藏不顯示，維持專注零焦慮。</span>
         <button id="btnCloseMatrixFooter" class="btn-secondary">關閉總覽</button>
       </div>
     </div>
@@ -578,7 +582,9 @@
         <div id="viewImportFile" style="display: flex; flex-direction: column; gap: 12px;">
           <!-- Dropzone -->
           <div id="importDropzone" class="import-dropzone">
-            <div style="font-size: 1.5rem; margin-bottom: 4px;">📁</div>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 6px; opacity: 0.7;">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            </svg>
             <div style="font-size: 0.92rem; font-weight: 600; color: var(--text-color);">點擊選擇或拖放 Google Tasks 檔案</div>
             <div style="font-size: 0.78rem; color: var(--meta-text); margin-top: 4px;">支援 .Tasks、.json 或純文字檔 (例如 1000606440619.Tasks)</div>
             <input type="file" id="inputGoogleTaskFile" accept=".Tasks,.tasks,.json,.txt,*" style="display: none;">
@@ -698,7 +704,7 @@
         <div class="form-group" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
           <div class="form-toggle-row">
             <div>
-              <div class="form-label">🛡️ 啟用 Kairos 本機專注守護連動 (Windows)</div>
+              <div class="form-label">啟用 Kairos 本機專注守護連動 (Windows)</div>
               <div class="form-sublabel">當啟動「現在」時，自動通知本機運行的 Kairos 啟動視窗攔截與防分心鎖定。</div>
             </div>
             <label class="switch">
@@ -792,7 +798,7 @@
         <div class="form-sublabel" style="margin-bottom: 10px;">
           平時資料存放於各裝置本機，聯網時可手動上傳或下載同步（Web 與 Android App 雙向通用）。
           <div style="margin-top: 4px;">
-            手機尚未安裝 App？ <a href="https://github.com/Annie04082020/TaskDesk/releases/latest" target="_blank" rel="noopener" style="color: var(--accent-primary); text-decoration: underline;">點此下載 Android APK 📱</a>
+            手機尚未安裝 App？ <a href="https://github.com/Annie04082020/TaskDesk/releases/latest" target="_blank" rel="noopener" style="color: var(--accent-primary); text-decoration: underline;">點此下載 Android APK</a>
           </div>
         </div>
 
@@ -820,22 +826,22 @@
 
           <!-- Helpful workflow tip -->
           <div id="syncFlowTip" style="font-size: 0.72rem; color: var(--text-muted); line-height: 1.4; margin-top: 8px; padding: 6px 10px; background: rgba(78, 136, 255, 0.06); border-radius: 6px; border-left: 3px solid var(--accent-primary);">
-            💡 <b>跨裝置同步流程：</b><br>
-            • 在<b>有任務的裝置</b>（如手機）點擊 <b>「⬆ 上傳本機」</b> 或 <b>「🔄 雙向合併」</b> 將任務推送到 Gist。<br>
-            • 在<b>要接收任務的裝置</b>（如電腦）點擊 <b>「🔄 雙向合併」</b> 即可無縫同步！
+            <b>跨裝置同步流程：</b><br>
+            • 在<b>有任務的裝置</b>（如手機）點擊 <b>「上傳本機」</b> 或 <b>「智慧雙向合併」</b> 將任務推送到 Gist。<br>
+            • 在<b>要接收任務的裝置</b>（如電腦）點擊 <b>「智慧雙向合併」</b> 即可無縫同步！
           </div>
 
           <!-- Main Actions -->
           <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
             <button id="btnSyncMerge" class="btn-primary" style="justify-content: center; padding: 9px 14px;">
-              🔄 智慧雙向合併 (推薦：保留最新)
+              智慧雙向合併 (推薦：保留最新)
             </button>
             <div style="display: flex; gap: 8px;">
               <button id="btnSyncPush" class="btn-secondary" style="flex: 1; justify-content: center;">
-                ⬆ 上傳本機 (Push)
+                上傳本機 (Push)
               </button>
               <button id="btnSyncPull" class="btn-secondary" style="flex: 1; justify-content: center;">
-                ⬇ 從雲端下載 (Pull)
+                從雲端下載 (Pull)
               </button>
             </div>
           </div>
@@ -844,17 +850,17 @@
           <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-light);">
             <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" id="syncToggleConfigHeader">
               <span class="form-label" style="font-size: 0.82rem;">Gist 連線設定 (初次使用必填)</span>
-              <span class="folder-chevron" id="syncConfigChevron">▼</span>
+              <span class="folder-chevron" id="syncConfigChevron" style="font-size: 0.72rem;">▼</span>
             </div>
             <div id="syncConfigBody" style="display: none; flex-direction: column; gap: 10px; margin-top: 10px;">
               <div class="form-group">
                 <label class="form-label" for="syncGithubToken">GitHub Personal Access Token (Classic)</label>
                 <div class="form-sublabel">只需勾選 <code>gist</code> 權限即可，Token 100% 僅儲存在本機。</div>
                 <div style="margin-top: 3px;">
-                  <a href="https://github.com/settings/tokens/new?scopes=gist&description=TaskDesk+Sync" target="_blank" rel="noopener" style="color: var(--accent-primary); font-size: 0.76rem; text-decoration: underline;">👉 點此一鍵前往 GitHub 產生 Token (已自動預選 gist 權限)</a>
+                  <a href="https://github.com/settings/tokens/new?scopes=gist&description=TaskDesk+Sync" target="_blank" rel="noopener" style="color: var(--accent-primary); font-size: 0.76rem; text-decoration: underline;">前往 GitHub 產生 Token (已自動預選 gist 權限)</a>
                 </div>
                 <div style="font-size: 0.72rem; color: #ffb86c; margin-top: 3px;">
-                  ⚠️ 請注意：必須是 Classic Token (以 <code>ghp_</code> 開頭)；GitHub 官方限制細粒度 Token (<code>github_pat_</code>) 無法存取 Gist。
+                  請注意：必須是 Classic Token (以 <code>ghp_</code> 開頭)；GitHub 官方限制細粒度 Token (<code>github_pat_</code>) 無法存取 Gist。
                 </div>
                 <div style="display: flex; gap: 6px; margin-top: 6px;">
                   <input type="password" id="syncGithubToken" class="form-input" style="flex: 1;" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
@@ -903,9 +909,195 @@
         <button class="btn-secondary" id="btnCloseSyncFooter">關閉</button>
       </div>
     </div>
+  <!-- Modal: Focus Analytics Dashboard (專注與工時分析後台儀表板) -->
+  <div class="modal-overlay" id="modalAnalytics" style="display: none;" role="dialog" aria-modal="true">
+    <div class="modal-sheet analytics-modal-sheet">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <div class="modal-title">專注與工時分析</div>
+          <div class="modal-subtitle">基於任務意圖與沉浸記錄的個人認知儀表板</div>
+        </div>
+        <!-- 時間篩選器 (純文字 Pills) -->
+        <div class="analytics-time-filter" id="analyticsTimeFilter">
+          <button type="button" class="analytics-filter-btn active" data-range="today">今日</button>
+          <button type="button" class="analytics-filter-btn" data-range="week">本週</button>
+          <button type="button" class="analytics-filter-btn" data-range="month">本月</button>
+          <button type="button" class="analytics-filter-btn" data-range="all">全部</button>
+        </div>
+        <button type="button" class="modal-close" id="btnCloseAnalytics" aria-label="關閉分析視窗">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- 分頁標籤 (純文字 Tabs，零 Emoji) -->
+      <div class="analytics-tabs-bar">
+        <button type="button" class="analytics-tab-btn active" data-tab="overview" id="tabAnalyticsOverview">總覽</button>
+        <button type="button" class="analytics-tab-btn" data-tab="intent" id="tabAnalyticsIntent">意圖分佈</button>
+        <button type="button" class="analytics-tab-btn" data-tab="friction" id="tabAnalyticsFriction">摩擦力診斷</button>
+        <button type="button" class="analytics-tab-btn" data-tab="logs" id="tabAnalyticsLogs">日誌明細</button>
+      </div>
+
+      <div class="modal-body analytics-modal-body">
+        <!-- TAB 1: 總覽 -->
+        <div class="analytics-tab-panel" id="panelAnalyticsOverview">
+          <!-- 4 大核心 KPI 卡片 -->
+          <div class="analytics-kpi-grid">
+            <div class="analytics-kpi-card">
+              <span class="analytics-kpi-label">總投入時長</span>
+              <span class="analytics-kpi-value" id="kpiTotalTime">0m</span>
+              <span class="analytics-kpi-sub" id="kpiTotalTimeSub">有效專注加總</span>
+            </div>
+            <div class="analytics-kpi-card">
+              <span class="analytics-kpi-label">專注沉浸次數</span>
+              <span class="analytics-kpi-value" id="kpiSessionCount">0 次</span>
+              <span class="analytics-kpi-sub" id="kpiSessionCountSub">單工執行次數</span>
+            </div>
+            <div class="analytics-kpi-card">
+              <span class="analytics-kpi-label">平均單次沉浸</span>
+              <span class="analytics-kpi-value" id="kpiAvgDuration">0m</span>
+              <span class="analytics-kpi-sub" id="kpiAvgDurationSub">深度專注平均</span>
+            </div>
+            <div class="analytics-kpi-card">
+              <span class="analytics-kpi-label">完成與調整</span>
+              <span class="analytics-kpi-value" id="kpiCompletionRatio">0 / 0</span>
+              <span class="analytics-kpi-sub" id="kpiCompletionRatioSub">完成 / 彈性調整</span>
+            </div>
+          </div>
+
+          <!-- 每日工時長條圖 -->
+          <div class="analytics-section-card">
+            <div class="analytics-section-header">
+              <div class="analytics-section-title">每日專注時長趨勢</div>
+              <div class="analytics-section-desc">統計選取區間內各日的累積投入時長</div>
+            </div>
+            <div class="analytics-chart-container" id="analyticsTrendChartContainer">
+              <!-- Dynamically populated pure CSS/SVG bar chart -->
+            </div>
+          </div>
+
+          <!-- 開工時段分佈 -->
+          <div class="analytics-section-card">
+            <div class="analytics-section-header">
+              <div class="analytics-section-title">開工時段分佈</div>
+              <div class="analytics-section-desc">觀察大腦在各生理時段的沉浸投入程度</div>
+            </div>
+            <div class="analytics-tod-list" id="analyticsTodList">
+              <!-- Dynamically populated time-of-day bars -->
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 2: 意圖分佈 -->
+        <div class="analytics-tab-panel" id="panelAnalyticsIntent" style="display: none;">
+          <!-- 四象限時間投資比 -->
+          <div class="analytics-section-card">
+            <div class="analytics-section-header">
+              <div class="analytics-section-title">四象限時間投資比</div>
+              <div class="analytics-section-desc">檢視精力是否深耕於重要目標，抑或被救火消耗</div>
+            </div>
+            <div class="analytics-quadrant-bars" id="analyticsQuadrantBars">
+              <!-- Dynamically populated quadrant bars -->
+            </div>
+          </div>
+
+          <!-- 任務類型工時比例 -->
+          <div class="analytics-section-card">
+            <div class="analytics-section-header">
+              <div class="analytics-section-title">任務類型配置</div>
+              <div class="analytics-section-desc">深度專注、動手做、行政、整理、運動的實際工時比例</div>
+            </div>
+            <div class="analytics-type-bars" id="analyticsTypeBars">
+              <!-- Dynamically populated task type bars -->
+            </div>
+          </div>
+
+          <!-- 任務尺寸分佈 -->
+          <div class="analytics-section-card">
+            <div class="analytics-section-header">
+              <div class="analytics-section-title">任務尺寸投入</div>
+              <div class="analytics-section-desc">試水溫 (5-10m)、小 (15-30m)、中 (1-2h)、大 (2h+) 的次數與時數</div>
+            </div>
+            <div class="analytics-size-bars" id="analyticsSizeBars">
+              <!-- Dynamically populated size distribution -->
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 3: 摩擦力診斷 -->
+        <div class="analytics-tab-panel" id="panelAnalyticsFriction" style="display: none;">
+          <!-- 中止原因自覺比例 -->
+          <div class="analytics-section-card">
+            <div class="analytics-section-header">
+              <div class="analytics-section-title">中斷原因結構</div>
+              <div class="analytics-section-desc">探尋開工後遇到的阻力本質，將放棄轉化為認知回饋</div>
+            </div>
+            <div class="analytics-friction-bars" id="analyticsFrictionBars">
+              <!-- Dynamically populated friction reasons -->
+            </div>
+          </div>
+
+          <!-- 溫和建議提示框 (單色微邊框，純文字引導) -->
+          <div class="analytics-insight-box" id="analyticsInsightBox">
+            <div class="analytics-insight-title">自我認知回饋</div>
+            <div class="analytics-insight-text" id="analyticsInsightText">目前尚無足夠的中斷樣本。</div>
+          </div>
+
+          <!-- 接關便籤歷史簿 -->
+          <div class="analytics-section-card">
+            <div class="analytics-section-header">
+              <div class="analytics-section-title">工作記憶接關簿</div>
+              <div class="analytics-section-desc">回顧暫停專注時隨手留下的「第一步要做什麼」便籤</div>
+            </div>
+            <div class="analytics-notes-list" id="analyticsNotesList">
+              <!-- Dynamically populated resume notes -->
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 4: 日誌明細 -->
+        <div class="analytics-tab-panel" id="panelAnalyticsLogs" style="display: none;">
+          <!-- 工具列 (純文字按鈕，匯出與清除) -->
+          <div class="analytics-logs-toolbar">
+            <div class="analytics-logs-count" id="analyticsLogsCount">共 0 筆紀錄</div>
+            <div class="analytics-logs-actions">
+              <button type="button" class="btn-secondary" id="btnExportSessionsCsv">匯出 CSV</button>
+              <button type="button" class="btn-secondary" id="btnExportSessionsJson">匯出 JSON</button>
+              <button type="button" class="btn-secondary btn-analytics-danger" id="btnClearSessions">清除紀錄</button>
+            </div>
+          </div>
+
+          <!-- 日誌流水帳清單 -->
+          <div class="analytics-sessions-table-wrap">
+            <table class="analytics-table" id="analyticsSessionsTable">
+              <thead>
+                <tr>
+                  <th>時間</th>
+                  <th>任務</th>
+                  <th>耗時</th>
+                  <th>狀態</th>
+                  <th>分類</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="analyticsSessionsTbody">
+                <!-- Dynamically populated session rows -->
+              </tbody>
+            </table>
+            <div id="analyticsEmptyLogs" class="analytics-empty-hint" style="display: none;">尚無專注紀錄</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" id="btnCloseAnalyticsFooter">關閉</button>
+      </div>
+    </div>
   </div>
 
-  <!-- Lock Screen Overlay -->
+
   <div id="lockScreenOverlay" class="lock-screen-overlay" style="display: none;">
     <div class="lock-screen-card">
       <div class="brand-dot" style="width: 10px; height: 10px; margin: 0 auto; box-shadow: 0 0 15px var(--accent-primary);"></div>

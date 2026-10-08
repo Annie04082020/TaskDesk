@@ -4026,3 +4026,449 @@ input:checked + .slider:before {
   from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)); }
   to   { opacity: 1; transform: translate(-50%, -50%); }
 }
+
+/* =========================================================
+   專注與工時分析儀表板 (Focus Analytics Dashboard)
+   設計哲學：零 Icon、純字體排版、單色高雅質調
+   ========================================================= */
+
+.analytics-modal-sheet {
+  max-width: 960px;
+  width: 95%;
+  max-height: 90vh;
+}
+
+.analytics-modal-body {
+  padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+/* 時間篩選器 (純文字按鈕組) */
+.analytics-time-filter {
+  display: flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+}
+
+.analytics-filter-btn {
+  background: transparent;
+  border: none;
+  color: var(--meta-text);
+  font-family: var(--font-heading);
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.analytics-filter-btn:hover {
+  color: var(--text-color);
+}
+
+.analytics-filter-btn.active {
+  background: var(--card-bg);
+  color: var(--accent-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="light"] .analytics-time-filter {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .analytics-filter-btn.active {
+  background: #ffffff;
+  color: var(--accent-primary);
+}
+
+/* Tabs 導覽列 (純文字無 Emoji) */
+.analytics-tabs-bar {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-light);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.analytics-tabs-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.analytics-tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--meta-text);
+  font-family: var(--font-heading);
+  font-size: 0.88rem;
+  font-weight: 700;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.analytics-tab-btn:hover {
+  color: var(--text-color);
+}
+
+.analytics-tab-btn.active {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
+/* 4 大核心 KPI 網格 */
+.analytics-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .analytics-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.analytics-kpi-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.analytics-kpi-label {
+  font-size: 0.72rem;
+  color: var(--meta-text);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.analytics-kpi-value {
+  font-family: var(--font-mono);
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--text-color);
+  letter-spacing: -0.02em;
+}
+
+.analytics-kpi-sub {
+  font-size: 0.68rem;
+  color: var(--meta-text);
+  opacity: 0.7;
+}
+
+/* 區塊卡片 */
+.analytics-section-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.analytics-section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.analytics-section-title {
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.analytics-section-desc {
+  font-size: 0.72rem;
+  color: var(--meta-text);
+}
+
+/* 每日專注工時長條圖 (純 CSS/SVG 幾何) */
+.analytics-chart-container {
+  min-height: 140px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding-top: 16px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-light);
+  overflow-x: auto;
+}
+
+.analytics-bar-col {
+  flex: 1;
+  min-width: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.analytics-bar-track {
+  width: 100%;
+  max-width: 32px;
+  height: 100px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  position: relative;
+}
+
+.analytics-bar-fill {
+  width: 100%;
+  background: var(--accent-primary);
+  border-radius: 4px 4px 0 0;
+  transition: height 0.3s ease;
+}
+
+.analytics-bar-date {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--meta-text);
+  white-space: nowrap;
+}
+
+/* 條形進度分佈列 (時段、象限、類型、摩擦力通用) */
+.analytics-bar-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.analytics-bar-row-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+}
+
+.analytics-bar-row-label {
+  color: var(--text-color);
+  font-weight: 600;
+}
+
+.analytics-bar-row-val {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--meta-text);
+}
+
+.analytics-progress-track {
+  width: 100%;
+  height: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.analytics-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  background: var(--accent-primary);
+}
+
+/* 自我認知診斷建議框 (純單色邊框，零 Emoji) */
+.analytics-insight-box {
+  background: rgba(0, 240, 255, 0.03);
+  border: 1px solid var(--border-light);
+  border-left: 3px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.analytics-insight-title {
+  font-family: var(--font-heading);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+  letter-spacing: 0.02em;
+}
+
+.analytics-insight-text {
+  font-size: 0.82rem;
+  color: var(--text-color);
+  line-height: 1.55;
+}
+
+/* 工作記憶接關簿列表 */
+.analytics-notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.analytics-note-item {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.analytics-note-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.72rem;
+  color: var(--meta-text);
+}
+
+.analytics-note-task {
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.analytics-note-content {
+  font-size: 0.82rem;
+  color: var(--accent-primary);
+  line-height: 1.45;
+}
+
+/* 日誌明細工具列與表格 */
+.analytics-logs-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.analytics-logs-count {
+  font-size: 0.78rem;
+  color: var(--meta-text);
+  font-family: var(--font-mono);
+}
+
+.analytics-logs-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-analytics-danger:hover {
+  color: #f87171 !important;
+  border-color: rgba(248, 113, 113, 0.4) !important;
+}
+
+.analytics-sessions-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+}
+
+.analytics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  text-align: left;
+}
+
+.analytics-table th {
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--border-light);
+  color: var(--meta-text);
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.analytics-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-color);
+  vertical-align: middle;
+}
+
+.analytics-table tr:last-child td {
+  border-bottom: none;
+}
+
+.analytics-status-pill {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.analytics-status-pill.status-completed {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--accent-green);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.analytics-status-pill.status-too-large {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.analytics-status-pill.status-postpone {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.analytics-status-pill.status-quit {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.btn-session-delete {
+  background: transparent;
+  border: none;
+  color: var(--meta-text);
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.btn-session-delete:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.analytics-empty-hint {
+  padding: 32px;
+  text-align: center;
+  color: var(--meta-text);
+  font-size: 0.85rem;
+}
+
