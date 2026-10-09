@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>專注進行中 · TaskDesk Focus Guardian</title>
+  <link rel="stylesheet" href="blocked.css">
+</head>
+<body>
+  <div class="guardian-container">
+    <div class="guardian-card">
+      <div class="guardian-header">
+        <div class="guardian-badge">
+          <span class="badge-dot"></span>
+          <span>TASKDESK FOCUS GUARDIAN</span>
+        </div>
+        <h1 class="guardian-title">目前正在專注工作中</h1>
+        <p class="guardian-subtitle">守護你的深度心流，攔截潛在分心干擾。</p>
+      </div>
+
+      <div class="task-spotlight">
+        <div class="spotlight-label">當前主要任務</div>
+        <div class="spotlight-title" id="activeTaskTitle">專注任務執行中</div>
+        <div class="spotlight-meta">
+          <span class="meta-item" id="targetSiteText">攔截目標：YouTube</span>
+        </div>
+      </div>
+
+      <div class="guardian-actions">
+        <button id="btnReturnDesk" class="btn btn-primary">
+          <span>返回 TaskDesk 工作桌</span>
+        </button>
+
+        <button id="btnFrictionPass" class="btn btn-secondary">
+          <span>需要查資料？深呼吸 5 秒通行 3 分鐘</span>
+        </button>
+
+        <button id="btnCloseTab" class="btn btn-ghost">
+          <span>關閉此分頁</span>
+        </button>
+      </div>
+
+      <!-- 深呼吸冷卻狀態覆蓋層 -->
+      <div id="frictionCountdown" class="friction-overlay" style="display: none;">
+        <div class="breathing-circle">
+          <span id="countdownNumber">5</span>
+        </div>
+        <div class="friction-note">深呼吸，確認是否為必要操作...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="blocked.js"></script>
+</body>
+</html>

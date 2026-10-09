@@ -1,0 +1,21 @@
+{
+  "defaultBlockedDomains": [
+    "youtube.com",
+    "youtu.be",
+    "bilibili.com",
+    "facebook.com",
+    "instagram.com",
+    "twitter.com",
+    "x.com",
+    "reddit.com",
+    "tiktok.com",
+    "threads.net",
+    "netflix.com",
+    "twitch.tv",
+    "dcard.tw",
+    "ptt.cc",
+    "weibo.com"
+  ],
+  "emergencyPassDurationMinutes": 3,
+  "frictionCountdownSeconds": 5
+}

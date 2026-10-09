@@ -120,6 +120,7 @@
   let activeFocusTaskId = null;
   let focusRemainingSeconds = 25 * 60;
   let kairosOnline = false;
+  let guardianExtensionOnline = false;
   let kairosSession = {
     status: 'IDLE', // 'IDLE' | 'FOCUSING' | 'PAUSED'
     taskId: null,
@@ -1123,10 +1124,24 @@
     }
   }
 
+  function broadcastFocusToExtension(action, payload) {
+    try {
+      window.postMessage({
+        type: 'TASKDESK_FOCUS_EVENT',
+        action: action,
+        payload: payload || null
+      }, '*');
+    } catch (e) {}
+  }
+
   function updateFocusGuardStatusBadge() {
     const badge = document.getElementById('focusGuardStatusBadge');
     if (!badge) return;
-    if (settings.kairosEnabled) {
+    if (guardianExtensionOnline) {
+      badge.textContent = 'Guardian 擴充守護中 (已阻擋分心網站)';
+      badge.style.color = '#2dd4bf';
+      badge.style.borderColor = 'rgba(45, 212, 191, 0.4)';
+    } else if (settings.kairosEnabled) {
       if (kairosOnline) {
         badge.textContent = 'Kairos 本機守護中';
         badge.style.color = '#38bdf8';
@@ -1224,10 +1239,16 @@
 
     updateKairosTimerDisplay();
 
+    const durMinutes = getTaskFocusDurationMinutes(item);
     if (settings.kairosEnabled) {
-      const durMinutes = getTaskFocusDurationMinutes(item);
       notifyKairosFocusStart(item, durMinutes);
     }
+    broadcastFocusToExtension('START', {
+      id: item.id,
+      text: item.text,
+      durMinutes: durMinutes,
+      startedAt: now
+    });
 
     focusTimerInterval = setInterval(() => {
       if (kairosSession.status === 'FOCUSING') {
@@ -1250,6 +1271,7 @@
     if (settings.kairosEnabled) {
       notifyKairosFocusStop();
     }
+    broadcastFocusToExtension('STOP');
   }
 
   // 渲染 Kairos 全頁沉浸 Overlay
@@ -1356,6 +1378,7 @@
     }
     kairosSession.status = 'PAUSED';
     syncKairosElapsedSeconds();
+    broadcastFocusToExtension('PAUSE');
 
     const overlay = document.getElementById('kairosOverlay');
     const breathing = document.getElementById('kairosBreathingState');
@@ -1400,6 +1423,7 @@
     kairosSession.status = 'FOCUSING';
     syncKairosElapsedSeconds();
     updateKairosTimerDisplay();
+    broadcastFocusToExtension('RESUME');
   }
 
   function handleKairosAbort() {
@@ -6045,6 +6069,18 @@
         updateKairosTimerDisplay();
       }
     });
+
+    // 監聽 Focus Guardian Extension 連線訊號
+    window.addEventListener('message', (event) => {
+      if (event.source !== window || !event.data) return;
+      if (event.data.type === 'TASKDESK_GUARDIAN_READY' || event.data.type === 'TASKDESK_GUARDIAN_PONG') {
+        guardianExtensionOnline = true;
+        updateFocusGuardStatusBadge();
+      }
+    });
+    try {
+      window.postMessage({ type: 'TASKDESK_PING_GUARDIAN' }, '*');
+    } catch (e) {}
   }
 
   // 啟動應用

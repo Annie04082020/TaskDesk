@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TaskDesk Focus Guardian</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <header class="popup-header">
+      <div class="brand-row">
+        <span class="brand-title">TASKDESK GUARDIAN</span>
+        <span class="version-badge">v1.0.0</span>
+      </div>
+      <div class="status-indicator" id="statusIndicator">
+        <span class="status-dot"></span>
+        <span id="statusText">待命中</span>
+      </div>
+    </header>
+
+    <section class="task-section" id="activeTaskSection" style="display: none;">
+      <div class="section-label">當前主要專注任務</div>
+      <div class="task-title" id="activeTaskText">---</div>
+      <button id="btnQuickOpenDesk" class="btn btn-sm btn-outline">切換至工作桌分頁</button>
+    </section>
+
+    <section class="control-section">
+      <div class="control-row">
+        <div class="control-info">
+          <div class="control-title">干擾網站自動攔截</div>
+          <div class="control-desc">專注時阻擋 YouTube、社群等分心網站</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="toggleGuardian" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="control-row" id="passRow">
+        <div class="control-info">
+          <div class="control-title">臨時放行通道</div>
+          <div class="control-desc" id="passDescText">需要查資料時暫時解除攔截 3 分鐘</div>
+        </div>
+        <button id="btnTriggerPass" class="btn btn-sm btn-secondary">通行 3m</button>
+      </div>
+    </section>
+
+    <section class="blocklist-section">
+      <div class="blocklist-header">
+        <span class="section-label">攔截網站名單 (<span id="blockedCount">0</span>)</span>
+      </div>
+      <div class="domain-chips" id="domainChipsContainer">
+        <!-- 動態渲染網域標籤 -->
+      </div>
+      <form id="addDomainForm" class="add-domain-form">
+        <input type="text" id="newDomainInput" placeholder="輸入網域 (如 news.ycombinator.com)" autocomplete="off">
+        <button type="submit" class="btn btn-sm btn-primary">新增</button>
+      </form>
+    </section>
+
+    <footer class="popup-footer">
+      <span id="distractionCountText">本次專注累計攔截 0 次分心</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
