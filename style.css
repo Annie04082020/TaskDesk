@@ -1738,6 +1738,7 @@ body::before {
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
 }
 
 .modal-title {
@@ -1769,6 +1770,8 @@ body::before {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .modal-footer {
@@ -1779,6 +1782,7 @@ body::before {
   justify-content: flex-end;
   gap: 10px;
   background: var(--modal-footer-bg);
+  flex-shrink: 0;
 }
 
 /* Form Controls */
@@ -4103,14 +4107,19 @@ input:checked + .slider:before {
   max-width: 960px;
   width: 95%;
   max-height: 90vh;
+  height: 85vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .analytics-modal-body {
-  padding-top: 14px;
+  padding: 18px 20px 24px 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
   overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* 時間篩選器 (純文字按鈕組) */
@@ -4121,6 +4130,7 @@ input:checked + .slider:before {
   padding: 3px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-light);
+  flex-shrink: 0;
 }
 
 .analytics-filter-btn {
@@ -4159,10 +4169,15 @@ input:checked + .slider:before {
 /* Tabs 導覽列 (純文字無 Emoji) */
 .analytics-tabs-bar {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   border-bottom: 1px solid var(--border-light);
   overflow-x: auto;
   scrollbar-width: none;
+  flex-shrink: 0;
+  padding: 0 20px;
+  background: var(--modal-bg);
+  min-height: 44px;
+  align-items: flex-end;
 }
 
 .analytics-tabs-bar::-webkit-scrollbar {
@@ -4177,10 +4192,13 @@ input:checked + .slider:before {
   font-family: var(--font-heading);
   font-size: 0.88rem;
   font-weight: 700;
-  padding: 8px 14px;
+  padding: 10px 16px;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
   white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.4;
+  margin-bottom: -1px;
 }
 
 .analytics-tab-btn:hover {
@@ -4190,6 +4208,14 @@ input:checked + .slider:before {
 .analytics-tab-btn.active {
   color: var(--accent-primary);
   border-bottom-color: var(--accent-primary);
+}
+
+/* 分頁面板容器 */
+.analytics-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
 }
 
 /* 4 大核心 KPI 網格 */

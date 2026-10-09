@@ -1597,7 +1597,7 @@
       logs: document.getElementById('panelAnalyticsLogs')
     };
     Object.keys(panels).forEach(key => {
-      if (panels[key]) panels[key].style.display = key === tabId ? 'block' : 'none';
+      if (panels[key]) panels[key].style.display = key === tabId ? 'flex' : 'none';
     });
   }
 
