@@ -48,7 +48,7 @@ public class BlockOverlayActivity extends AppCompatActivity {
         TextView tvTask = findViewById(R.id.tvBlockedTaskText);
         TextView tvApp = findViewById(R.id.tvBlockedAppName);
         Button btnReturn = findViewById(R.id.btnReturnToTaskDesk);
-        Button btnFriction = findViewById(R.id.btnFrictionPass);
+        Button btnFrictionPass = findViewById(R.id.btnFrictionPass);
         Button btnHome = findViewById(R.id.btnGoHome);
         final View frictionLayout = findViewById(R.id.layoutFrictionOverlay);
         final TextView tvCountdown = findViewById(R.id.tvBreathingCountdown);
