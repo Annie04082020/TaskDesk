@@ -125,6 +125,8 @@
     taskId: null,
     elapsedSeconds: 0,
     startedAt: null,
+    accumulatedSeconds: 0,
+    currentSliceStart: null,
     pauseResumeNote: ''
   };
 
@@ -1196,16 +1198,28 @@
     }, 1200);
   }
 
+  function syncKairosElapsedSeconds() {
+    if (kairosSession.status === 'FOCUSING' && kairosSession.currentSliceStart) {
+      const slice = Math.max(0, Math.floor((Date.now() - kairosSession.currentSliceStart) / 1000));
+      kairosSession.elapsedSeconds = (kairosSession.accumulatedSeconds || 0) + slice;
+    } else {
+      kairosSession.elapsedSeconds = kairosSession.accumulatedSeconds || 0;
+    }
+  }
+
   function startFocusTimer(item) {
     if (focusTimerInterval) {
       clearInterval(focusTimerInterval);
       focusTimerInterval = null;
     }
+    const now = Date.now();
     activeFocusTaskId = item.id;
     kairosSession.status = 'FOCUSING';
     kairosSession.taskId = item.id;
+    kairosSession.accumulatedSeconds = 0;
+    kairosSession.currentSliceStart = now;
+    kairosSession.startedAt = now;
     kairosSession.elapsedSeconds = 0;
-    kairosSession.startedAt = Date.now();
     kairosSession.pauseResumeNote = '';
 
     updateKairosTimerDisplay();
@@ -1217,13 +1231,14 @@
 
     focusTimerInterval = setInterval(() => {
       if (kairosSession.status === 'FOCUSING') {
-        kairosSession.elapsedSeconds++;
+        syncKairosElapsedSeconds();
         updateKairosTimerDisplay();
       }
     }, 1000);
   }
 
   function stopFocusTimer() {
+    syncKairosElapsedSeconds();
     if (focusTimerInterval) {
       clearInterval(focusTimerInterval);
       focusTimerInterval = null;
@@ -1231,6 +1246,7 @@
     activeFocusTaskId = null;
     kairosSession.status = 'IDLE';
     kairosSession.taskId = null;
+    kairosSession.currentSliceStart = null;
     if (settings.kairosEnabled) {
       notifyKairosFocusStop();
     }
@@ -1311,6 +1327,7 @@
 
   // --- Kairos 沉浸模式動作處理器 (Done / Pause / Resume / Abort / Brain Dump) ---
   function handleKairosDone() {
+    syncKairosElapsedSeconds();
     const nowItem = items.find(it => it.isNow && !it.done);
     if (!nowItem) return;
     const elapsed = kairosSession.elapsedSeconds;
@@ -1333,7 +1350,13 @@
   }
 
   function handleKairosPause() {
+    if (kairosSession.status === 'FOCUSING' && kairosSession.currentSliceStart) {
+      kairosSession.accumulatedSeconds += Math.max(0, Math.floor((Date.now() - kairosSession.currentSliceStart) / 1000));
+      kairosSession.currentSliceStart = null;
+    }
     kairosSession.status = 'PAUSED';
+    syncKairosElapsedSeconds();
+
     const overlay = document.getElementById('kairosOverlay');
     const breathing = document.getElementById('kairosBreathingState');
     const actions = document.getElementById('kairosActions');
@@ -1373,10 +1396,14 @@
     if (breathing) breathing.style.display = 'none';
     if (actions) actions.style.display = 'flex';
     if (statusLabel) statusLabel.textContent = '專注中';
+    kairosSession.currentSliceStart = Date.now();
     kairosSession.status = 'FOCUSING';
+    syncKairosElapsedSeconds();
+    updateKairosTimerDisplay();
   }
 
   function handleKairosAbort() {
+    syncKairosElapsedSeconds();
     const modal = document.getElementById('kairosAbortModal');
     const elapsedEl = document.getElementById('kairosAbortElapsed');
     if (elapsedEl) {
@@ -1391,6 +1418,7 @@
   }
 
   function executeAbort(actionType) {
+    syncKairosElapsedSeconds();
     closeKairosAbortModal();
     const nowItem = items.find(it => it.isNow && !it.done);
     if (!nowItem) return;
@@ -6002,6 +6030,20 @@
           overlay.style.display = 'none';
         }
       });
+    });
+
+    // 背景分頁切換回復時，即時刷新真實專注秒數
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && kairosSession.status === 'FOCUSING') {
+        syncKairosElapsedSeconds();
+        updateKairosTimerDisplay();
+      }
+    });
+    window.addEventListener('focus', () => {
+      if (kairosSession.status === 'FOCUSING') {
+        syncKairosElapsedSeconds();
+        updateKairosTimerDisplay();
+      }
     });
   }
 
