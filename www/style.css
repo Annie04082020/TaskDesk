@@ -1153,6 +1153,49 @@ body::before {
   border: 1px solid rgba(249, 115, 22, 0.3);
 }
 
+/* 低刺激截止時間狀態標籤 (Low-Stimulus Deadline Risk) */
+.chip-deadline-risk {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--meta-text);
+  display: inline-flex;
+  align-items: center;
+  user-select: none;
+}
+
+.chip-deadline-risk.risk-overdue {
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.chip-deadline-risk.risk-today {
+  border-color: rgba(251, 191, 36, 0.35);
+  color: #fde047;
+  background: rgba(245, 158, 11, 0.05);
+}
+
+.chip-deadline-risk.risk-near {
+  border-color: rgba(56, 189, 248, 0.25);
+  color: #7dd3fc;
+  background: rgba(14, 165, 233, 0.04);
+}
+
+.chip-deadline-risk.risk-week {
+  border-color: rgba(148, 163, 184, 0.25);
+  color: #cbd5e1;
+}
+
+.chip-deadline-risk.risk-far {
+  color: var(--meta-text);
+  border-color: transparent;
+}
+
 /* ==========================================================================
    Card Bottom Actions: Triage Buttons
    ========================================================================== */

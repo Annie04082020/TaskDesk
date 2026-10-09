@@ -216,7 +216,7 @@
         <div class="kairos-actions" id="kairosActions">
           <button type="button" class="btn-kairos-done" id="btnKairosDone">完成任務</button>
           <button type="button" class="btn-kairos-pause" id="btnKairosPause">暫停</button>
-          <button type="button" class="btn-kairos-abort" id="btnKairosAbort">放棄</button>
+          <button type="button" class="btn-kairos-abort" id="btnKairosAbort">結束專注</button>
         </div>
 
         <!-- Brain Dump 快速捕捉（全域 Ctrl/Cmd+K 觸發）-->
@@ -243,7 +243,7 @@
     <div class="kairos-abort-modal" id="kairosAbortModal" style="display:none;" role="dialog" aria-modal="true">
       <div class="kairos-abort-inner">
         <h3 class="kairos-abort-title">需要調整方向嗎？</h3>
-        <p class="kairos-abort-subtitle">剛才的 <span id="kairosAbortElapsed">0</span> 分鐘有被記錄下來，沒有白費。</p>
+        <p class="kairos-abort-subtitle">剛才投入的 <span id="kairosAbortElapsed">0</span> 分鐘有被記錄下來，沒有白費。</p>
         <div class="kairos-abort-options">
           <button type="button" class="kairos-abort-option" id="btnAbortTooLarge">
             <span class="kairos-abort-option-title">這任務太大了，需要重新拆解</span>
@@ -254,8 +254,8 @@
             <span class="kairos-abort-option-hint">任務留在工作桌，但移除「現在」標記</span>
           </button>
           <button type="button" class="kairos-abort-option" id="btnAbortQuit">
-            <span class="kairos-abort-option-title">純粹不想做了</span>
-            <span class="kairos-abort-option-hint">正常退出，無任何處罰</span>
+            <span class="kairos-abort-option-title">暫時不想做了</span>
+            <span class="kairos-abort-option-hint">結束這次專注，工時照常完整累積</span>
           </button>
         </div>
         <button type="button" class="kairos-abort-cancel" id="btnAbortCancel">繼續專注</button>
@@ -401,7 +401,7 @@
     <div class="modal-sheet" style="max-width: 480px;">
       <div class="modal-header">
         <h3 class="modal-title">
-          <span>推薦優先行動</span>
+          <span>依目前條件推薦</span>
         </h3>
         <button class="modal-close" id="btnCloseAutoDecide">&times;</button>
       </div>
@@ -417,7 +417,7 @@
             <div id="autoDecideReasonText" class="auto-decide-reason-text">決策理由</div>
           </div>
           <div class="auto-decide-status-note">
-            已自動指派為「現在做這個」，並在工作桌置頂高亮！
+            這是目前最適合的建議，確認後才會設為現在並開始專注。
           </div>
         </div>
       </div>
@@ -425,7 +425,7 @@
         <button id="btnAutoDecideManual" class="btn-secondary" style="font-size: 0.78rem;">微調情境條件…</button>
         <div style="display: flex; gap: 8px;">
           <button id="btnAutoDecideNext" class="btn-secondary">換一個</button>
-          <button id="btnAutoDecideAccept" class="btn-primary">開始專注</button>
+          <button id="btnAutoDecideAccept" class="btn-primary">採用並開始專注</button>
         </div>
       </div>
     </div>
@@ -750,7 +750,7 @@
           <div class="form-sublabel">在 Android 手機上安裝原生 Task Desk，支援離線執行與跨裝置手動同步。</div>
           <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
             <a href="https://github.com/Annie04082020/TaskDesk/releases/latest" target="_blank" rel="noopener" class="btn-primary" style="justify-content: center; text-decoration: none; padding: 10px 14px;">
-              <span>前往 GitHub Releases 下載最新 APK (v1.0.14)</span>
+              <span>前往 GitHub Releases 下載最新 APK (v1.0.15)</span>
             </a>
             <div style="font-size: 0.74rem; color: var(--meta-text); line-height: 1.45;">
               <strong>APK 更新說明：</strong>手機端安裝的 APK 屬於獨立離線封裝。更新網頁原始碼後，GitHub 會自動打包新版本 APK，點擊上方按鈕下載安裝即可直接覆蓋更新！

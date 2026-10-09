@@ -1292,6 +1292,10 @@
 
       if (activeFocusTaskId !== nowItem.id) {
         startFocusTimer(nowItem);
+        if (!localStorage.getItem('taskdesk_focus_hint_seen')) {
+          showToast('已進入單工專注：底層工作桌已暫時鎖定。您可隨時點暫停、結束專注，或按 Ctrl+K 隨手記雜念。');
+          localStorage.setItem('taskdesk_focus_hint_seen', 'true');
+        }
       }
       updateFocusGuardStatusBadge();
     } else {
@@ -2087,7 +2091,33 @@
     });
     metaRow.appendChild(sizeChip);
 
-    // 主介面卡片不顯示象限標籤與死線（避免造成輕重緩急焦慮，僅在總覽視窗與自動選演算法使用）
+    // 低刺激時間狀態標籤（平衡隱形死線與防止遺忘，採單色低對比呈現）
+    if (item.deadline) {
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      const dlDate = new Date(item.deadline + 'T00:00:00');
+      const diffDays = Math.round((dlDate - now) / (1000 * 60 * 60 * 24));
+      const dlChip = document.createElement('span');
+      dlChip.className = 'chip chip-deadline-risk';
+      const monthDayStr = item.deadline.substring(5).replace('-', '/');
+      if (diffDays < 0) {
+        dlChip.textContent = `逾期 · ${monthDayStr}`;
+        dlChip.classList.add('risk-overdue');
+      } else if (diffDays === 0) {
+        dlChip.textContent = `今天截止`;
+        dlChip.classList.add('risk-today');
+      } else if (diffDays === 1) {
+        dlChip.textContent = `明天截止`;
+        dlChip.classList.add('risk-near');
+      } else if (diffDays <= 7) {
+        dlChip.textContent = `本週 · ${monthDayStr}`;
+        dlChip.classList.add('risk-week');
+      } else {
+        dlChip.textContent = `${monthDayStr}`;
+        dlChip.classList.add('risk-far');
+      }
+      metaRow.appendChild(dlChip);
+    }
 
     // AI 協助中性標籤
     if (typeObj && typeObj.aiAssist) {
@@ -2380,24 +2410,38 @@
     const smallCount = todayItems.filter(it => ['small', 'micro'].includes(it.size || guessSize(it.text, it.typeId))).length;
 
     if (badgeEl) {
-      badgeEl.textContent = `${smallCount} / ${settings.todaySmallLimit} (小 / 試水溫)`;
+      badgeEl.textContent = `小/微型 ${smallCount} / ${settings.todaySmallLimit} · 總計 ${todayItems.length} 件`;
     }
 
     if (noticeEl) {
       if (smallCount >= settings.todaySmallLimit) {
-        noticeEl.textContent = `小任務/試水溫已達上限（${settings.todaySmallLimit} 件）`;
+        noticeEl.textContent = `今日小任務配額已滿 (${smallCount}/${settings.todaySmallLimit})，中大型推進任務仍可放入`;
         noticeEl.style.color = 'var(--accent-primary)';
       } else {
-        noticeEl.textContent = `小任務/試水溫上限 ${settings.todaySmallLimit} 件（總計 ${todayItems.length} 件）`;
+        noticeEl.textContent = `小/微型配額 ${settings.todaySmallLimit} 件 · 總計 ${todayItems.length} 件`;
         noticeEl.style.color = '';
       }
     }
 
     if (todayItems.length === 0) {
-      const emptyMsg = document.createElement('div');
-      emptyMsg.className = 'empty-neutral';
-      emptyMsg.textContent = '今日工作桌目前沒有項目。可從收集箱點選「今日」移入。';
-      listEl.appendChild(emptyMsg);
+      const inboxItemsCount = items.filter(it => (!it.drawer || it.drawer === 'inbox') && !it.bucket && !it.done).length;
+      const emptyWrap = document.createElement('div');
+      emptyWrap.className = 'workbench-empty-guide';
+      emptyWrap.style.cssText = 'padding: 24px 16px; text-align: center; border: 1px dashed var(--border-light); border-radius: 8px; margin: 8px 0; background: rgba(255,255,255,0.01);';
+      emptyWrap.innerHTML = `
+        <div class="empty-neutral" style="margin-bottom: 12px; color: var(--text-muted); font-size: 0.88rem;">
+          今日工作桌目前空空如也。<br>
+          <span style="font-size: 0.78rem; color: var(--meta-text);">先將想法倒入收集箱，再挑選 1~3 件放上工作桌。</span>
+        </div>
+        <button type="button" class="btn-guide-open-inbox btn-secondary" style="margin: 0 auto; display: inline-flex; align-items: center; gap: 6px; padding: 7px 16px; font-size: 0.84rem; border-color: var(--border-light); cursor: pointer;">
+          打開收集箱挑選任務 ${inboxItemsCount > 0 ? `(${inboxItemsCount})` : ''}
+        </button>
+      `;
+      const btnGuide = emptyWrap.querySelector('.btn-guide-open-inbox');
+      if (btnGuide) {
+        btnGuide.addEventListener('click', () => openDrawer('inbox'));
+      }
+      listEl.appendChild(emptyWrap);
       return;
     }
 
@@ -2429,24 +2473,38 @@
     }).length;
 
     if (badgeEl) {
-      badgeEl.textContent = `${medLargeCount} / ${settings.weekMediumLargeLimit} (中/大)`;
+      badgeEl.textContent = `中/大型 ${medLargeCount} / ${settings.weekMediumLargeLimit} · 總計 ${weekItems.length} 件`;
     }
 
     if (noticeEl) {
       if (medLargeCount >= settings.weekMediumLargeLimit) {
-        noticeEl.textContent = `中/大任務已達上限（${settings.weekMediumLargeLimit} 件）`;
+        noticeEl.textContent = `本週中大任務配額已滿 (${medLargeCount}/${settings.weekMediumLargeLimit})，小型任務仍可放入`;
         noticeEl.style.color = 'var(--accent-primary)';
       } else {
-        noticeEl.textContent = `中/大任務上限 ${settings.weekMediumLargeLimit} 件（總計 ${weekItems.length} 件）`;
+        noticeEl.textContent = `中/大型配額 ${settings.weekMediumLargeLimit} 件 · 總計 ${weekItems.length} 件`;
         noticeEl.style.color = '';
       }
     }
 
     if (weekItems.length === 0) {
-      const emptyMsg = document.createElement('div');
-      emptyMsg.className = 'empty-neutral';
-      emptyMsg.textContent = '這週目前沒有挑選的項目。可從收集箱點選移入。';
-      listEl.appendChild(emptyMsg);
+      const inboxItemsCount = items.filter(it => (!it.drawer || it.drawer === 'inbox') && !it.bucket && !it.done).length;
+      const emptyWrap = document.createElement('div');
+      emptyWrap.className = 'workbench-empty-guide';
+      emptyWrap.style.cssText = 'padding: 24px 16px; text-align: center; border: 1px dashed var(--border-light); border-radius: 8px; margin: 8px 0; background: rgba(255,255,255,0.01);';
+      emptyWrap.innerHTML = `
+        <div class="empty-neutral" style="margin-bottom: 12px; color: var(--text-muted); font-size: 0.88rem;">
+          這週工作桌目前沒有項目。<br>
+          <span style="font-size: 0.78rem; color: var(--meta-text);">可拉開收集箱挑選中長期或核心推進事項。</span>
+        </div>
+        <button type="button" class="btn-guide-open-inbox btn-secondary" style="margin: 0 auto; display: inline-flex; align-items: center; gap: 6px; padding: 7px 16px; font-size: 0.84rem; border-color: var(--border-light); cursor: pointer;">
+          打開收集箱挑選任務 ${inboxItemsCount > 0 ? `(${inboxItemsCount})` : ''}
+        </button>
+      `;
+      const btnGuide = emptyWrap.querySelector('.btn-guide-open-inbox');
+      if (btnGuide) {
+        btnGuide.addEventListener('click', () => openDrawer('inbox'));
+      }
+      listEl.appendChild(emptyWrap);
       return;
     }
 
@@ -3261,9 +3319,10 @@
     });
   }
 
-  // --- 幫我選：客觀自動決策引擎 (Auto-Decide) ---
+  // --- 幫我選：依條件推薦引擎 (Auto-Decide) ---
   let autoDecideCandidates = [];
   let autoDecideCurrentIndex = 0;
+  let autoDecidePreviewItemId = null;
 
   function runAutoDecideTask() {
     // 優先挑選未完成之活躍項目 (今日 > 這週 > 保溫)
@@ -3405,8 +3464,8 @@
     const candidate = autoDecideCandidates[index];
     const item = candidate.item;
 
-    // 直接在系統中將此任務指派為「現在做這個」
-    setAsNow(item.id);
+    // 僅記錄預覽候選任務 ID，不提前更改任務狀態，待使用者確認才設為現在
+    autoDecidePreviewItemId = item.id;
 
     // 填入彈窗內容
     const modal = document.getElementById('modalAutoDecide');
@@ -3437,7 +3496,7 @@
     }
 
     if (reasonText) {
-      reasonText.textContent = `根據條件評估：${candidate.reasonSummary} 已為您直接設定為「現在」，即刻專注於此！`;
+      reasonText.textContent = `推薦理由：${candidate.reasonSummary}`;
     }
 
     if (modal) modal.style.display = 'flex';
@@ -4712,7 +4771,7 @@
         selectedCaptureDeadline = null;
         if (btnToggleDeadline) btnToggleDeadline.classList.remove('has-deadline');
         if (deadlineBadgeText) deadlineBadgeText.textContent = '死線';
-        showToast(`已將 ${parsed.length} 件項目收進「收集箱」抽屜`);
+        showToast(`已存入收集箱（共 ${parsed.length} 件）。點擊底座抽屜即可挑選移至工作桌！`);
       }
     };
 
@@ -4978,6 +5037,7 @@
     if (btnCloseAutoDecide) {
       btnCloseAutoDecide.addEventListener('click', () => {
         document.getElementById('modalAutoDecide').style.display = 'none';
+        autoDecidePreviewItemId = null;
       });
     }
 
@@ -4985,7 +5045,11 @@
     if (btnAutoDecideAccept) {
       btnAutoDecideAccept.addEventListener('click', () => {
         document.getElementById('modalAutoDecide').style.display = 'none';
-        showToast('已為您聚焦現在任務，開始專注！');
+        if (autoDecidePreviewItemId) {
+          setAsNow(autoDecidePreviewItemId);
+          autoDecidePreviewItemId = null;
+          showToast('已採用推薦，聚焦現在任務！');
+        }
       });
     }
 
