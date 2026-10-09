@@ -1137,6 +1137,22 @@
   function updateFocusGuardStatusBadge() {
     const badge = document.getElementById('focusGuardStatusBadge');
     if (!badge) return;
+    if (window.AndroidWidgetBridge && typeof window.AndroidWidgetBridge.isAccessibilityGranted === 'function') {
+      try {
+        const granted = window.AndroidWidgetBridge.isAccessibilityGranted();
+        if (granted) {
+          badge.textContent = 'Android 守護中 (已阻擋分心 App)';
+          badge.style.color = '#2dd4bf';
+          badge.style.borderColor = 'rgba(45, 212, 191, 0.4)';
+          return;
+        } else {
+          badge.textContent = 'Android 守護未授權 (請至設定開啟)';
+          badge.style.color = '#f59e0b';
+          badge.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+          return;
+        }
+      } catch (e) {}
+    }
     if (guardianExtensionOnline) {
       badge.textContent = 'Guardian 擴充守護中 (已阻擋分心網站)';
       badge.style.color = '#2dd4bf';
@@ -1249,6 +1265,11 @@
       durMinutes: durMinutes,
       startedAt: now
     });
+    if (window.AndroidWidgetBridge && typeof window.AndroidWidgetBridge.setFocusActive === 'function') {
+      try {
+        window.AndroidWidgetBridge.setFocusActive(true, item.text);
+      } catch (e) {}
+    }
 
     focusTimerInterval = setInterval(() => {
       if (kairosSession.status === 'FOCUSING') {
@@ -1272,6 +1293,11 @@
       notifyKairosFocusStop();
     }
     broadcastFocusToExtension('STOP');
+    if (window.AndroidWidgetBridge && typeof window.AndroidWidgetBridge.setFocusActive === 'function') {
+      try {
+        window.AndroidWidgetBridge.setFocusActive(false, '');
+      } catch (e) {}
+    }
   }
 
   // 渲染 Kairos 全頁沉浸 Overlay
@@ -5685,8 +5711,55 @@
       const pinPassEl = document.getElementById('settingPinPass');
       if (pinPassEl) pinPassEl.value = '';
 
+      // 更新 Android 守護狀態
+      const androidStatusText = document.getElementById('androidGuardianStatusText');
+      const androidStatusSub = document.getElementById('androidGuardianStatusSub');
+      const btnOpenAccessibility = document.getElementById('btnOpenAndroidAccessibility');
+      const androidBadge = document.getElementById('androidGuardianBadge');
+
+      if (window.AndroidWidgetBridge && typeof window.AndroidWidgetBridge.isAccessibilityGranted === 'function') {
+        const granted = window.AndroidWidgetBridge.isAccessibilityGranted();
+        if (granted) {
+          if (androidStatusText) androidStatusText.textContent = '守護中 (無障礙服務已啟用)';
+          if (androidStatusSub) androidStatusSub.textContent = '專注時將自動攔截 YouTube、IG、TikTok 等分心 App';
+          if (androidBadge) {
+            androidBadge.textContent = '守護運作中';
+            androidBadge.style.color = 'var(--accent-teal)';
+            androidBadge.style.borderColor = 'rgba(45, 212, 191, 0.4)';
+          }
+          if (btnOpenAccessibility) {
+            btnOpenAccessibility.style.display = 'inline-block';
+            btnOpenAccessibility.textContent = '重新檢查';
+          }
+        } else {
+          if (androidStatusText) androidStatusText.textContent = '尚未授權無障礙服務';
+          if (androidStatusSub) androidStatusSub.textContent = '點擊前往手機設定開啟 TaskDesk 專注守護者權限';
+          if (androidBadge) {
+            androidBadge.textContent = '待授權';
+            androidBadge.style.color = '#f59e0b';
+            androidBadge.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+          }
+          if (btnOpenAccessibility) {
+            btnOpenAccessibility.style.display = 'inline-block';
+            btnOpenAccessibility.textContent = '前往設定授權';
+          }
+        }
+      } else {
+        if (androidStatusText) androidStatusText.textContent = '未偵測到原生 Android 環境';
+        if (androidStatusSub) androidStatusSub.textContent = '安裝下方 Android APK 即可享有系統級跨 App 鎖定守護';
+        if (btnOpenAccessibility) btnOpenAccessibility.style.display = 'none';
+      }
+
       modalSettings.style.display = 'flex';
     }
+
+    safeOn('btnOpenAndroidAccessibility', 'click', () => {
+      if (window.AndroidWidgetBridge && typeof window.AndroidWidgetBridge.openAccessibilitySettings === 'function') {
+        window.AndroidWidgetBridge.openAccessibilitySettings();
+      } else {
+        showToast('目前非 Android App 環境');
+      }
+    });
 
     // 常駐設定按鈕 (桌面/手機均可直接點擊)
     safeOn('btnOpenSettings', 'click', openSettingsModal);

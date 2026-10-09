@@ -73,12 +73,36 @@ function injectManifest(manifestPath) {
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_quick_capture_info" />
         </receiver>
+
+        <!-- Focus Guardian (取代 StayFree 原生鎖定守護服務) -->
+        <service
+            android:name=".guardian.FocusGuardianAccessibilityService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true"
+            android:label="@string/accessibility_guardian_label">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/focus_guardian_accessibility_config" />
+        </service>
+
+        <activity
+            android:name=".guardian.BlockOverlayActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+            android:launchMode="singleTop" />
     </application>`;
+
+  if (!content.includes('android.permission.SYSTEM_ALERT_WINDOW')) {
+    content = content.replace('<application', '    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />\n    <application');
+  }
 
   if (content.includes('</application>')) {
     content = content.replace('</application>', receiverSnippet);
     fs.writeFileSync(manifestPath, content, 'utf8');
-    console.log('[Widgets] Successfully injected AppWidget receivers into AndroidManifest.xml');
+    console.log('[Widgets & Guardian] Successfully injected AppWidget receivers and Focus Guardian into AndroidManifest.xml');
   } else {
     console.warn('[Widgets] Could not find </application> tag in AndroidManifest.xml');
   }

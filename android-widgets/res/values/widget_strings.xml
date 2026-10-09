@@ -8,4 +8,7 @@
 
     <string name="widget_capture_label">Task Desk · 快速收集</string>
     <string name="widget_capture_desc">一鍵從桌面開啟輸入框，即時捕捉靈感與待辦事項。</string>
+
+    <string name="accessibility_guardian_label">TaskDesk 專注守護者</string>
+    <string name="accessibility_guardian_desc">在您啟動 TaskDesk 專注工作時，自動攔截分心 App (如 YouTube、社群媒體)，維持深度工作流。</string>
 </resources>

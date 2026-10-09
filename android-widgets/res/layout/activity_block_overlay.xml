@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0b0f17"
+    android:padding="24dp">
+
+    <!-- 主介面卡片 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/widget_bg_rounded"
+        android:orientation="vertical"
+        android:padding="28dp">
+
+        <!-- 徽章標籤 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/widget_tag_bg"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp"
+            android:text="TASKDESK GUARDIAN"
+            android:textColor="#38bdf8"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <!-- 標題 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="目前正在專注工作中"
+            android:textColor="#ffffff"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="已為你阻擋分心干擾，保護深度工作流。"
+            android:textColor="#94a3b8"
+            android:textSize="13sp" />
+
+        <!-- 當前任務聚光卡片 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:background="#151b26"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="當前核心任務"
+                android:textColor="#38bdf8"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvBlockedTaskText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="專注任務執行中"
+                android:textColor="#ffffff"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvBlockedAppName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="已攔截分心 App：YouTube"
+                android:textColor="#94a3b8"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- 操作按鈕群 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:orientation="vertical">
+
+            <Button
+                android:id="@+id/btnReturnToTaskDesk"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="#ffffff"
+                android:text="返回 TaskDesk 工作桌"
+                android:textAllCaps="false"
+                android:textColor="#0b0f17"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/btnFrictionPass"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="10dp"
+                android:background="#222a38"
+                android:text="需要查資料？深呼吸 5 秒通行 3 分鐘"
+                android:textAllCaps="false"
+                android:textColor="#f1f5f9"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/btnGoHome"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:layout_marginTop="6dp"
+                android:background="@android:color/transparent"
+                android:text="回到手機桌面"
+                android:textAllCaps="false"
+                android:textColor="#64748b"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 5 秒深呼吸冷卻覆蓋層 -->
+    <LinearLayout
+        android:id="@+id/layoutFrictionOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#f20b0f17"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tvBreathingCountdown"
+            android:layout_width="100dp"
+            android:layout_height="100dp"
+            android:background="@drawable/widget_bg_rounded"
+            android:gravity="center"
+            android:text="5"
+            android:textColor="#38bdf8"
+            android:textSize="36sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="深呼吸，確認是否為必要操作..."
+            android:textColor="#94a3b8"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+</FrameLayout>

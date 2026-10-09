@@ -138,6 +138,22 @@ cd android
 
 ---
 
+## 手機端專注守護系統 (Android Mobile Focus Guardian · 取代 StayFree)
+
+為滿足在 Android 手機上整合「任務管理 + 專注計時 + 跨 App 分心鎖定」之一體化需求，TaskDesk 原生支援系統級守護服務：
+
+1. **核心能力**：
+   * **原生無障礙即時攔截**：透過 Android 原生 `AccessibilityService`，開工專注時自動攔截 YouTube、Instagram、TikTok、Threads、Twitter/X、Reddit、Bilibili、遊戲等分心 App。
+   * **全螢幕沉浸阻擋畫面**：一旦嘗試開啟分心 App，自動覆蓋 TaskDesk 阻擋畫面，顯示當前主要任務，並支援一鍵回桌或退回桌面。
+   * **深呼吸彈性通行通道 (Friction Pass)**：遇臨時查資料需求，提供 5 秒深呼吸冷卻倒數後放行 3 分鐘，避免強硬鎖機引發逆反。
+   * **極低功耗與隱私保護**：僅監聽視窗變更事件 (`typeWindowStateChanged`)，不讀取任何螢幕內容文字，零後台額外耗電。
+2. **啟用步驟**：
+   * 安裝 TaskDesk APK 後，進入系統設定 ➔ 點擊「**前往授權**」。
+   * 在手機「**無障礙 (Accessibility)**」設定中，將「**TaskDesk 專注守護者**」切換為「**開啟**」。
+   * 在 TaskDesk 點選任務開始專注，即刻享有全手機分心 App 自動封鎖防護！
+
+---
+
 ## 資料安全性與同步架構說明
 
 * **100% 儲存於設備本機 (Local-First)**：所有任務項目、自訂標籤、專注工時與系統設定均儲存於瀏覽器或設備本機之 `LocalStorage`。無外部第三方分析或後端伺服器，無隱私外洩疑慮。

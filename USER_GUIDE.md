@@ -240,6 +240,12 @@ Task Desk 提供原生 Android APK 離線安裝版本，具備完整的 PWA 離�
 * **背景防凍結真實計時**：切換至其他本機視窗（如 Word、VS Code）專注工作，背景工時絲毫不中斷。
 * **安裝方式**：於 Edge 開啟 `edge://extensions`（或 Chrome `chrome://extensions`），開啟「開發人員模式」，點選「載入未封裝項目」並選擇專案中的 `extension/` 目錄即可。
 
+### 10.4 手機端專注守護系統 (取代 StayFree)
+安裝 Android APK 後，TaskDesk 原生整合了類似 StayFree 的系統級防分心守護：
+* **跨 App 即時攔截**：開工專注時，若在手機切換至 YouTube、Instagram、TikTok、Threads、Twitter/X、Reddit、Bilibili 或手機遊戲，系統會即刻彈出 TaskDesk 阻擋畫面。
+* **冷靜提醒與深呼吸放行**：阻擋畫面顯示當前主要任務，並提供「返回工作桌」與「5 秒深呼吸放行 3 分鐘」通道，維護自律並保留彈性。
+* **如何啟用**：在系統設定中點擊「前往授權」，於手機「無障礙 (Accessibility)」設定中將「TaskDesk 專注守護者」開啟即可。
+
 ---
 
 ## 11. 鍵盤快捷鍵一覽
