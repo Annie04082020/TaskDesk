@@ -76,7 +76,7 @@ function injectManifest(manifestPath) {
 
         <!-- Focus Guardian (取代 StayFree 原生鎖定守護服務) -->
         <service
-            android:name=".guardian.FocusGuardianAccessibilityService"
+            android:name="com.annie.taskdesk.guardian.FocusGuardianAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true"
             android:label="@string/accessibility_guardian_label">
@@ -89,9 +89,9 @@ function injectManifest(manifestPath) {
         </service>
 
         <activity
-            android:name=".guardian.BlockOverlayActivity"
+            android:name="com.annie.taskdesk.guardian.BlockOverlayActivity"
             android:exported="false"
-            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+            android:theme="@style/AppTheme.NoActionBar"
             android:launchMode="singleTop" />
     </application>`;
 

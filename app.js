@@ -3270,6 +3270,38 @@
 
       const box = document.createElement('div');
       box.className = `matrix-quadrant-box ${quad.borderClass}`;
+      box.dataset.quadrant = quad.id;
+
+      // 拖曳放置目標 (Drop Zone)
+      box.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        box.classList.add('drag-over');
+      });
+      box.addEventListener('dragleave', (e) => {
+        if (!box.contains(e.relatedTarget)) {
+          box.classList.remove('drag-over');
+        }
+      });
+      box.addEventListener('drop', (e) => {
+        e.preventDefault();
+        box.classList.remove('drag-over');
+        const itemId = e.dataTransfer.getData('text/plain');
+        if (!itemId) return;
+        const targetItem = items.find(it => it.id === itemId);
+        if (!targetItem) return;
+
+        const targetQuadId = quad.id; // 'q1', 'q2', 'q3', 'q4'
+        if (targetItem.manualQuadrant === targetQuadId) return;
+
+        targetItem.manualQuadrant = targetQuadId;
+        targetItem.quadrant = targetQuadId;
+        targetItem.updatedAt = Date.now();
+        saveItems();
+        renderAll();
+        renderMatrixModal();
+        showToast(`已將任務移至 ${quad.title} (${quad.id.toUpperCase()})`);
+      });
 
       const header = document.createElement('div');
       header.className = 'matrix-quadrant-header';
@@ -3300,12 +3332,23 @@
         empty.className = 'empty-neutral';
         empty.style.padding = '24px 0';
         empty.style.fontSize = '0.78rem';
-        empty.textContent = '此象限尚無待辦事項';
+        empty.textContent = '此象限尚無待辦事項 (可將卡片拖曳至此)';
         itemsList.appendChild(empty);
       } else {
         qItems.forEach(it => {
           const card = document.createElement('div');
           card.className = `matrix-item-card ${it.isNow ? 'is-now' : ''}`;
+          card.draggable = true;
+
+          card.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', it.id);
+            e.dataTransfer.effectAllowed = 'move';
+            card.classList.add('is-dragging');
+          });
+          card.addEventListener('dragend', () => {
+            card.classList.remove('is-dragging');
+            document.querySelectorAll('.matrix-quadrant-box').forEach(b => b.classList.remove('drag-over'));
+          });
 
           const mainRow = document.createElement('div');
           mainRow.className = 'matrix-item-main';
@@ -5833,7 +5876,51 @@
       });
     }
 
-    // 全域大腦暫存器快捷鍵 (Ctrl/Cmd + K)
+    // 統一關閉所有非主畫面覆蓋層 (Modals, Drawers, Nav Tools, Popups) 返回主工作桌
+    function closeAllNonMainOverlays() {
+      let closedSomething = false;
+
+      // 1. 關閉所有彈出 Modal
+      document.querySelectorAll('.modal-overlay').forEach(modal => {
+        if (modal.style.display && modal.style.display !== 'none') {
+          modal.style.display = 'none';
+          closedSomething = true;
+        }
+      });
+
+      // 2. 關閉桌上工具選單 (Nav Tools)
+      const navToolsMenu = document.getElementById('navToolsMenu');
+      if (navToolsMenu && navToolsMenu.style.display && navToolsMenu.style.display !== 'none') {
+        closeNavTools();
+        closedSomething = true;
+      }
+
+      // 3. 關閉所有底座抽屜
+      const openDrawers = document.querySelectorAll('.drawer.open');
+      if (openDrawers.length > 0) {
+        openDrawers.forEach(drawer => drawer.classList.remove('open'));
+        const backdrop = document.getElementById('drawerBackdrop');
+        if (backdrop) backdrop.style.display = 'none';
+        closedSomething = true;
+      }
+
+      // 4. 關閉浮動彈出選單
+      document.querySelectorAll('.deadline-menu-popup, .context-menu-popup').forEach(popup => {
+        popup.remove();
+        closedSomething = true;
+      });
+
+      // 5. 關閉大腦暫存器
+      const dump = document.getElementById('kairosbrainDump');
+      if (dump && dump.style.display === 'block') {
+        closeBrainDump();
+        closedSomething = true;
+      }
+
+      return closedSomething;
+    }
+
+    // 全域大腦暫存器快捷鍵 (Ctrl/Cmd + K) 與 全域 ESC 返回主畫面
     window.addEventListener('keydown', (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
@@ -5850,13 +5937,10 @@
           }
         }
       } else if (e.key === 'Escape') {
-        const dump = document.getElementById('kairosbrainDump');
-        if (dump && dump.style.display === 'block') {
-          closeBrainDump();
-        }
-        const modal = document.getElementById('kairosAbortModal');
-        if (modal && modal.style.display === 'flex') {
-          closeKairosAbortModal();
+        // 只要是非主畫面的選單/彈窗/抽屜，按 ESC 均可直接返回主畫面
+        const closed = closeAllNonMainOverlays();
+        if (closed) {
+          e.preventDefault();
         }
       }
     });

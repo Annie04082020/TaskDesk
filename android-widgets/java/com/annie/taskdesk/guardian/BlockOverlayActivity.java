@@ -1,6 +1,6 @@
 package com.annie.taskdesk.guardian;
 
-import android.app.Activity;
+import androidx.appcompat.app.AppCompatActivity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -14,7 +14,7 @@ import android.widget.TextView;
 import com.annie.taskdesk.MainActivity;
 import com.annie.taskdesk.R;
 
-public class BlockOverlayActivity extends Activity {
+public class BlockOverlayActivity extends AppCompatActivity {
 
     private String blockedPkg = "";
     private String taskText = "";

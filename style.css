@@ -2755,6 +2755,30 @@ input:checked + .slider:before {
   box-shadow: 0 0 10px rgba(0, 240, 255, 0.15);
 }
 
+.matrix-item-card {
+  cursor: grab;
+  user-select: none;
+}
+
+.matrix-item-card:active {
+  cursor: grabbing;
+}
+
+.matrix-item-card.is-dragging {
+  opacity: 0.35;
+  border-style: dashed;
+}
+
+.matrix-quadrant-box {
+  transition: all 0.2s ease;
+}
+
+.matrix-quadrant-box.drag-over {
+  border-color: var(--accent-primary) !important;
+  background: rgba(56, 189, 248, 0.08) !important;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.2);
+}
+
 .matrix-item-main {
   display: flex;
   align-items: flex-start;
