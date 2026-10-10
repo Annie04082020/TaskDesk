@@ -2336,7 +2336,11 @@
       const routineChip = document.createElement('span');
       routineChip.className = 'chip chip-routine';
       routineChip.textContent = '每日習慣';
-      routineChip.title = '每日自動重設，依能量與時機浮出推薦';
+      routineChip.title = '點擊開啟每日習慣庫設定與調整時機';
+      routineChip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openRoutinesModal();
+      });
       metaRow.appendChild(routineChip);
     }
 
@@ -4064,17 +4068,57 @@
       info.className = 'routine-item-info';
 
       const title = document.createElement('div');
-      title.className = 'routine-item-title';
+      title.className = 'routine-item-title routine-item-title-editable';
       title.textContent = r.text;
+      title.title = '點擊可修改習慣名稱';
       if (r.done) {
         title.style.textDecoration = 'line-through';
         title.style.opacity = '0.55';
       }
+      title.addEventListener('click', () => {
+        const newName = prompt('修改習慣名稱：', r.text);
+        if (newName && newName.trim() && newName.trim() !== r.text) {
+          r.text = newName.trim();
+          r.updatedAt = Date.now();
+          saveItems();
+          renderRoutinesModal();
+          renderAll();
+          showToast(`已更新習慣名稱為「${r.text}」`);
+        }
+      });
 
       const meta = document.createElement('div');
       meta.className = 'routine-item-meta';
-      const triggerText = triggerLabels[r.routineTrigger || 'recharge'] || '任意時段';
-      meta.textContent = `${triggerText} · 今日${r.done ? '已完成' : '待命推薦'}`;
+
+      const selectTrigger = document.createElement('select');
+      selectTrigger.className = 'routine-select-inline';
+      selectTrigger.title = '切換此習慣的推薦浮出時機';
+      const triggerOptions = [
+        { val: 'recharge', label: '疲憊/卡關時' },
+        { val: 'high', label: '精力充沛時' },
+        { val: 'evening', label: '傍晚日常' },
+        { val: 'any', label: '任意時段' }
+      ];
+      triggerOptions.forEach(opt => {
+        const opEl = document.createElement('option');
+        opEl.value = opt.val;
+        opEl.textContent = opt.label;
+        if ((r.routineTrigger || 'recharge') === opt.val) opEl.selected = true;
+        selectTrigger.appendChild(opEl);
+      });
+      selectTrigger.addEventListener('change', (e) => {
+        r.routineTrigger = e.target.value;
+        r.updatedAt = Date.now();
+        saveItems();
+        if (typeof renderAmbientSuggestion === 'function') renderAmbientSuggestion();
+        showToast(`已將「${r.text}」推薦時機調整為：${triggerLabels[r.routineTrigger] || '任意時段'}`);
+      });
+
+      const statusSpan = document.createElement('span');
+      statusSpan.textContent = `· 今日${r.done ? '已完成' : '待命推薦'}`;
+
+      meta.appendChild(selectTrigger);
+      meta.appendChild(statusSpan);
 
       info.appendChild(title);
       info.appendChild(meta);
@@ -5711,6 +5755,15 @@
         const modalSync = document.getElementById('modalSync');
         if (modalSync) modalSync.style.display = 'flex';
         checkRemoteGistStatus(false);
+      });
+    }
+
+    const btnOpenRoutinesFromSettings = document.getElementById('btnOpenRoutinesFromSettings');
+    if (btnOpenRoutinesFromSettings) {
+      btnOpenRoutinesFromSettings.addEventListener('click', () => {
+        const modalSettings = document.getElementById('modalSettings');
+        if (modalSettings) modalSettings.style.display = 'none';
+        openRoutinesModal();
       });
     }
 

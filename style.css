@@ -4925,6 +4925,32 @@ input:checked + .slider:before {
   border-color: rgba(99, 102, 241, 0.35);
   color: #a5b4fc;
   background: rgba(99, 102, 241, 0.08);
+  cursor: pointer;
+}
+
+.routine-select-inline {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-color);
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  cursor: pointer;
+  outline: none;
+  font-family: inherit;
+}
+
+.routine-select-inline:hover {
+  border-color: var(--border-light);
+}
+
+.routine-item-title-editable {
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.routine-item-title-editable:hover {
+  color: var(--accent-primary);
 }
 
 
