@@ -4863,12 +4863,25 @@ input:checked + .slider:before {
 
 .routine-select {
   flex: 1;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid var(--input-border);
-  color: var(--text-color);
+  background-color: #101524;
+  border: 1px solid var(--border-light);
+  color: #f8fafc;
   padding: 8px 10px;
   border-radius: var(--radius-sm);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
+  color-scheme: dark;
+  outline: none;
+  cursor: pointer;
+}
+
+.routine-select:focus {
+  border-color: var(--accent-primary);
+}
+
+.routine-select option {
+  background-color: #101524 !important;
+  color: #f8fafc !important;
+  padding: 8px 12px;
 }
 
 .routine-list {
@@ -4929,19 +4942,26 @@ input:checked + .slider:before {
 }
 
 .routine-select-inline {
-  background: rgba(255, 255, 255, 0.05);
+  background-color: #101524;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  color: var(--text-color);
+  color: #f8fafc;
   font-size: 0.72rem;
-  padding: 2px 6px;
+  padding: 3px 8px;
   cursor: pointer;
   outline: none;
   font-family: inherit;
+  color-scheme: dark;
 }
 
 .routine-select-inline:hover {
   border-color: var(--border-light);
+}
+
+.routine-select-inline option {
+  background-color: #101524 !important;
+  color: #f8fafc !important;
+  padding: 6px 10px;
 }
 
 .routine-item-title-editable {
@@ -4951,6 +4971,21 @@ input:checked + .slider:before {
 
 .routine-item-title-editable:hover {
   color: var(--accent-primary);
+}
+
+/* 全域原生 select 與 option 深色主題高對比修復 */
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: #101524 !important;
+  color: #f8fafc !important;
+}
+
+select option:checked {
+  background-color: #1e293b !important;
+  color: #00f0ff !important;
 }
 
 
