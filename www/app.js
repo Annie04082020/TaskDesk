@@ -96,9 +96,19 @@
   const STORAGE_KEY_SETTINGS = 'taskdesk_settings_v1';
   const STORAGE_KEY_SYNC = 'taskdesk_sync_v1';
   const STORAGE_KEY_FOCUS_SESSIONS = 'taskdesk_focus_sessions_v1';
+  const STORAGE_KEY_USER_STATE = 'taskdesk_user_state_v1';
 
   let rules = DEFAULT_RULES;
   let items = [];
+  let currentUserState = {
+    energy: 'high', // 'high' | 'low'
+    flow: 'smooth', // 'smooth' | 'stuck'
+    updatedAt: 0
+  };
+  let ambientCandidates = [];
+  let ambientCurrentIndex = 0;
+  let ambientDismissed = false;
+  let isCaptureRoutineActive = false;
   let settings = {
     todaySmallLimit: 3,
     weekMediumLargeLimit: 3,
@@ -155,15 +165,18 @@
   // --- 初始化流程 ---
   async function init() {
     loadSettings();
+    loadUserState();
     loadSyncConfig();
     applyTheme(settings.theme);
     applySafeTop(settings.safeTop);
     loadItems();
+    checkAndResetRoutines();
     await loadRules();
     setupEventListeners();
     setupPWA();
     renderAll();
     checkLockOnStartup();
+    checkStartupStatePrompt();
     if (window.location.hash === '#quick_capture' || window.location.search.includes('action=quick_capture')) {
       setTimeout(() => {
         if (window.handleQuickCaptureFromWidget) window.handleQuickCaptureFromWidget();
@@ -206,6 +219,100 @@
     } catch (e) {
       console.error('儲存設定失敗:', e);
     }
+  }
+
+  function loadUserState() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_USER_STATE);
+      if (saved) {
+        currentUserState = Object.assign({}, currentUserState, JSON.parse(saved));
+      }
+    } catch (e) {
+      console.warn('載入使用者狀態失敗:', e);
+    }
+  }
+
+  function saveUserState() {
+    try {
+      localStorage.setItem(STORAGE_KEY_USER_STATE, JSON.stringify(currentUserState));
+    } catch (e) {
+      console.error('儲存使用者狀態失敗:', e);
+    }
+  }
+
+  function getTodayDateStr() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  function checkAndResetRoutines() {
+    const todayStr = getTodayDateStr();
+    let changed = false;
+    items.forEach(it => {
+      if (it.isRoutine) {
+        if (it.lastResetDate !== todayStr) {
+          if (it.done) {
+            it.done = false;
+            it.doneAt = null;
+          }
+          it.lastResetDate = todayStr;
+          it.updatedAt = Date.now();
+          changed = true;
+        }
+      }
+    });
+    if (changed) {
+      saveItems();
+    }
+  }
+
+  function checkStartupStatePrompt() {
+    const elapsed = Date.now() - (currentUserState.updatedAt || 0);
+    // 若超過 3.5 小時未更新，或今日剛開工，提示速評當前能量
+    if (elapsed > 3.5 * 60 * 60 * 1000) {
+      setTimeout(() => {
+        showPostTaskCheckin(null, true);
+      }, 700);
+    }
+  }
+
+  function showPostTaskCheckin(taskItem = null, isStartup = false) {
+    const checkinEl = document.getElementById('postTaskCheckin');
+    const titleEl = document.getElementById('postTaskCheckinTitle');
+    if (!checkinEl) return;
+    if (isStartup) {
+      if (titleEl) titleEl.textContent = '歡迎上桌開工！目前身心能量狀態如何？';
+    } else if (taskItem) {
+      if (titleEl) titleEl.textContent = `剛完成「${taskItem.text}」！目前感覺如何？`;
+    } else {
+      if (titleEl) titleEl.textContent = '目前身心能量狀態感覺如何？';
+    }
+    checkinEl.style.display = 'block';
+  }
+
+  function closePostTaskCheckin() {
+    const checkinEl = document.getElementById('postTaskCheckin');
+    if (checkinEl) checkinEl.style.display = 'none';
+  }
+
+  function setUserState(energy, flow) {
+    currentUserState.energy = energy;
+    currentUserState.flow = flow;
+    currentUserState.updatedAt = Date.now();
+    saveUserState();
+    ambientDismissed = false;
+    ambientCurrentIndex = 0;
+    closePostTaskCheckin();
+    renderAmbientSuggestion();
+    const stateLabels = {
+      'high_smooth': '充沛 · 順暢',
+      'high_stuck': '充沛 · 卡關',
+      'low_smooth': '疲憊 · 順暢',
+      'low_stuck': '疲憊 · 卡關'
+    };
+    const key = `${energy}_${flow}`;
+    showToast(`狀態已更新為【${stateLabels[key] || ''}】，推薦條已同步調整`);
   }
 
   function loadSyncConfig() {
@@ -674,9 +781,15 @@
         text = text.replace(dlMatch[0], '').trim();
       }
 
+      let isRoutine = isCaptureRoutineActive;
+      if (/#routine\b/i.test(text) || /#習慣\b/.test(text)) {
+        isRoutine = true;
+        text = text.replace(/#routine\b/i, '').replace(/#習慣\b/, '').trim();
+      }
+
       // 判定是否作為子任務放入 currentParentItem
       const parentIdToUse = (isSubtask && currentParentItem) ? currentParentItem.id : null;
-      const targetBucket = (parentIdToUse && currentParentItem) ? currentParentItem.bucket : 'inbox';
+      const targetBucket = (parentIdToUse && currentParentItem) ? currentParentItem.bucket : (isRoutine ? 'keep' : 'inbox');
 
       // 立即使用本機關鍵字備案作為初值
       const keywordGuessedType = guessTypeByKeywords(text);
@@ -698,7 +811,11 @@
         aiGenerated: false,
         manualQuadrant: parsedQuadrant,
         quadrant: parsedQuadrant || getComputedQuadrant({ text: text, size: itemSize, deadline: parsedDeadline }),
-        deadline: parsedDeadline || null
+        deadline: parsedDeadline || null,
+        isRoutine: isRoutine,
+        routineTrigger: isRoutine ? 'recharge' : null,
+        routineCadence: isRoutine ? 'daily' : null,
+        lastResetDate: isRoutine ? getTodayDateStr() : null
       };
       items.push(item);
       newItems.push(item);
@@ -888,7 +1005,17 @@
       saveItems();
       renderAll();
       if (isChecked) {
-        showToast(`已完成「${item.text}」，已永久歸檔至歷史檔案庫`);
+        if (item.isRoutine) {
+          item.lastResetDate = getTodayDateStr();
+          showToast(`已完成今日習慣「${item.text}」！明天將自動重設`);
+        } else {
+          showToast(`已完成「${item.text}」，已永久歸檔至歷史檔案庫`);
+        }
+        if (!item.parentId) {
+          setTimeout(() => {
+            showPostTaskCheckin(item, false);
+          }, 350);
+        }
       }
     }, 200);
   }
@@ -2102,6 +2229,7 @@
     renderFocusLockBanner();
     renderWeekCounter();
     renderWorkbenchCounters();
+    renderAmbientSuggestion();
     renderToday();
     renderWeek();
     updateDockBadges();
@@ -2202,6 +2330,15 @@
       openSizePicker(item.id, sizeChip);
     });
     metaRow.appendChild(sizeChip);
+
+    // 每日習慣 Chip
+    if (item.isRoutine) {
+      const routineChip = document.createElement('span');
+      routineChip.className = 'chip chip-routine';
+      routineChip.textContent = '每日習慣';
+      routineChip.title = '每日自動重設，依能量與時機浮出推薦';
+      metaRow.appendChild(routineChip);
+    }
 
     // 低刺激時間狀態標籤（平衡隱形死線與防止遺忘，採單色低對比呈現）
     if (item.deadline) {
@@ -3657,6 +3794,371 @@
     if (modal) modal.style.display = 'flex';
   }
 
+  // --- 常駐環境推薦引擎 (Ambient Suggestion Engine) ---
+  function getAmbientCandidates() {
+    const now = new Date();
+    const currentHour = now.getHours();
+    const todayStr = getTodayDateStr();
+
+    // 候選池：
+    // 1. 今日工作桌未完成主要任務
+    // 2. 這週工作桌未完成主要任務
+    // 3. 每日習慣未完成者 (isRoutine && !done)
+    const pool = items.filter(it => {
+      if (it.done || it.parentId) return false;
+      if (it.isRoutine) {
+        return true;
+      }
+      return it.bucket === 'today' || it.bucket === 'week';
+    });
+
+    if (pool.length === 0) return [];
+
+    const scored = pool.map(item => {
+      let score = 0;
+      const reasons = [];
+
+      if (item.isRoutine) {
+        score += 65;
+        const trigger = item.routineTrigger || 'recharge';
+        if (trigger === 'recharge' && (currentUserState.energy === 'low' || currentUserState.flow === 'stuck')) {
+          score += 55;
+          reasons.push('身心疲憊或卡關時，適合執行此習慣重置大腦');
+        } else if (trigger === 'high' && currentUserState.energy === 'high') {
+          score += 45;
+          reasons.push('目前體能充沛，適合進行高強度習慣');
+        } else if (trigger === 'evening' && currentHour >= 17) {
+          score += 45;
+          reasons.push('傍晚晚間時段，是養成此生活習慣的黃金期');
+        } else {
+          score += 25;
+          reasons.push('今日日常習慣待完成');
+        }
+      } else {
+        const quad = getComputedQuadrant(item);
+        const itemSize = item.size || guessSize(item.text, item.typeId);
+
+        // 1. 四象限基礎權重
+        if (quad === 'q1') {
+          score += 90;
+          reasons.push('Q1 迫在眉睫核心焦點');
+        } else if (quad === 'q2') {
+          score += 70;
+          reasons.push('Q2 重要深耕項目');
+        } else if (quad === 'q3') {
+          score += 40;
+          reasons.push('Q3 瑣事速辦');
+        } else {
+          score += 20;
+          reasons.push('順手雜項');
+        }
+
+        // 2. 死線臨近度
+        if (item.deadline) {
+          if (item.deadline <= todayStr) {
+            score += 60;
+            reasons.push('死線就在今天');
+          } else {
+            const diffDays = Math.ceil((new Date(item.deadline + 'T23:59:59').getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+            if (diffDays <= 2) {
+              score += 35;
+              reasons.push(`${diffDays} 天內到期`);
+            }
+          }
+        }
+
+        // 3. 使用者當前身心二維狀態適配
+        const { energy, flow } = currentUserState;
+        if (energy === 'high' && flow === 'smooth') {
+          if (itemSize === 'large' || itemSize === 'medium') {
+            score += 45;
+            reasons.push('精神飽滿且思緒順暢，是攻克大任務的最佳時機');
+          }
+        } else if (energy === 'high' && flow === 'stuck') {
+          if (itemSize === 'micro' || itemSize === 'small' || item.typeId === 'hands_on') {
+            score += 40;
+            reasons.push('體能充足但思緒卡關，建議切換動手做或小題目');
+          }
+        } else if (energy === 'low' && flow === 'smooth') {
+          if (itemSize === 'small' || item.typeId === 'admin' || item.typeId === 'tidy') {
+            score += 40;
+            reasons.push('手感順暢但已略感疲態，適合行政收尾與整理');
+          }
+        } else if (energy === 'low' && flow === 'stuck') {
+          if (itemSize === 'micro') {
+            score += 55;
+            reasons.push('大腦疲憊過載，建議只花 5-10m 試水溫起步');
+          } else if (itemSize === 'large') {
+            score -= 50; // 降低大任務避免抗拒
+          }
+        }
+
+        // 4. 工作桌位置加權
+        if (item.bucket === 'today') {
+          score += 30;
+        } else if (item.bucket === 'week') {
+          score += 10;
+        }
+      }
+
+      return {
+        item,
+        score,
+        reasonSummary: reasons.slice(0, 2).join(' · ') || '符合目前節奏'
+      };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored;
+  }
+
+  function renderAmbientSuggestion() {
+    const bar = document.getElementById('ambientSuggestionBar');
+    if (!bar) return;
+
+    if (ambientDismissed) {
+      bar.style.display = 'none';
+      return;
+    }
+
+    const stateTextEl = document.getElementById('ambientStateText');
+    const prefixEl = document.getElementById('ambientTaskPrefix');
+    const titleEl = document.getElementById('ambientTaskTitle');
+    const chipsEl = document.getElementById('ambientTaskChips');
+    const reasonEl = document.getElementById('ambientReasonText');
+    const btnAccept = document.getElementById('btnAmbientAccept');
+
+    const stateLabels = {
+      'high_smooth': '狀態：充沛 · 順暢',
+      'high_stuck': '狀態：充沛 · 卡關',
+      'low_smooth': '狀態：疲憊 · 順暢',
+      'low_stuck': '狀態：疲憊 · 卡關'
+    };
+    const key = `${currentUserState.energy}_${currentUserState.flow}`;
+    if (stateTextEl) stateTextEl.textContent = stateLabels[key] || '狀態：點擊切換';
+
+    const nowItem = items.find(it => it.isNow && !it.done);
+    if (nowItem) {
+      bar.style.display = 'block';
+      if (prefixEl) prefixEl.textContent = '專注中';
+      if (titleEl) titleEl.textContent = nowItem.text;
+      if (chipsEl) {
+        chipsEl.innerHTML = '';
+        const chip = document.createElement('span');
+        chip.className = 'chip chip-now';
+        chip.textContent = '● 現在做這個';
+        chipsEl.appendChild(chip);
+      }
+      if (reasonEl) reasonEl.textContent = '目前工作桌已鎖定此任務，點擊右側可直接開啟沉浸專注。';
+      if (btnAccept) btnAccept.textContent = '進入專注';
+      return;
+    }
+
+    const candidates = getAmbientCandidates();
+    ambientCandidates = candidates;
+
+    if (candidates.length === 0) {
+      bar.style.display = 'none';
+      return;
+    }
+
+    if (ambientCurrentIndex >= candidates.length) {
+      ambientCurrentIndex = 0;
+    }
+
+    const pick = candidates[ambientCurrentIndex];
+    const item = pick.item;
+
+    bar.style.display = 'block';
+    if (prefixEl) prefixEl.textContent = item.isRoutine ? '習慣推薦' : '環境推薦';
+    if (titleEl) titleEl.textContent = item.text;
+    if (chipsEl) {
+      chipsEl.innerHTML = '';
+      if (item.isRoutine) {
+        const rChip = document.createElement('span');
+        rChip.className = 'chip chip-routine';
+        rChip.textContent = '每日習慣';
+        chipsEl.appendChild(rChip);
+      } else {
+        const qInfo = getQuadrantInfo(item);
+        const qChip = document.createElement('span');
+        qChip.className = `chip chip-quadrant chip-quadrant-${qInfo.id}`;
+        qChip.textContent = qInfo.badge;
+        chipsEl.appendChild(qChip);
+      }
+    }
+    if (reasonEl) reasonEl.textContent = pick.reasonSummary;
+    if (btnAccept) btnAccept.textContent = '聚焦現在';
+  }
+
+  function handleAmbientAccept() {
+    const nowItem = items.find(it => it.isNow && !it.done);
+    if (nowItem) {
+      openKairosFocusModal(nowItem);
+      return;
+    }
+
+    if (!ambientCandidates || ambientCandidates.length === 0) return;
+    const pick = ambientCandidates[ambientCurrentIndex];
+    if (!pick) return;
+    const item = pick.item;
+
+    if (item.isRoutine) {
+      item.bucket = 'today';
+      setAsNow(item.id);
+      showToast(`已將習慣「${item.text}」移至今日並聚焦現在！`);
+    } else {
+      setAsNow(item.id);
+      showToast(`已採納推薦，聚焦「${item.text}」！`);
+    }
+    renderAll();
+  }
+
+  function handleAmbientNext() {
+    if (!ambientCandidates || ambientCandidates.length === 0) return;
+    ambientCurrentIndex = (ambientCurrentIndex + 1) % ambientCandidates.length;
+    renderAmbientSuggestion();
+  }
+
+  function handleAmbientDismiss() {
+    ambientDismissed = true;
+    const bar = document.getElementById('ambientSuggestionBar');
+    if (bar) bar.style.display = 'none';
+  }
+
+  // --- 每日習慣庫視窗管理 (Routines Management) ---
+  function openRoutinesModal() {
+    renderRoutinesModal();
+    const modal = document.getElementById('modalRoutines');
+    if (modal) modal.style.display = 'flex';
+  }
+
+  function closeRoutinesModal() {
+    const modal = document.getElementById('modalRoutines');
+    if (modal) modal.style.display = 'none';
+  }
+
+  function renderRoutinesModal() {
+    const listArea = document.getElementById('routineListArea');
+    if (!listArea) return;
+    listArea.innerHTML = '';
+
+    const routines = items.filter(it => it.isRoutine && !it.parentId);
+    if (routines.length === 0) {
+      listArea.innerHTML = '<div class="empty-neutral">目前尚無每日習慣。可在上方輸入習慣（例如：核心拉筋、慢跑 30 分鐘、讀論文 1 篇）！</div>';
+      return;
+    }
+
+    const triggerLabels = {
+      recharge: '疲憊/卡關時浮出',
+      high: '精力充沛時浮出',
+      evening: '傍晚時浮出',
+      any: '任意契合時段浮出'
+    };
+
+    routines.forEach(r => {
+      const row = document.createElement('div');
+      row.className = 'routine-item-row';
+
+      const info = document.createElement('div');
+      info.className = 'routine-item-info';
+
+      const title = document.createElement('div');
+      title.className = 'routine-item-title';
+      title.textContent = r.text;
+      if (r.done) {
+        title.style.textDecoration = 'line-through';
+        title.style.opacity = '0.55';
+      }
+
+      const meta = document.createElement('div');
+      meta.className = 'routine-item-meta';
+      const triggerText = triggerLabels[r.routineTrigger || 'recharge'] || '任意時段';
+      meta.textContent = `${triggerText} · 今日${r.done ? '已完成' : '待命推薦'}`;
+
+      info.appendChild(title);
+      info.appendChild(meta);
+
+      const actions = document.createElement('div');
+      actions.className = 'routine-item-actions';
+
+      const btnToggle = document.createElement('button');
+      btnToggle.className = 'btn-triage';
+      btnToggle.textContent = r.done ? '重設' : '完成';
+      btnToggle.addEventListener('click', () => {
+        r.done = !r.done;
+        r.doneAt = r.done ? Date.now() : null;
+        r.updatedAt = Date.now();
+        saveItems();
+        renderRoutinesModal();
+        renderAll();
+        showToast(r.done ? `今日「${r.text}」已完成！` : `「${r.text}」已重設為待命`);
+      });
+
+      const btnDoNow = document.createElement('button');
+      btnDoNow.className = 'btn-triage';
+      btnDoNow.textContent = '現在做';
+      btnDoNow.addEventListener('click', () => {
+        closeRoutinesModal();
+        r.bucket = 'today';
+        setAsNow(r.id);
+        renderAll();
+        showToast(`已將習慣「${r.text}」設為現在！`);
+      });
+
+      const btnDel = document.createElement('button');
+      btnDel.className = 'btn-delete-subtask';
+      btnDel.innerHTML = '&times;';
+      btnDel.title = '刪除此習慣';
+      btnDel.addEventListener('click', () => {
+        if (confirm(`確定要刪除習慣「${r.text}」嗎？`)) {
+          deleteItem(r.id);
+          renderRoutinesModal();
+          renderAll();
+        }
+      });
+
+      actions.appendChild(btnToggle);
+      actions.appendChild(btnDoNow);
+      actions.appendChild(btnDel);
+
+      row.appendChild(info);
+      row.appendChild(actions);
+      listArea.appendChild(row);
+    });
+  }
+
+  function addRoutine(text, trigger = 'recharge') {
+    if (!text || !text.trim()) return;
+    const item = {
+      id: generateId(),
+      text: text.trim(),
+      size: 'micro',
+      bucket: 'keep', // 平時收納，不干擾主工作桌
+      isNow: false,
+      done: false,
+      doneAt: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      typeId: guessTypeByKeywords(text.trim()) || 'physical',
+      typeSource: 'rule',
+      parentId: null,
+      aiGenerated: false,
+      manualQuadrant: null,
+      quadrant: 'q2',
+      deadline: null,
+      isRoutine: true,
+      routineTrigger: trigger,
+      routineCadence: 'daily',
+      lastResetDate: getTodayDateStr()
+    };
+    items.push(item);
+    saveItems();
+    renderRoutinesModal();
+    renderAll();
+    showToast(`已新增每日習慣「${item.text}」！`);
+  }
+
   // --- 完成紀錄 Modal 渲染 ---
   function renderHistoryModal() {
     const listArea = document.getElementById('historyListArea');
@@ -4908,6 +5410,26 @@
       });
     }
 
+    // 每日習慣標記切換
+    const btnToggleRoutine = document.getElementById('btnToggleCaptureRoutine');
+    const routineBadgeText = document.getElementById('captureRoutineBadgeText');
+    if (btnToggleRoutine) {
+      btnToggleRoutine.addEventListener('click', () => {
+        isCaptureRoutineActive = !isCaptureRoutineActive;
+        if (isCaptureRoutineActive) {
+          btnToggleRoutine.classList.add('has-deadline');
+          btnToggleRoutine.style.background = 'rgba(99, 102, 241, 0.2)';
+          btnToggleRoutine.style.borderColor = 'rgba(99, 102, 241, 0.5)';
+          if (routineBadgeText) routineBadgeText.textContent = '每日習慣';
+        } else {
+          btnToggleRoutine.classList.remove('has-deadline');
+          btnToggleRoutine.style.background = '';
+          btnToggleRoutine.style.borderColor = '';
+          if (routineBadgeText) routineBadgeText.textContent = '習慣';
+        }
+      });
+    }
+
     // 收集箱批次送出
     const btnCapture = document.getElementById('btnCaptureSubmit');
     const inputCapture = document.getElementById('inputCapture');
@@ -4926,7 +5448,19 @@
         selectedCaptureDeadline = null;
         if (btnToggleDeadline) btnToggleDeadline.classList.remove('has-deadline');
         if (deadlineBadgeText) deadlineBadgeText.textContent = '死線';
-        showToast(`已存入收集箱（共 ${parsed.length} 件）。點擊底座抽屜即可挑選移至工作桌！`);
+
+        if (isCaptureRoutineActive) {
+          isCaptureRoutineActive = false;
+          if (btnToggleRoutine) {
+            btnToggleRoutine.classList.remove('has-deadline');
+            btnToggleRoutine.style.background = '';
+            btnToggleRoutine.style.borderColor = '';
+          }
+          if (routineBadgeText) routineBadgeText.textContent = '習慣';
+          showToast(`已建立每日習慣（共 ${parsed.length} 件）！將於時機契合時自動浮出推薦`);
+        } else {
+          showToast(`已存入收集箱（共 ${parsed.length} 件）。點擊底座抽屜即可挑選移至工作桌！`);
+        }
       }
     };
 
@@ -5157,6 +5691,86 @@
       mItemSettings.addEventListener('click', () => {
         closeNavTools();
         openSettingsModal();
+      });
+    }
+
+    const mItemRoutines = document.getElementById('menuItemRoutines');
+    if (mItemRoutines) {
+      mItemRoutines.addEventListener('click', () => {
+        closeNavTools();
+        openRoutinesModal();
+      });
+    }
+
+    const btnOpenSyncFromSettings = document.getElementById('btnOpenSyncFromSettings');
+    if (btnOpenSyncFromSettings) {
+      btnOpenSyncFromSettings.addEventListener('click', () => {
+        const modalSettings = document.getElementById('modalSettings');
+        if (modalSettings) modalSettings.style.display = 'none';
+        updateSyncModalStatus();
+        const modalSync = document.getElementById('modalSync');
+        if (modalSync) modalSync.style.display = 'flex';
+        checkRemoteGistStatus(false);
+      });
+    }
+
+    // 常駐環境推薦條 (Ambient Suggestion Bar)
+    const btnAmbientAccept = document.getElementById('btnAmbientAccept');
+    if (btnAmbientAccept) btnAmbientAccept.addEventListener('click', handleAmbientAccept);
+
+    const btnAmbientNext = document.getElementById('btnAmbientNext');
+    if (btnAmbientNext) btnAmbientNext.addEventListener('click', handleAmbientNext);
+
+    const btnAmbientDismiss = document.getElementById('btnAmbientDismiss');
+    if (btnAmbientDismiss) btnAmbientDismiss.addEventListener('click', handleAmbientDismiss);
+
+    const ambientStatePill = document.getElementById('ambientStatePill');
+    if (ambientStatePill) {
+      ambientStatePill.addEventListener('click', () => {
+        showPostTaskCheckin(null, false);
+      });
+    }
+
+    // 任務後 / 開工身心二維狀態速評 (Post-Task Check-in)
+    const btnClosePostTaskCheckin = document.getElementById('btnClosePostTaskCheckin');
+    if (btnClosePostTaskCheckin) {
+      btnClosePostTaskCheckin.addEventListener('click', closePostTaskCheckin);
+    }
+
+    const stateCards = document.querySelectorAll('.state-choice-card');
+    stateCards.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const energy = btn.dataset.energy;
+        const flow = btn.dataset.flow;
+        if (energy && flow) {
+          setUserState(energy, flow);
+        }
+      });
+    });
+
+    // 每日習慣管理 (Routines Modal)
+    const btnCloseRoutines = document.getElementById('btnCloseRoutines');
+    if (btnCloseRoutines) btnCloseRoutines.addEventListener('click', closeRoutinesModal);
+
+    const btnDismissRoutines = document.getElementById('btnDismissRoutines');
+    if (btnDismissRoutines) btnDismissRoutines.addEventListener('click', closeRoutinesModal);
+
+    const btnAddRoutine = document.getElementById('btnAddRoutine');
+    const inputNewRoutineText = document.getElementById('inputNewRoutineText');
+    const selectRoutineTrigger = document.getElementById('selectRoutineTrigger');
+
+    if (btnAddRoutine && inputNewRoutineText) {
+      const handleAddRoutine = () => {
+        const text = inputNewRoutineText.value;
+        const trigger = selectRoutineTrigger ? selectRoutineTrigger.value : 'recharge';
+        if (text && text.trim()) {
+          addRoutine(text, trigger);
+          inputNewRoutineText.value = '';
+        }
+      };
+      btnAddRoutine.addEventListener('click', handleAddRoutine);
+      inputNewRoutineText.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleAddRoutine();
       });
     }
 
@@ -6035,6 +6649,13 @@
       const dump = document.getElementById('kairosbrainDump');
       if (dump && dump.style.display === 'block') {
         closeBrainDump();
+        closedSomething = true;
+      }
+
+      // 6. 關閉任務後狀態評估卡片
+      const checkin = document.getElementById('postTaskCheckin');
+      if (checkin && checkin.style.display && checkin.style.display !== 'none') {
+        closePostTaskCheckin();
         closedSomething = true;
       }
 
