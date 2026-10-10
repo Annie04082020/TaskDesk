@@ -6,6 +6,7 @@
   "scripts": {
     "start": "python -m http.server 8080",
     "build": "node build.js",
+    "test": "node --test test/sync-and-xss.test.js",
     "setup:widgets": "node setup-widgets.js",
     "cap:add": "cap add android",
     "cap:sync": "cap sync",

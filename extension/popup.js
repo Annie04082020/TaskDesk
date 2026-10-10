@@ -83,10 +83,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentBlockedDomains.forEach(domain => {
       const chip = document.createElement('div');
       chip.className = 'domain-chip';
-      chip.innerHTML = `
-        <span>${escapeHtml(domain)}</span>
-        <span class="chip-remove" data-domain="${escapeHtml(domain)}">&times;</span>
-      `;
+      const label = document.createElement('span');
+      label.textContent = domain;
+      const removeBtn = document.createElement('span');
+      removeBtn.className = 'chip-remove';
+      removeBtn.textContent = '×';
+      removeBtn.dataset.domain = domain;
+      chip.appendChild(label);
+      chip.appendChild(removeBtn);
       domainChipsContainer.appendChild(chip);
     });
   }
@@ -157,7 +161,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (err) {}
     val = val.replace(/^www\./, '');
 
-    if (!currentBlockedDomains.includes(val)) {
+    if (!currentBlockedDomains.includes(val) && /^[a-z0-9.-]+$/i.test(val)) {
       currentBlockedDomains.push(val);
       await chrome.storage.local.set({ blockedDomains: currentBlockedDomains });
       renderDomainChips();

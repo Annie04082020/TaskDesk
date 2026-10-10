@@ -93,6 +93,7 @@
 
   // --- 狀態與常數 ---
   const STORAGE_KEY_ITEMS = 'taskdesk_items_v1';
+  const STORAGE_KEY_TOMBSTONES = 'taskdesk_tombstones_v1';
   const STORAGE_KEY_SETTINGS = 'taskdesk_settings_v1';
   const STORAGE_KEY_SYNC = 'taskdesk_sync_v1';
   const STORAGE_KEY_FOCUS_SESSIONS = 'taskdesk_focus_sessions_v1';
@@ -100,6 +101,397 @@
 
   let rules = DEFAULT_RULES;
   let items = [];
+  let tombstones = {};
+
+  // --- 純函式同步與資料清洗核心模組 (Sync & Schema Engine) ---
+  const SyncEngine = {
+    ALLOWED_BUCKETS: new Set(['inbox', 'today', 'week', 'keep', 'release']),
+    ALLOWED_QUADRANTS: new Set(['q1', 'q2', 'q3', 'q4']),
+    ALLOWED_SIZES: new Set(['micro', 'small', 'medium', 'large']),
+    ALLOWED_ROUTINE_TRIGGERS: new Set(['recharge', 'high', 'evening', 'any']),
+
+    isValidDateString(str) {
+      if (typeof str !== 'string') return false;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(str)) return false;
+      const parts = str.split('-');
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const d = parseInt(parts[2], 10);
+      if (y < 1970 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return false;
+      const dt = new Date(str + 'T00:00:00Z');
+      return !isNaN(dt.getTime())
+        && dt.getUTCFullYear() === y
+        && dt.getUTCMonth() + 1 === m
+        && dt.getUTCDate() === d;
+    },
+
+    sanitizeItem(raw, generateIdFn = null) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+
+      // 文字欄位 (必填)
+      let text = '';
+      if (typeof raw.text === 'string') text = raw.text.trim();
+      else if (typeof raw.title === 'string') text = raw.title.trim();
+      else if (typeof raw.summary === 'string') text = raw.summary.trim();
+      if (!text) return null;
+
+      // ID (必填或以函式產生)
+      let id = null;
+      if (typeof raw.id === 'string' && raw.id.trim()) {
+        id = raw.id.trim();
+      } else if (typeof raw.id === 'number') {
+        id = String(raw.id);
+      } else if (typeof generateIdFn === 'function') {
+        id = generateIdFn();
+      } else {
+        return null;
+      }
+
+      // rawId (Google Tasks 或外部來源 ID)
+      let rawId = (typeof raw.rawId === 'string' && raw.rawId.trim()) ? raw.rawId.trim() : null;
+
+      // 備註
+      let notes = (typeof raw.notes === 'string') ? raw.notes : '';
+
+      // 完成狀態
+      const done = !!raw.done;
+
+      // 時間戳記正規化 (有限正整數或 null)
+      const parseTimestamp = (val) => {
+        if (typeof val === 'number' && Number.isFinite(val)) return Math.max(0, Math.floor(val));
+        if (typeof val === 'string' && /^\d+$/.test(val)) {
+          const n = parseInt(val, 10);
+          if (Number.isFinite(n)) return Math.max(0, n);
+        }
+        return null;
+      };
+
+      const createdAt = parseTimestamp(raw.createdAt);
+      const updatedAt = parseTimestamp(raw.updatedAt);
+      const doneAt = done ? parseTimestamp(raw.doneAt) : null;
+      const deletedAt = parseTimestamp(raw.deletedAt);
+
+      // deadline (僅接受 YYYY-MM-DD，惡意字串或格式錯誤一律轉為 null)
+      let deadline = null;
+      if (typeof raw.deadline === 'string' && this.isValidDateString(raw.deadline.trim())) {
+        deadline = raw.deadline.trim();
+      }
+
+      // 工作桌桶子列舉
+      let bucket = 'inbox';
+      if (typeof raw.bucket === 'string' && this.ALLOWED_BUCKETS.has(raw.bucket.trim().toLowerCase())) {
+        bucket = raw.bucket.trim().toLowerCase();
+      }
+
+      // 尺寸列舉
+      let size = 'small';
+      if (typeof raw.size === 'string' && this.ALLOWED_SIZES.has(raw.size.trim().toLowerCase())) {
+        size = raw.size.trim().toLowerCase();
+      }
+
+      // 象限
+      let manualQuadrant = null;
+      if (typeof raw.manualQuadrant === 'string' && this.ALLOWED_QUADRANTS.has(raw.manualQuadrant.trim().toLowerCase())) {
+        manualQuadrant = raw.manualQuadrant.trim().toLowerCase();
+      }
+      let quadrant = manualQuadrant || 'q2';
+      if (typeof raw.quadrant === 'string' && this.ALLOWED_QUADRANTS.has(raw.quadrant.trim().toLowerCase())) {
+        quadrant = raw.quadrant.trim().toLowerCase();
+      }
+
+      // 習慣設定
+      const isRoutine = !!raw.isRoutine;
+      let routineTrigger = 'recharge';
+      if (typeof raw.routineTrigger === 'string' && this.ALLOWED_ROUTINE_TRIGGERS.has(raw.routineTrigger.trim().toLowerCase())) {
+        routineTrigger = raw.routineTrigger.trim().toLowerCase();
+      }
+      const routineCadence = (typeof raw.routineCadence === 'string') ? raw.routineCadence.slice(0, 30) : 'daily';
+      let lastResetDate = null;
+      if (typeof raw.lastResetDate === 'string' && this.isValidDateString(raw.lastResetDate.trim())) {
+        lastResetDate = raw.lastResetDate.trim();
+      }
+
+      // 其它屬性
+      const isNow = !!raw.isNow && !done;
+      const parentId = (typeof raw.parentId === 'string' && raw.parentId.trim()) ? raw.parentId.trim() : null;
+      const typeId = (typeof raw.typeId === 'string' && raw.typeId.trim()) ? raw.typeId.trim().slice(0, 50) : null;
+      const typeSource = (typeof raw.typeSource === 'string') ? raw.typeSource.slice(0, 20) : 'rule';
+      const aiGenerated = !!raw.aiGenerated;
+
+      return {
+        id,
+        rawId,
+        text,
+        notes,
+        done,
+        doneAt,
+        createdAt: createdAt !== null ? createdAt : (updatedAt !== null ? updatedAt : 0),
+        updatedAt: updatedAt !== null ? updatedAt : (createdAt !== null ? createdAt : 0),
+        deletedAt,
+        deadline,
+        bucket,
+        size,
+        quadrant,
+        manualQuadrant,
+        isNow,
+        isRoutine,
+        routineTrigger,
+        routineCadence,
+        lastResetDate,
+        parentId,
+        typeId,
+        typeSource,
+        aiGenerated
+      };
+    },
+
+    sanitizeItems(rawList, generateIdFn = null) {
+      if (!Array.isArray(rawList)) return [];
+      const result = [];
+      const seenIds = new Set();
+      for (const item of rawList) {
+        const sanitized = this.sanitizeItem(item, generateIdFn);
+        if (sanitized && !seenIds.has(sanitized.id)) {
+          seenIds.add(sanitized.id);
+          result.push(sanitized);
+        }
+      }
+      return result;
+    },
+
+    sanitizeTombstones(raw) {
+      const result = {};
+      if (!raw) return result;
+      if (Array.isArray(raw)) {
+        for (const item of raw) {
+          if (item && typeof item === 'object') {
+            const id = (typeof item.id === 'string') ? item.id.trim() : null;
+            const time = (typeof item.deletedAt === 'number' && Number.isFinite(item.deletedAt))
+              ? Math.max(0, Math.floor(item.deletedAt))
+              : ((typeof item.time === 'number' && Number.isFinite(item.time)) ? Math.max(0, Math.floor(item.time)) : null);
+            if (id && time !== null) {
+              result[id] = Math.max(result[id] || 0, time);
+            }
+          }
+        }
+      } else if (typeof raw === 'object') {
+        for (const [id, val] of Object.entries(raw)) {
+          if (typeof id === 'string' && id.trim()) {
+            const cleanId = id.trim();
+            let time = null;
+            if (typeof val === 'number' && Number.isFinite(val)) {
+              time = Math.max(0, Math.floor(val));
+            } else if (val && typeof val === 'object' && typeof val.deletedAt === 'number' && Number.isFinite(val.deletedAt)) {
+              time = Math.max(0, Math.floor(val.deletedAt));
+            }
+            if (time !== null) {
+              result[cleanId] = Math.max(result[cleanId] || 0, time);
+            }
+          }
+        }
+      }
+      return result;
+    },
+
+    sanitizeSettings(raw) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+      const clean = {};
+      clean.todaySmallLimit = (typeof raw.todaySmallLimit === 'number' && Number.isFinite(raw.todaySmallLimit) && raw.todaySmallLimit > 0)
+        ? Math.floor(raw.todaySmallLimit) : 3;
+      clean.weekMediumLargeLimit = (typeof raw.weekMediumLargeLimit === 'number' && Number.isFinite(raw.weekMediumLargeLimit) && raw.weekMediumLargeLimit > 0)
+        ? Math.floor(raw.weekMediumLargeLimit) : 3;
+      clean.weekLimit = clean.weekMediumLargeLimit;
+      const allowedThemes = ['dark', 'light', 'amoled', 'mono'];
+      clean.theme = (typeof raw.theme === 'string' && allowedThemes.includes(raw.theme)) ? raw.theme : 'dark';
+      clean.safeTop = (typeof raw.safeTop === 'number' && Number.isFinite(raw.safeTop) && raw.safeTop >= 0 && raw.safeTop <= 200)
+        ? Math.floor(raw.safeTop) : 56;
+      clean.includeKeepInConsult = !!raw.includeKeepInConsult;
+      clean.pinLock = !!raw.pinLock;
+      clean.pinHash = (typeof raw.pinHash === 'string') ? raw.pinHash.slice(0, 128) : '';
+      clean.focusLockEnabled = raw.focusLockEnabled !== false;
+      clean.kairosEnabled = !!raw.kairosEnabled;
+      clean.kairosUrl = (typeof raw.kairosUrl === 'string' && /^https?:\/\//i.test(raw.kairosUrl)) ? raw.kairosUrl : 'http://127.0.0.1:5050';
+      if (typeof raw.updatedAt === 'number' && Number.isFinite(raw.updatedAt)) {
+        clean.updatedAt = Math.floor(raw.updatedAt);
+      }
+      return clean;
+    },
+
+    defaultTieBreaker(a, b) {
+      const strA = JSON.stringify([a.id, a.text, a.updatedAt, a.done, a.bucket]);
+      const strB = JSON.stringify([b.id, b.text, b.updatedAt, b.done, b.bucket]);
+      if (strA > strB) return 1;
+      if (strA < strB) return -1;
+      return 0;
+    },
+
+    smartMergeData(localData, remoteData, options = {}) {
+      const localList = (localData && Array.isArray(localData.items)) ? localData.items : (Array.isArray(localData) ? localData : []);
+      const remoteList = (remoteData && Array.isArray(remoteData.items)) ? remoteData.items : (Array.isArray(remoteData) ? remoteData : []);
+
+      const localTombstones = this.sanitizeTombstones(localData && localData.tombstones);
+      const remoteTombstones = this.sanitizeTombstones(remoteData && remoteData.tombstones);
+
+      // 1. 合併 tombstones
+      const mergedTombstones = Object.assign({}, localTombstones);
+      for (const [id, rTime] of Object.entries(remoteTombstones)) {
+        mergedTombstones[id] = Math.max(mergedTombstones[id] || 0, rTime);
+      }
+
+      for (const it of localList) {
+        if (it && it.id && it.deletedAt) {
+          mergedTombstones[it.id] = Math.max(mergedTombstones[it.id] || 0, it.deletedAt);
+        }
+      }
+      for (const it of remoteList) {
+        if (it && it.id && it.deletedAt) {
+          mergedTombstones[it.id] = Math.max(mergedTombstones[it.id] || 0, it.deletedAt);
+        }
+      }
+
+      // 2. 本地項目加載至 Map（以穩定唯一 ID 為 key）
+      const itemMap = new Map();
+      for (const rawIt of localList) {
+        const it = this.sanitizeItem(rawIt);
+        if (!it || !it.id) continue;
+        const itTime = Math.max(it.updatedAt || 0, it.createdAt || 0);
+        const tombTime = mergedTombstones[it.id];
+        if (tombTime && tombTime >= itTime) {
+          continue; // 維持刪除
+        }
+        if (tombTime && itTime > tombTime) {
+          delete mergedTombstones[it.id]; // 本地較新修改勝出
+        }
+        itemMap.set(it.id, it);
+      }
+
+      // 3. 遠端項目合併
+      for (const rawRIt of remoteList) {
+        const rIt = this.sanitizeItem(rawRIt);
+        if (!rIt || !rIt.id) continue;
+        const rTime = Math.max(rIt.updatedAt || 0, rIt.createdAt || 0);
+        const tombTime = mergedTombstones[rIt.id];
+
+        if (tombTime && tombTime >= rTime) {
+          continue; // 刪除勝出，不復活
+        }
+        if (tombTime && rTime > tombTime) {
+          delete mergedTombstones[rIt.id]; // 遠端較新修改勝出
+        }
+
+        if (!itemMap.has(rIt.id)) {
+          // 本機不存在此 ID：加入（完全不使用標題模糊比對！）
+          itemMap.set(rIt.id, rIt);
+        } else {
+          // 兩端 ID 相同：進行智慧欄位與時間戳融合
+          const localIt = itemMap.get(rIt.id);
+          const localTime = Math.max(localIt.updatedAt || 0, localIt.createdAt || 0);
+          const remoteTime = Math.max(rIt.updatedAt || 0, rIt.createdAt || 0);
+
+          let newerObj;
+          let olderObj;
+          if (remoteTime > localTime) {
+            newerObj = rIt;
+            olderObj = localIt;
+          } else if (localTime > remoteTime) {
+            newerObj = localIt;
+            olderObj = rIt;
+          } else {
+            // 時間戳完全相同：使用穩定且可重現的 tie-breaker
+            const tieBreaker = options.tieBreaker || this.defaultTieBreaker;
+            if (tieBreaker(localIt, rIt) >= 0) {
+              newerObj = localIt;
+              olderObj = rIt;
+            } else {
+              newerObj = rIt;
+              olderObj = localIt;
+            }
+          }
+
+          // 判定完成狀態 (done & doneAt)
+          let resolvedDone = false;
+          let resolvedDoneAt = null;
+
+          if (localIt.done === rIt.done) {
+            resolvedDone = !!localIt.done;
+            resolvedDoneAt = resolvedDone
+              ? (newerObj.doneAt || olderObj.doneAt || Math.max(localIt.doneAt || 0, rIt.doneAt || 0) || null)
+              : null;
+          } else {
+            const doneItem = localIt.done ? localIt : rIt;
+            const undoneItem = localIt.done ? rIt : localIt;
+            const doneActionTime = Math.max(doneItem.doneAt || 0, doneItem.updatedAt || 0, doneItem.createdAt || 0);
+            const undoneActionTime = Math.max(undoneItem.updatedAt || 0, undoneItem.createdAt || 0);
+
+            if (doneActionTime >= undoneActionTime) {
+              resolvedDone = true;
+              resolvedDoneAt = doneItem.doneAt || doneActionTime;
+            } else {
+              resolvedDone = false;
+              resolvedDoneAt = null;
+            }
+          }
+
+          // 保留有效的工作桌桶子
+          let resolvedBucket = newerObj.bucket || olderObj.bucket || 'inbox';
+          if (resolvedBucket === 'inbox' && (olderObj.bucket === 'today' || olderObj.bucket === 'week' || olderObj.bucket === 'keep' || olderObj.bucket === 'release')) {
+            if (remoteTime === localTime || !newerObj.updatedAt) {
+              resolvedBucket = olderObj.bucket;
+            }
+          }
+
+          // 保留兩端實際操作時間，絕對不用 Date.now() 覆寫！
+          const resolvedUpdatedAt = Math.max(localIt.updatedAt || 0, rIt.updatedAt || 0, localIt.createdAt || 0, rIt.createdAt || 0);
+
+          const mergedItem = Object.assign({}, olderObj, newerObj, {
+            id: localIt.id,
+            rawId: newerObj.rawId || olderObj.rawId || null,
+            done: resolvedDone,
+            doneAt: resolvedDoneAt,
+            updatedAt: resolvedUpdatedAt,
+            bucket: resolvedBucket,
+            text: (newerObj.text && newerObj.text.trim()) ? newerObj.text : olderObj.text,
+            notes: (newerObj.notes !== undefined && newerObj.notes !== null) ? newerObj.notes : (olderObj.notes || ''),
+            size: newerObj.size || olderObj.size || 'small',
+            deadline: (newerObj.deadline !== undefined) ? newerObj.deadline : olderObj.deadline,
+            manualQuadrant: (newerObj.manualQuadrant !== undefined) ? newerObj.manualQuadrant : olderObj.manualQuadrant,
+            quadrant: newerObj.quadrant || olderObj.quadrant || 'q2',
+            typeId: newerObj.typeId || olderObj.typeId || null,
+            parentId: (newerObj.parentId !== undefined) ? newerObj.parentId : olderObj.parentId,
+            isNow: (resolvedDone ? false : (newerObj.isNow !== undefined ? newerObj.isNow : olderObj.isNow))
+          });
+
+          itemMap.set(localIt.id, mergedItem);
+        }
+      }
+
+      // 4. 維護子任務與母任務狀態聯動
+      const mergedList = Array.from(itemMap.values());
+      const parentMap = new Map();
+      for (const it of mergedList) {
+        if (!it.parentId) parentMap.set(it.id, it);
+      }
+      for (const it of mergedList) {
+        if (it.parentId && parentMap.has(it.parentId)) {
+          const parent = parentMap.get(it.parentId);
+          if (parent.done && !it.done) {
+            it.done = true;
+            it.doneAt = parent.doneAt || it.doneAt || parent.updatedAt;
+          }
+        }
+      }
+
+      return {
+        items: mergedList,
+        tombstones: mergedTombstones
+      };
+    },
+
+    smartMergeItems(localList, remoteList, options = {}) {
+      const res = this.smartMergeData({ items: localList, tombstones: {} }, { items: remoteList, tombstones: {} }, options);
+      return res.items;
+    }
+  };
   let currentUserState = {
     energy: 'high', // 'high' | 'low'
     flow: 'smooth', // 'smooth' | 'stuck'
@@ -413,8 +805,9 @@
     try {
       const saved = localStorage.getItem(STORAGE_KEY_ITEMS);
       if (saved) {
-        items = JSON.parse(saved);
-        // 確保每個任務都有 size, quadrant, deadline 屬性
+        const parsed = JSON.parse(saved);
+        items = SyncEngine.sanitizeItems(parsed);
+        // 補齊可能缺失的動態屬性
         items.forEach(it => {
           if (!it.size) {
             it.size = guessSize(it.text, it.typeId);
@@ -422,20 +815,23 @@
           if (!it.quadrant) {
             it.quadrant = getComputedQuadrant(it);
           }
-          if (it.deadline === undefined) {
-            it.deadline = null;
-          }
         });
+      }
+      const savedTombstones = localStorage.getItem(STORAGE_KEY_TOMBSTONES);
+      if (savedTombstones) {
+        tombstones = SyncEngine.sanitizeTombstones(JSON.parse(savedTombstones));
       }
     } catch (e) {
       console.warn('載入任務失敗:', e);
       items = [];
+      tombstones = {};
     }
   }
 
   function saveItems() {
     try {
       localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
+      localStorage.setItem(STORAGE_KEY_TOMBSTONES, JSON.stringify(tombstones));
       syncToAndroidWidgets();
     } catch (e) {
       console.error('儲存任務失敗:', e);
@@ -459,14 +855,16 @@
   }
 
   // 接收來自 Android Widget 的快速記錄觸發
-  window.handleQuickCaptureFromWidget = function () {
-    const quickInput = document.getElementById('inputQuickTask');
-    if (quickInput) {
-      quickInput.focus();
-      quickInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      showToast('快速記錄模式：請輸入任務名稱');
-    }
-  };
+  if (typeof window !== 'undefined') {
+    window.handleQuickCaptureFromWidget = function () {
+      const quickInput = document.getElementById('inputQuickTask');
+      if (quickInput) {
+        quickInput.focus();
+        quickInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        showToast('快速記錄模式：請輸入任務名稱');
+      }
+    };
+  }
 
   async function loadRules() {
     try {
@@ -1020,10 +1418,17 @@
     }, 200);
   }
 
-  // 刪除項目
+  // 刪除項目 (以 tombstone 標記，防止跨裝置同步時復活)
   function deleteItem(itemId) {
     const item = items.find(it => it.id === itemId);
     if (!item) return;
+
+    const delTime = Date.now();
+    tombstones[itemId] = delTime;
+    const subtasks = items.filter(it => it.parentId === itemId);
+    subtasks.forEach(s => {
+      tombstones[s.id] = delTime;
+    });
 
     // 同步刪除子任務
     items = items.filter(it => it.id !== itemId && it.parentId !== itemId);
@@ -1846,12 +2251,17 @@
           const col = document.createElement('div');
           col.className = 'analytics-bar-col';
           col.title = `${k}: ${formatDurationZh(sec)}`;
-          col.innerHTML = `
-            <div class="analytics-bar-track">
-              <div class="analytics-bar-fill" style="height: ${pct}%;"></div>
-            </div>
-            <span class="analytics-bar-date">${k}</span>
-          `;
+          const track = document.createElement('div');
+          track.className = 'analytics-bar-track';
+          const fill = document.createElement('div');
+          fill.className = 'analytics-bar-fill';
+          fill.style.height = `${pct}%`;
+          track.appendChild(fill);
+          const dateSpan = document.createElement('span');
+          dateSpan.className = 'analytics-bar-date';
+          dateSpan.textContent = k;
+          col.appendChild(track);
+          col.appendChild(dateSpan);
           chartContainer.appendChild(col);
         });
       }
@@ -1882,15 +2292,24 @@
         const pct = Math.round((sec / maxTodSec) * 100);
         const row = document.createElement('div');
         row.className = 'analytics-bar-row';
-        row.innerHTML = `
-          <div class="analytics-bar-row-info">
-            <span class="analytics-bar-row-label">${k}</span>
-            <span class="analytics-bar-row-val">${formatDurationZh(sec)}</span>
-          </div>
-          <div class="analytics-progress-track">
-            <div class="analytics-progress-fill" style="width: ${pct}%;"></div>
-          </div>
-        `;
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'analytics-bar-row-info';
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'analytics-bar-row-label';
+        labelSpan.textContent = k;
+        const valSpan = document.createElement('span');
+        valSpan.className = 'analytics-bar-row-val';
+        valSpan.textContent = formatDurationZh(sec);
+        infoDiv.appendChild(labelSpan);
+        infoDiv.appendChild(valSpan);
+        const track = document.createElement('div');
+        track.className = 'analytics-progress-track';
+        const fill = document.createElement('div');
+        fill.className = 'analytics-progress-fill';
+        fill.style.width = `${pct}%`;
+        track.appendChild(fill);
+        row.appendChild(infoDiv);
+        row.appendChild(track);
         todList.appendChild(row);
       });
     }
@@ -1924,15 +2343,26 @@
         const pct = Math.round((q.sec / maxQuadSec) * 100);
         const row = document.createElement('div');
         row.className = 'analytics-bar-row';
-        row.innerHTML = `
-          <div class="analytics-bar-row-info">
-            <span class="analytics-bar-row-label" style="color: ${q.color};">${q.label}</span>
-            <span class="analytics-bar-row-val">${formatDurationZh(q.sec)}</span>
-          </div>
-          <div class="analytics-progress-track">
-            <div class="analytics-progress-fill" style="width: ${pct}%; background: ${q.color};"></div>
-          </div>
-        `;
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'analytics-bar-row-info';
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'analytics-bar-row-label';
+        labelSpan.style.color = q.color;
+        labelSpan.textContent = q.label;
+        const valSpan = document.createElement('span');
+        valSpan.className = 'analytics-bar-row-val';
+        valSpan.textContent = formatDurationZh(q.sec);
+        infoDiv.appendChild(labelSpan);
+        infoDiv.appendChild(valSpan);
+        const track = document.createElement('div');
+        track.className = 'analytics-progress-track';
+        const fill = document.createElement('div');
+        fill.className = 'analytics-progress-fill';
+        fill.style.width = `${pct}%`;
+        fill.style.background = q.color;
+        track.appendChild(fill);
+        row.appendChild(infoDiv);
+        row.appendChild(track);
         quadBars.appendChild(row);
       });
     }
@@ -1964,15 +2394,24 @@
         const pct = Math.round((t.sec / maxTypeSec) * 100);
         const row = document.createElement('div');
         row.className = 'analytics-bar-row';
-        row.innerHTML = `
-          <div class="analytics-bar-row-info">
-            <span class="analytics-bar-row-label">${t.name}</span>
-            <span class="analytics-bar-row-val">${formatDurationZh(t.sec)}</span>
-          </div>
-          <div class="analytics-progress-track">
-            <div class="analytics-progress-fill" style="width: ${pct}%;"></div>
-          </div>
-        `;
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'analytics-bar-row-info';
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'analytics-bar-row-label';
+        labelSpan.textContent = t.name;
+        const valSpan = document.createElement('span');
+        valSpan.className = 'analytics-bar-row-val';
+        valSpan.textContent = formatDurationZh(t.sec);
+        infoDiv.appendChild(labelSpan);
+        infoDiv.appendChild(valSpan);
+        const track = document.createElement('div');
+        track.className = 'analytics-progress-track';
+        const fill = document.createElement('div');
+        fill.className = 'analytics-progress-fill';
+        fill.style.width = `${pct}%`;
+        track.appendChild(fill);
+        row.appendChild(infoDiv);
+        row.appendChild(track);
         typeBars.appendChild(row);
       });
     }
@@ -2003,15 +2442,24 @@
         const pct = Math.round((sz.sec / maxSizeSec) * 100);
         const row = document.createElement('div');
         row.className = 'analytics-bar-row';
-        row.innerHTML = `
-          <div class="analytics-bar-row-info">
-            <span class="analytics-bar-row-label">${sz.name} (${sz.count} 次)</span>
-            <span class="analytics-bar-row-val">${formatDurationZh(sz.sec)}</span>
-          </div>
-          <div class="analytics-progress-track">
-            <div class="analytics-progress-fill" style="width: ${pct}%;"></div>
-          </div>
-        `;
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'analytics-bar-row-info';
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'analytics-bar-row-label';
+        labelSpan.textContent = `${sz.name} (${sz.count} 次)`;
+        const valSpan = document.createElement('span');
+        valSpan.className = 'analytics-bar-row-val';
+        valSpan.textContent = formatDurationZh(sz.sec);
+        infoDiv.appendChild(labelSpan);
+        infoDiv.appendChild(valSpan);
+        const track = document.createElement('div');
+        track.className = 'analytics-progress-track';
+        const fill = document.createElement('div');
+        fill.className = 'analytics-progress-fill';
+        fill.style.width = `${pct}%`;
+        track.appendChild(fill);
+        row.appendChild(infoDiv);
+        row.appendChild(track);
         sizeBars.appendChild(row);
       });
     }
@@ -2043,15 +2491,26 @@
           const pct = Math.round((r.count / totalAborts) * 100);
           const row = document.createElement('div');
           row.className = 'analytics-bar-row';
-          row.innerHTML = `
-            <div class="analytics-bar-row-info">
-              <span class="analytics-bar-row-label" style="color: ${r.color};">${r.label}</span>
-              <span class="analytics-bar-row-val">${r.count} 次 (${pct}%)</span>
-            </div>
-            <div class="analytics-progress-track">
-              <div class="analytics-progress-fill" style="width: ${pct}%; background: ${r.color};"></div>
-            </div>
-          `;
+          const infoDiv = document.createElement('div');
+          infoDiv.className = 'analytics-bar-row-info';
+          const labelSpan = document.createElement('span');
+          labelSpan.className = 'analytics-bar-row-label';
+          labelSpan.style.color = r.color;
+          labelSpan.textContent = r.label;
+          const valSpan = document.createElement('span');
+          valSpan.className = 'analytics-bar-row-val';
+          valSpan.textContent = `${r.count} 次 (${pct}%)`;
+          infoDiv.appendChild(labelSpan);
+          infoDiv.appendChild(valSpan);
+          const track = document.createElement('div');
+          track.className = 'analytics-progress-track';
+          const fill = document.createElement('div');
+          fill.className = 'analytics-progress-fill';
+          fill.style.width = `${pct}%`;
+          fill.style.background = r.color;
+          track.appendChild(fill);
+          row.appendChild(infoDiv);
+          row.appendChild(track);
           frictionBars.appendChild(row);
         });
       }
@@ -2088,13 +2547,20 @@
           const timeStr = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
           const item = document.createElement('div');
           item.className = 'analytics-note-item';
-          item.innerHTML = `
-            <div class="analytics-note-header">
-              <span class="analytics-note-task">${escapeHtml(s.taskText || '任務')}</span>
-              <span>${timeStr}</span>
-            </div>
-            <div class="analytics-note-content">${escapeHtml(s.note)}</div>
-          `;
+          const header = document.createElement('div');
+          header.className = 'analytics-note-header';
+          const taskSpan = document.createElement('span');
+          taskSpan.className = 'analytics-note-task';
+          taskSpan.textContent = s.taskText || '任務';
+          const timeSpan = document.createElement('span');
+          timeSpan.textContent = timeStr;
+          header.appendChild(taskSpan);
+          header.appendChild(timeSpan);
+          const content = document.createElement('div');
+          content.className = 'analytics-note-content';
+          content.textContent = s.note || '';
+          item.appendChild(header);
+          item.appendChild(content);
           notesList.appendChild(item);
         });
       }
@@ -2141,22 +2607,43 @@
       const catLabel = quadInfo ? quadInfo.badge : '核心深耕';
 
       const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td style="font-family: var(--font-mono); white-space: nowrap;">${timeStr}</td>
-        <td style="font-weight: 600;">${escapeHtml(s.taskText || '未命名任務')}</td>
-        <td style="font-family: var(--font-mono); white-space: nowrap;">${durStr}</td>
-        <td><span class="analytics-status-pill ${statusPillClass}">${statusLabel}</span></td>
-        <td style="font-size: 0.75rem; color: var(--meta-text); white-space: nowrap;">${catLabel}</td>
-        <td><button type="button" class="btn-session-delete" data-id="${s.id}">刪除</button></td>
-      `;
+      const tdTime = document.createElement('td');
+      tdTime.style.fontFamily = 'var(--font-mono)';
+      tdTime.style.whiteSpace = 'nowrap';
+      tdTime.textContent = timeStr;
+      const tdTitle = document.createElement('td');
+      tdTitle.style.fontWeight = '600';
+      tdTitle.textContent = s.taskText || '未命名任務';
+      const tdDur = document.createElement('td');
+      tdDur.style.fontFamily = 'var(--font-mono)';
+      tdDur.style.whiteSpace = 'nowrap';
+      tdDur.textContent = durStr;
+      const tdStatus = document.createElement('td');
+      const statusPill = document.createElement('span');
+      statusPill.className = `analytics-status-pill ${statusPillClass}`;
+      statusPill.textContent = statusLabel;
+      tdStatus.appendChild(statusPill);
+      const tdCat = document.createElement('td');
+      tdCat.style.fontSize = '0.75rem';
+      tdCat.style.color = 'var(--meta-text)';
+      tdCat.style.whiteSpace = 'nowrap';
+      tdCat.textContent = catLabel;
+      const tdAct = document.createElement('td');
+      const btnDel = document.createElement('button');
+      btnDel.type = 'button';
+      btnDel.className = 'btn-session-delete';
+      btnDel.textContent = '刪除';
+      btnDel.addEventListener('click', () => {
+        deleteFocusSession(s.id);
+      });
+      tdAct.appendChild(btnDel);
 
-      const btnDel = tr.querySelector('.btn-session-delete');
-      if (btnDel) {
-        btnDel.addEventListener('click', () => {
-          deleteFocusSession(s.id);
-        });
-      }
-
+      tr.appendChild(tdTime);
+      tr.appendChild(tdTitle);
+      tr.appendChild(tdDur);
+      tr.appendChild(tdStatus);
+      tr.appendChild(tdCat);
+      tr.appendChild(tdAct);
       tbody.appendChild(tr);
     });
   }
@@ -2697,19 +3184,25 @@
       const emptyWrap = document.createElement('div');
       emptyWrap.className = 'workbench-empty-guide';
       emptyWrap.style.cssText = 'padding: 24px 16px; text-align: center; border: 1px dashed var(--border-light); border-radius: 8px; margin: 8px 0; background: rgba(255,255,255,0.01);';
-      emptyWrap.innerHTML = `
-        <div class="empty-neutral" style="margin-bottom: 12px; color: var(--text-muted); font-size: 0.88rem;">
-          今日工作桌目前空空如也。<br>
-          <span style="font-size: 0.78rem; color: var(--meta-text);">先將想法倒入收集箱，再挑選 1~3 件放上工作桌。</span>
-        </div>
-        <button type="button" class="btn-guide-open-inbox btn-secondary" style="margin: 0 auto; display: inline-flex; align-items: center; gap: 6px; padding: 7px 16px; font-size: 0.84rem; border-color: var(--border-light); cursor: pointer;">
-          打開收集箱挑選任務 ${inboxItemsCount > 0 ? `(${inboxItemsCount})` : ''}
-        </button>
-      `;
-      const btnGuide = emptyWrap.querySelector('.btn-guide-open-inbox');
-      if (btnGuide) {
-        btnGuide.addEventListener('click', () => openDrawer('inbox'));
-      }
+
+      const neutralDiv = document.createElement('div');
+      neutralDiv.className = 'empty-neutral';
+      neutralDiv.style.cssText = 'margin-bottom: 12px; color: var(--text-muted); font-size: 0.88rem;';
+      neutralDiv.textContent = '今日工作桌目前空空如也。';
+      const neutralSub = document.createElement('span');
+      neutralSub.style.cssText = 'display: block; font-size: 0.78rem; color: var(--meta-text); margin-top: 4px;';
+      neutralSub.textContent = '先將想法倒入收集箱，再挑選 1~3 件放上工作桌。';
+      neutralDiv.appendChild(neutralSub);
+
+      const btnGuide = document.createElement('button');
+      btnGuide.type = 'button';
+      btnGuide.className = 'btn-guide-open-inbox btn-secondary';
+      btnGuide.style.cssText = 'margin: 0 auto; display: inline-flex; align-items: center; gap: 6px; padding: 7px 16px; font-size: 0.84rem; border-color: var(--border-light); cursor: pointer;';
+      btnGuide.textContent = `打開收集箱挑選任務 ${inboxItemsCount > 0 ? `(${inboxItemsCount})` : ''}`.trim();
+      btnGuide.addEventListener('click', () => openDrawer('inbox'));
+
+      emptyWrap.appendChild(neutralDiv);
+      emptyWrap.appendChild(btnGuide);
       listEl.appendChild(emptyWrap);
       return;
     }
@@ -2760,19 +3253,25 @@
       const emptyWrap = document.createElement('div');
       emptyWrap.className = 'workbench-empty-guide';
       emptyWrap.style.cssText = 'padding: 24px 16px; text-align: center; border: 1px dashed var(--border-light); border-radius: 8px; margin: 8px 0; background: rgba(255,255,255,0.01);';
-      emptyWrap.innerHTML = `
-        <div class="empty-neutral" style="margin-bottom: 12px; color: var(--text-muted); font-size: 0.88rem;">
-          這週工作桌目前沒有項目。<br>
-          <span style="font-size: 0.78rem; color: var(--meta-text);">可拉開收集箱挑選中長期或核心推進事項。</span>
-        </div>
-        <button type="button" class="btn-guide-open-inbox btn-secondary" style="margin: 0 auto; display: inline-flex; align-items: center; gap: 6px; padding: 7px 16px; font-size: 0.84rem; border-color: var(--border-light); cursor: pointer;">
-          打開收集箱挑選任務 ${inboxItemsCount > 0 ? `(${inboxItemsCount})` : ''}
-        </button>
-      `;
-      const btnGuide = emptyWrap.querySelector('.btn-guide-open-inbox');
-      if (btnGuide) {
-        btnGuide.addEventListener('click', () => openDrawer('inbox'));
-      }
+
+      const neutralDiv = document.createElement('div');
+      neutralDiv.className = 'empty-neutral';
+      neutralDiv.style.cssText = 'margin-bottom: 12px; color: var(--text-muted); font-size: 0.88rem;';
+      neutralDiv.textContent = '這週工作桌目前沒有項目。';
+      const neutralSub = document.createElement('span');
+      neutralSub.style.cssText = 'display: block; font-size: 0.78rem; color: var(--meta-text); margin-top: 4px;';
+      neutralSub.textContent = '可拉開收集箱挑選中長期或核心推進事項。';
+      neutralDiv.appendChild(neutralSub);
+
+      const btnGuide = document.createElement('button');
+      btnGuide.type = 'button';
+      btnGuide.className = 'btn-guide-open-inbox btn-secondary';
+      btnGuide.style.cssText = 'margin: 0 auto; display: inline-flex; align-items: center; gap: 6px; padding: 7px 16px; font-size: 0.84rem; border-color: var(--border-light); cursor: pointer;';
+      btnGuide.textContent = `打開收集箱挑選任務 ${inboxItemsCount > 0 ? `(${inboxItemsCount})` : ''}`.trim();
+      btnGuide.addEventListener('click', () => openDrawer('inbox'));
+
+      emptyWrap.appendChild(neutralDiv);
+      emptyWrap.appendChild(btnGuide);
       listEl.appendChild(emptyWrap);
       return;
     }
@@ -3013,7 +3512,19 @@
     sizeOptions.forEach(opt => {
       const optEl = document.createElement('div');
       optEl.className = `type-picker-item ${currentSize === opt.id ? 'active' : ''}`;
-      optEl.innerHTML = `<div style="font-weight: 600; font-family: var(--font-mono);">${opt.title}</div><div style="font-size: 0.72rem; color: var(--meta-text); line-height: 1.3; margin-top: 2px;">${opt.desc}</div>`;
+      const optTitle = document.createElement('div');
+      optTitle.style.fontWeight = '600';
+      optTitle.style.fontFamily = 'var(--font-mono)';
+      optTitle.textContent = opt.title;
+      const optDesc = document.createElement('div');
+      optDesc.style.fontSize = '0.72rem';
+      optDesc.style.color = 'var(--meta-text)';
+      optDesc.style.lineHeight = '1.3';
+      optDesc.style.marginTop = '2px';
+      optDesc.textContent = opt.desc;
+      optEl.appendChild(optTitle);
+      optEl.appendChild(optDesc);
+
       optEl.addEventListener('click', () => {
         if (item) {
           item.size = opt.id;
@@ -3034,8 +3545,12 @@
 
     const dlOption = document.createElement('div');
     dlOption.className = 'type-picker-item';
-    const dlText = item && item.deadline ? `截止死線：${item.deadline}` : '設定截止死線 (選填)';
-    dlOption.innerHTML = `<div style="font-weight: 500; font-size: 0.74rem; color: var(--text-color);">${dlText}</div>`;
+    const dlInner = document.createElement('div');
+    dlInner.style.fontWeight = '500';
+    dlInner.style.fontSize = '0.74rem';
+    dlInner.style.color = 'var(--text-color)';
+    dlInner.textContent = item && item.deadline ? `截止死線：${item.deadline}` : '設定截止死線 (選填)';
+    dlOption.appendChild(dlInner);
     dlOption.addEventListener('click', () => {
       menu.remove();
       openDeadlinePicker(itemId, targetEl);
@@ -3265,12 +3780,16 @@
     function updateInfoDisplay() {
       const qInfo = getQuadrantInfo(item);
       const isManual = !!(item.manualQuadrant && ['q1', 'q2', 'q3', 'q4'].includes(item.manualQuadrant.toLowerCase()));
-      infoBox.innerHTML = `
-        <div class="deadline-auto-badge" style="color: ${qInfo.color};">
-          ${isManual ? '手動指定' : '自動推估'}：${qInfo.badge} (${qInfo.title})
-        </div>
-        <div class="deadline-auto-desc">${qInfo.desc}</div>
-      `;
+      infoBox.innerHTML = '';
+      const badgeDiv = document.createElement('div');
+      badgeDiv.className = 'deadline-auto-badge';
+      badgeDiv.style.color = qInfo.color;
+      badgeDiv.textContent = `${isManual ? '手動指定' : '自動推估'}：${qInfo.badge} (${qInfo.title})`;
+      const descDiv = document.createElement('div');
+      descDiv.className = 'deadline-auto-desc';
+      descDiv.textContent = qInfo.desc;
+      infoBox.appendChild(badgeDiv);
+      infoBox.appendChild(descDiv);
     }
 
     function applyDeadline(newVal) {
@@ -4662,14 +5181,34 @@
       resultArea.innerHTML = '';
       const noMatchCard = document.createElement('div');
       noMatchCard.className = 'consult-card';
-      noMatchCard.innerHTML = `
-        <div class="consult-task-title">目前狀態下沒有符合的項目</div>
-        <div class="consult-reason">根據您選擇的地點、時間與體力精神，目前「這週」清單中沒有完全相符的任務。保持中性，不勉強進行。</div>
-        <div class="consult-card-actions" style="margin-top: 10px;">
-          <button id="btnConsultRandomPick" class="btn-secondary">隨機挑一件（零力氣備案）</button>
-          <button id="btnConsultCloseNone" class="btn-secondary">關閉</button>
-        </div>
-      `;
+
+      const titleEl = document.createElement('div');
+      titleEl.className = 'consult-task-title';
+      titleEl.textContent = '目前狀態下沒有符合的項目';
+
+      const reasonEl = document.createElement('div');
+      reasonEl.className = 'consult-reason';
+      reasonEl.textContent = '根據您選擇的地點、時間與體力精神，目前「這週」清單中沒有完全相符的任務。保持中性，不勉強進行。';
+
+      const actionsEl = document.createElement('div');
+      actionsEl.className = 'consult-card-actions';
+      actionsEl.style.marginTop = '10px';
+
+      const btnRandom = document.createElement('button');
+      btnRandom.id = 'btnConsultRandomPick';
+      btnRandom.className = 'btn-secondary';
+      btnRandom.textContent = '隨機挑一件（零力氣備案）';
+
+      const btnClose = document.createElement('button');
+      btnClose.id = 'btnConsultCloseNone';
+      btnClose.className = 'btn-secondary';
+      btnClose.textContent = '關閉';
+
+      actionsEl.appendChild(btnRandom);
+      actionsEl.appendChild(btnClose);
+      noMatchCard.appendChild(titleEl);
+      noMatchCard.appendChild(reasonEl);
+      noMatchCard.appendChild(actionsEl);
       resultArea.appendChild(noMatchCard);
 
       document.getElementById('btnConsultCloseNone').addEventListener('click', () => {
@@ -4771,9 +5310,10 @@
   function exportBackupJson() {
     const payload = {
       app: 'Task Desk',
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       items: items,
+      tombstones: tombstones,
       settings: settings
     };
 
@@ -4794,11 +5334,17 @@
       try {
         const data = JSON.parse(e.target.result);
         if (data && Array.isArray(data.items)) {
-          items = data.items;
+          items = SyncEngine.sanitizeItems(data.items);
+          if (data.tombstones) {
+            tombstones = SyncEngine.sanitizeTombstones(data.tombstones);
+          }
           if (data.settings) {
-            settings = Object.assign({}, settings, data.settings);
-            saveSettings();
-            applyTheme(settings.theme);
+            const cleanSettings = SyncEngine.sanitizeSettings(data.settings);
+            if (cleanSettings) {
+              settings = Object.assign({}, settings, cleanSettings);
+              saveSettings();
+              applyTheme(settings.theme);
+            }
           }
           saveItems();
           renderAll();
@@ -4999,176 +5545,9 @@
     }
   }
 
-  // 智慧雙向合併演算法（無損雙向合併）
-  function smartMergeItems(localList, remoteList) {
-    const itemMap = new Map();
-
-    // 1. 先載入本機所有項目（深拷貝並確保完成狀態為嚴格布林值）
-    for (const it of (localList || [])) {
-      if (it && it.id) {
-        itemMap.set(it.id, Object.assign({}, it, {
-          done: !!it.done,
-          doneAt: it.done ? (it.doneAt || it.updatedAt || Date.now()) : null
-        }));
-      }
-    }
-
-    // 輔助查找：比對 ID、rawId 或同名任務（防跨裝置重複建立且同步狀態丟失）
-    function findExistingMatch(rIt) {
-      if (!rIt) return null;
-      // 精準比對 ID
-      if (itemMap.has(rIt.id)) {
-        return { matchKey: rIt.id, item: itemMap.get(rIt.id) };
-      }
-      // 比對 rawId (Google Tasks 或外部 ID)
-      if (rIt.rawId) {
-        for (const [key, it] of itemMap.entries()) {
-          if (it.rawId === rIt.rawId || it.id === `gt_${rIt.rawId}` || rIt.id === `gt_${it.rawId}`) {
-            return { matchKey: key, item: it };
-          }
-        }
-      }
-      // 比對標題（同為母任務且標題完全一致）
-      if (!rIt.parentId && rIt.text && rIt.text.trim()) {
-        const cleanRText = rIt.text.trim().toLowerCase();
-        for (const [key, it] of itemMap.entries()) {
-          if (!it.parentId && it.text && it.text.trim().toLowerCase() === cleanRText) {
-            return { matchKey: key, item: it };
-          }
-        }
-      }
-      return null;
-    }
-
-    // 2. 依據時間戳記與狀態合併遠端項目
-    for (const rIt of (remoteList || [])) {
-      if (!rIt || (!rIt.id && !rIt.text)) continue;
-
-      const normalizedRIt = Object.assign({}, rIt, {
-        done: !!rIt.done,
-        doneAt: rIt.done ? (rIt.doneAt || rIt.updatedAt || Date.now()) : null
-      });
-
-      const match = findExistingMatch(normalizedRIt);
-
-      if (!match) {
-        // 本機不存在此項目：直接新增
-        const newId = normalizedRIt.id || generateId();
-        itemMap.set(newId, Object.assign({}, normalizedRIt, { id: newId }));
-      } else {
-        // 本機已存在此項目：進行智慧狀態融合
-        const localIt = match.item;
-        const matchKey = match.matchKey;
-
-        // 計算兩端最後動作時間
-        const localTime = Math.max(localIt.updatedAt || 0, localIt.doneAt || 0, localIt.createdAt || 0);
-        const remoteTime = Math.max(normalizedRIt.updatedAt || 0, normalizedRIt.doneAt || 0, normalizedRIt.createdAt || 0);
-
-        // 1. 判定完成狀態 (done & doneAt)
-        let resolvedDone = false;
-        let resolvedDoneAt = null;
-
-        if (localIt.done === normalizedRIt.done) {
-          // 兩端完成狀態一致
-          resolvedDone = !!localIt.done;
-          resolvedDoneAt = localIt.done ? (localIt.doneAt || normalizedRIt.doneAt || Math.max(localTime, remoteTime)) : null;
-        } else {
-          // 兩端完成狀態不一致：比對完成發生的時間與另一端的修改時間
-          const doneItem = localIt.done ? localIt : normalizedRIt;
-          const undoneItem = localIt.done ? normalizedRIt : localIt;
-          const doneActionTime = Math.max(doneItem.doneAt || 0, doneItem.updatedAt || 0);
-          const undoneActionTime = Math.max(undoneItem.updatedAt || 0, undoneItem.createdAt || 0);
-
-          if (doneActionTime >= undoneActionTime) {
-            // 完成動作發生在未完成的最後異動之後（或同時間）：判定為已完成
-            resolvedDone = true;
-            resolvedDoneAt = doneItem.doneAt || doneActionTime;
-          } else {
-            // 未完成一端有明確晚於完成時間的異動（例如使用者重新勾除/反完成）：判定為未完成
-            resolvedDone = false;
-            resolvedDoneAt = null;
-          }
-        }
-
-        // 2. 各屬性無損合併（以較新變更為主，但確保欄位不丟失）
-        const newerObj = remoteTime >= localTime ? normalizedRIt : localIt;
-        const olderObj = remoteTime >= localTime ? localIt : normalizedRIt;
-
-        // 保留有效的工作桌桶子（若一方有明確分類，避免被預設 inbox 沖刷）
-        let resolvedBucket = newerObj.bucket || olderObj.bucket || 'inbox';
-        if (resolvedBucket === 'inbox' && (olderObj.bucket === 'today' || olderObj.bucket === 'week' || olderObj.bucket === 'keep' || olderObj.bucket === 'release')) {
-          if (remoteTime === localTime || !newerObj.updatedAt) {
-            resolvedBucket = olderObj.bucket;
-          }
-        }
-
-        const canonicalId = localIt.id || normalizedRIt.id;
-
-        const mergedItem = Object.assign({}, olderObj, newerObj, {
-          id: canonicalId,
-          rawId: newerObj.rawId || olderObj.rawId || null,
-          done: resolvedDone,
-          doneAt: resolvedDoneAt,
-          updatedAt: Math.max(localTime, remoteTime, resolvedDoneAt || 0, Date.now()),
-          // 象限屬性 (手動指定與自動推估)
-          manualQuadrant: (newerObj.manualQuadrant !== undefined) ? newerObj.manualQuadrant : olderObj.manualQuadrant,
-          quadrant: newerObj.quadrant || olderObj.quadrant || getComputedQuadrant(newerObj),
-          // 時間與尺寸設定 (大小、截止死線)
-          size: newerObj.size || olderObj.size || 'small',
-          deadline: (newerObj.deadline !== undefined) ? newerObj.deadline : olderObj.deadline,
-          // 工作桌桶子、文字、備註
-          bucket: resolvedBucket,
-          text: (newerObj.text && newerObj.text.trim()) ? newerObj.text : olderObj.text,
-          notes: (newerObj.notes !== undefined) ? newerObj.notes : olderObj.notes,
-          typeId: newerObj.typeId || olderObj.typeId || null,
-          parentId: (newerObj.parentId !== undefined) ? newerObj.parentId : olderObj.parentId
-        });
-
-        if (mergedItem.done && mergedItem.isNow) {
-          mergedItem.isNow = false;
-        }
-
-        // 若 matchKey 與 canonicalId 不同，清除舊 key
-        if (matchKey !== canonicalId) {
-          itemMap.delete(matchKey);
-        }
-        itemMap.set(canonicalId, mergedItem);
-      }
-    }
-
-    const merged = Array.from(itemMap.values());
-
-    // 確保子任務與母任務完成狀態聯動：
-    // 若母任務已完成，其所有子任務也一併標記為完成；若所有子任務皆完成，母任務也標記為完成
-    const parentMap = new Map();
-    for (const it of merged) {
-      if (!it.parentId) {
-        parentMap.set(it.id, it);
-      }
-    }
-    for (const it of merged) {
-      if (it.parentId && parentMap.has(it.parentId)) {
-        const parent = parentMap.get(it.parentId);
-        if (parent.done && !it.done) {
-          it.done = true;
-          it.doneAt = parent.doneAt || Date.now();
-        }
-      }
-    }
-
-    // 確保全域最多只有一個 isNow
-    let foundNow = false;
-    for (const it of merged) {
-      if (it.isNow) {
-        if (foundNow || it.done) {
-          it.isNow = false;
-        } else {
-          foundNow = true;
-        }
-      }
-    }
-
-    return merged;
+  // 智慧雙向合併函式（委託給純函式 SyncEngine）
+  function smartMergeItems(localList, remoteList, options) {
+    return SyncEngine.smartMergeItems(localList, remoteList, options);
   }
 
   // GitHub Gist API: 上傳本機 (Push)
@@ -5178,9 +5557,10 @@
 
     const payload = {
       app: 'Task Desk',
-      version: 1,
+      version: 2,
       syncedAt: Date.now(),
       items: items,
+      tombstones: tombstones,
       settings: settings
     };
 
@@ -5317,15 +5697,18 @@
         }
       }
 
-      items = (remotePayload.items || []).map(it => Object.assign({}, it, {
-        done: !!it.done,
-        doneAt: it.done ? (it.doneAt || it.updatedAt || Date.now()) : null
-      }));
+      items = SyncEngine.sanitizeItems(remotePayload.items);
+      if (remotePayload.tombstones) {
+        tombstones = SyncEngine.sanitizeTombstones(remotePayload.tombstones);
+      }
       if (remotePayload.settings) {
-        settings = Object.assign({}, settings, remotePayload.settings);
-        saveSettings();
-        applyTheme(settings.theme);
-        applySafeTop(settings.safeTop);
+        const cleanSettings = SyncEngine.sanitizeSettings(remotePayload.settings);
+        if (cleanSettings) {
+          settings = Object.assign({}, settings, cleanSettings);
+          saveSettings();
+          applyTheme(settings.theme);
+          applySafeTop(settings.safeTop);
+        }
       }
       saveItems();
       syncConfig.lastSyncTime = Date.now();
@@ -5394,28 +5777,42 @@
         }
       }
 
-      // 進行無失真時間戳雙向合併
-      items = smartMergeItems(items, remoteItems);
+      // 進行無失真時間戳雙向合併 (使用純函式模組)
+      const mergeRes = SyncEngine.smartMergeData({
+        items: items,
+        tombstones: tombstones
+      }, {
+        items: remoteItems,
+        tombstones: remotePayload && remotePayload.tombstones
+      });
+
+      items = mergeRes.items;
+      tombstones = mergeRes.tombstones;
+
       if (remotePayload && remotePayload.settings) {
-        const localSettingsTime = settings.updatedAt || 0;
-        const remoteSettingsTime = remotePayload.settings.updatedAt || 0;
-        if (remoteSettingsTime >= localSettingsTime) {
-          settings = Object.assign({}, settings, remotePayload.settings);
-        } else {
-          settings = Object.assign({}, remotePayload.settings, settings);
+        const cleanSettings = SyncEngine.sanitizeSettings(remotePayload.settings);
+        if (cleanSettings) {
+          const localSettingsTime = settings.updatedAt || 0;
+          const remoteSettingsTime = cleanSettings.updatedAt || 0;
+          if (remoteSettingsTime >= localSettingsTime) {
+            settings = Object.assign({}, settings, cleanSettings);
+          } else {
+            settings = Object.assign({}, cleanSettings, settings);
+          }
+          saveSettings();
+          applyTheme(settings.theme);
+          applySafeTop(settings.safeTop);
         }
-        saveSettings();
-        applyTheme(settings.theme);
-        applySafeTop(settings.safeTop);
       }
       saveItems();
 
-      // 將合併後的最新資料寫回 Gist
+      // 將合併後的最新資料寫回 Gist (包含 tombstones)
       const payload = {
         app: 'Task Desk',
-        version: 1,
+        version: 2,
         syncedAt: Date.now(),
         items: items,
+        tombstones: tombstones,
         settings: settings
       };
 
@@ -5461,9 +5858,10 @@
   function copySyncCode() {
     const payload = {
       app: 'Task Desk',
-      version: 1,
+      version: 2,
       syncedAt: Date.now(),
       items: items,
+      tombstones: tombstones,
       settings: settings
     };
     const jsonStr = JSON.stringify(payload);
@@ -5489,12 +5887,23 @@
         showToast('同步碼內容無效');
         return;
       }
-      items = smartMergeItems(items, data.items);
+      const mergeRes = SyncEngine.smartMergeData({
+        items: items,
+        tombstones: tombstones
+      }, {
+        items: data.items,
+        tombstones: data.tombstones
+      });
+      items = mergeRes.items;
+      tombstones = mergeRes.tombstones;
       if (data.settings) {
-        settings = Object.assign({}, settings, data.settings);
-        saveSettings();
-        applyTheme(settings.theme);
-        applySafeTop(settings.safeTop);
+        const cleanSettings = SyncEngine.sanitizeSettings(data.settings);
+        if (cleanSettings) {
+          settings = Object.assign({}, settings, cleanSettings);
+          saveSettings();
+          applyTheme(settings.theme);
+          applySafeTop(settings.safeTop);
+        }
       }
       saveItems();
       renderAll();
@@ -6501,20 +6910,11 @@
           }
         }
 
-        // 檢查是否已存在相同的任務（以 ID 或文字匹配）
+        // 檢查是否已存在相同的任務（僅以穩定 ID 或 rawId 匹配，絕對不以標題猜測合併）
         let existing = null;
         if (task.id) existing = items.find(it => it.id === task.id);
         if (!existing && task.rawId) {
           existing = items.find(it => it.rawId === task.rawId || it.id === `gt_${task.rawId}`);
-        }
-        if (!existing) {
-          if (resolvedParentId) {
-            // 子任務比對相同 parentId 下同名者
-            existing = items.find(it => it.parentId === resolvedParentId && it.text && it.text.trim() === task.text.trim());
-          } else {
-            // 母任務比對同標題且非子任務
-            existing = items.find(it => it.text && it.text.trim() === task.text.trim() && !it.parentId);
-          }
         }
 
         let currentItemId = null;
@@ -7172,10 +7572,17 @@
     } catch (e) {}
   }
 
-  // 啟動應用
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
+  // 啟動應用 (在瀏覽器環境下初始化)
+  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  }
+
+  // 匯出純函式引擎 (供 Node 測試與模組化呼叫)
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = SyncEngine;
   }
 })();

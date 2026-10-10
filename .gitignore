@@ -36,3 +36,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .system_generated/
+
+# Session Script
+SESSION_TRANSCRIPT.md
+SESSION_TRANSCRIPT.json
+
+# Workspace Agent settings
+.agents/
