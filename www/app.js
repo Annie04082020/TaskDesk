@@ -550,7 +550,7 @@
     return `${f(ISOweekStart)} - ${f(ISOweekEnd)}`;
   }
 
-  // --- 批次輸入解析 (支援換行純文字、符號分割、及 Google Tasks Takeout JSON) ---
+  // --- 批次輸入解析 (支援換行純文字、縮排子任務、符號分割、及 Google Tasks Takeout JSON) ---
   function parseBatchInput(rawText, onlyUncompleted = true) {
     if (!rawText || !rawText.trim()) return [];
     const trimmed = rawText.trim();
@@ -561,7 +561,7 @@
         const parsed = JSON.parse(trimmed);
         const tasksFound = [];
 
-        function processTaskObject(task) {
+        function processTaskObject(task, isSub = false) {
           if (!task) return;
           if (onlyUncompleted && (task.status === 'completed' || task.done === true)) {
             return;
@@ -572,16 +572,20 @@
             if (task.notes && typeof task.notes === 'string' && task.notes.trim()) {
               fullText += ` (${task.notes.trim()})`;
             }
-            tasksFound.push(fullText);
+            tasksFound.push({ text: fullText, isSubtask: isSub });
+          }
+          if (Array.isArray(task.items) || Array.isArray(task.subtasks)) {
+            const subItems = task.items || task.subtasks;
+            subItems.forEach(st => processTaskObject(st, true));
           }
         }
 
         if (Array.isArray(parsed)) {
           parsed.forEach(it => {
             if (typeof it === 'string' && it.trim()) {
-              tasksFound.push(it.trim());
+              tasksFound.push({ text: it.trim(), isSubtask: false });
             } else if (typeof it === 'object') {
-              processTaskObject(it);
+              processTaskObject(it, !!(it.parent || it.parentId));
             }
           });
         } else if (typeof parsed === 'object') {
@@ -589,9 +593,9 @@
           if (Array.isArray(parsed.items)) {
             parsed.items.forEach(item => {
               if (Array.isArray(item.items)) {
-                item.items.forEach(t => processTaskObject(t));
+                item.items.forEach(t => processTaskObject(t, !!(t.parent || t.parentId)));
               } else {
-                processTaskObject(item);
+                processTaskObject(item, !!(item.parent || item.parentId));
               }
             });
           }
@@ -605,15 +609,31 @@
       }
     }
 
-    // 依換行、頓號、逗號、分號分割
-    const lines = rawText.split(/[\r\n、，,；;]+/);
+    // 若包含換行符號：按行解析並識別縮排（Tab 或 2+ 空格）為子任務
+    if (/[\r\n]/.test(rawText)) {
+      const rawLines = rawText.split(/\r?\n/);
+      const result = [];
+      for (const line of rawLines) {
+        if (!line.trim()) continue;
+        const indentMatch = line.match(/^([ \t]+)/);
+        const isIndented = !!(indentMatch && (indentMatch[1].includes('\t') || indentMatch[1].length >= 2));
+        let clean = line.trim();
+        clean = clean.replace(/^[-*•]\s+/, '').replace(/^\d+[\.、]\s*/, '').trim();
+        if (clean.length > 0) {
+          result.push({ text: clean, isSubtask: isIndented });
+        }
+      }
+      return result;
+    }
+
+    // 若無換行符號：依頓號、逗號、分號分割為單層獨立任務
+    const parts = rawText.split(/[、，,；;]+/);
     const result = [];
-    for (let line of lines) {
-      line = line.trim();
-      // 清除項目符號如 - * 1. 2. •
-      line = line.replace(/^[-*•]\s+/, '').replace(/^\d+[\.、]\s*/, '').trim();
-      if (line.length > 0) {
-        result.push(line);
+    for (let part of parts) {
+      part = part.trim();
+      part = part.replace(/^[-*•]\s+/, '').replace(/^\d+[\.、]\s*/, '').trim();
+      if (part.length > 0) {
+        result.push({ text: part, isSubtask: false });
       }
     }
     return result;
@@ -624,7 +644,13 @@
     if (!rawTexts || rawTexts.length === 0) return;
 
     const newItems = [];
-    for (let text of rawTexts) {
+    let currentParentItem = null;
+
+    for (let rawElem of rawTexts) {
+      let text = typeof rawElem === 'string' ? rawElem : (rawElem.text || '');
+      const isSubtask = typeof rawElem === 'object' ? !!rawElem.isSubtask : false;
+      if (!text || !text.trim()) continue;
+
       let parsedQuadrant = explicitQuadrant || null;
       let parsedDeadline = explicitDeadline || null;
 
@@ -648,15 +674,19 @@
         text = text.replace(dlMatch[0], '').trim();
       }
 
+      // 判定是否作為子任務放入 currentParentItem
+      const parentIdToUse = (isSubtask && currentParentItem) ? currentParentItem.id : null;
+      const targetBucket = (parentIdToUse && currentParentItem) ? currentParentItem.bucket : 'inbox';
+
       // 立即使用本機關鍵字備案作為初值
       const keywordGuessedType = guessTypeByKeywords(text);
       const isAuto = (!explicitSize || explicitSize === 'auto');
-      const itemSize = isAuto ? guessSize(text, keywordGuessedType) : explicitSize;
+      const itemSize = parentIdToUse ? 'micro' : (isAuto ? guessSize(text, keywordGuessedType) : explicitSize);
       const item = {
         id: generateId(),
         text: text,
         size: itemSize, // 'micro' | 'small' | 'medium' | 'large'
-        bucket: 'inbox',
+        bucket: targetBucket,
         isNow: false,
         done: isDone,
         doneAt: isDone ? Date.now() : null,
@@ -664,7 +694,7 @@
         updatedAt: Date.now(),
         typeId: keywordGuessedType,
         typeSource: keywordGuessedType ? 'rule' : 'ai',
-        parentId: null,
+        parentId: parentIdToUse,
         aiGenerated: false,
         manualQuadrant: parsedQuadrant,
         quadrant: parsedQuadrant || getComputedQuadrant({ text: text, size: itemSize, deadline: parsedDeadline }),
@@ -672,6 +702,10 @@
       };
       items.push(item);
       newItems.push(item);
+
+      if (!parentIdToUse) {
+        currentParentItem = item;
+      }
     }
 
     saveItems();
@@ -5331,7 +5365,7 @@
         const uncompletedTasks = [];
         const completedTasks = [];
 
-        rawItems.forEach((item, itemIdx) => {
+        function pushTaskItem(item, itemIdx, overrideParentId = null) {
           if (!item || typeof item !== 'object') return;
           const title = (item.title || item.text || item.summary || '').trim();
           if (!title) return;
@@ -5356,9 +5390,12 @@
             else doneAt = Date.now();
           }
 
+          const parentRawId = overrideParentId || item.parent || item.parentId || null;
+
           const taskObj = {
             id: item.id ? `gt_${item.id}` : `gt_${idx}_${itemIdx}`,
             rawId: item.id || null,
+            parentRawId: parentRawId,
             text: title,
             notes: noteText,
             done: isDone,
@@ -5374,12 +5411,24 @@
           } else {
             uncompletedTasks.push(taskObj);
           }
+
+          // 支援巢狀子任務結構 (若檔案包含 items / subtasks 陣列)
+          if (Array.isArray(item.items) || Array.isArray(item.subtasks)) {
+            const nested = item.items || item.subtasks;
+            nested.forEach((subIt, subIdx) => {
+              pushTaskItem(subIt, `${itemIdx}_sub_${subIdx}`, item.id || taskObj.id);
+            });
+          }
+        }
+
+        rawItems.forEach((item, itemIdx) => {
+          pushTaskItem(item, itemIdx);
         });
 
         lists.push({
           id: lst.id || `list_${idx}`,
           title: listTitle,
-          totalCount: rawItems.length,
+          totalCount: uncompletedTasks.length + completedTasks.length,
           uncompletedCount: uncompletedTasks.length,
           completedCount: completedTasks.length,
           uncompletedTasks: uncompletedTasks,
@@ -5434,7 +5483,7 @@
         const badgeWrap = document.createElement('div');
         badgeWrap.style.display = 'flex';
         badgeWrap.style.alignItems = 'center';
-        badgeWrap.style.gap = '8px';
+        badgeWrap.gap = '8px';
 
         const badge = document.createElement('span');
         badge.className = 'folder-badge';
@@ -5470,7 +5519,8 @@
           previewBox.textContent = displayTasks.slice(0, 30).map((t, i) => {
             const statusTag = t.done ? '[已完成] ' : '';
             const dlTag = t.deadline ? ` #${t.deadline}` : '';
-            return `${i + 1}. ${statusTag}${t.text}${dlTag}`;
+            const subPrefix = t.parentRawId ? '  └ [子任務] ' : '';
+            return `${subPrefix || `${i + 1}. `}${statusTag}${t.text}${dlTag}`;
           }).join('\n') + (displayTasks.length > 30 ? `\n... 等共 ${displayTasks.length} 件` : '');
         }
         card.appendChild(previewBox);
@@ -5572,8 +5622,14 @@
         return;
       }
       const parsed = parseBatchInput(text, true);
+      const subtaskCount = parsed.filter(p => p.isSubtask).length;
+      const parentCount = parsed.length - subtaskCount;
       if (importNotice) {
-        importNotice.textContent = `偵測到 ${parsed.length} 件任務`;
+        if (subtaskCount > 0) {
+          importNotice.textContent = `偵測到 ${parentCount} 件主要任務，包含 ${subtaskCount} 件縮排子步驟`;
+        } else {
+          importNotice.textContent = `偵測到 ${parsed.length} 件任務`;
+        }
       }
     }
 
@@ -5603,15 +5659,29 @@
       if (modal) modal.style.display = 'none';
     });
 
-    // 智慧 Google Tasks 結構化匯入（保留完成狀態、所屬工作桌與屬性）
+    // 智慧 Google Tasks 結構化匯入（保留完成狀態、所屬工作桌、子任務層級與屬性）
     function importStructuredGoogleTasks(tasksToImport) {
       if (!tasksToImport || tasksToImport.length === 0) return { added: 0, updated: 0 };
 
       let updatedCount = 0;
       let addedCount = 0;
 
+      // 建立原始 ID 對應至系統項目 ID 之對照表
+      const idMap = new Map();
+      const parentTasks = [];
+      const subTasks = [];
+
       tasksToImport.forEach(task => {
-        // 判定目標分類（若清單名稱對應工作桌，直接放置；否則放入收集箱）
+        if (task.parentRawId) {
+          subTasks.push(task);
+        } else {
+          parentTasks.push(task);
+        }
+      });
+
+      // 內部執行單項任務匯入
+      function processSingleTask(task, resolvedParentId = null) {
+        // 判定目標分類
         let targetBucket = 'inbox';
         const lt = (task.listTitle || '').toLowerCase();
         if (lt.includes('今日') || lt.includes('今天') || lt.includes('today')) {
@@ -5624,6 +5694,14 @@
           targetBucket = 'release';
         }
 
+        // 若為子任務且母任務有特定工作桌，繼承母任務之 bucket
+        if (resolvedParentId) {
+          const parentItem = items.find(it => it.id === resolvedParentId);
+          if (parentItem) {
+            targetBucket = parentItem.bucket;
+          }
+        }
+
         // 檢查是否已存在相同的任務（以 ID 或文字匹配）
         let existing = null;
         if (task.id) existing = items.find(it => it.id === task.id);
@@ -5631,23 +5709,29 @@
           existing = items.find(it => it.rawId === task.rawId || it.id === `gt_${task.rawId}`);
         }
         if (!existing) {
-          // 同標題且非子任務比對防重複
-          existing = items.find(it => it.text && it.text.trim() === task.text.trim() && !it.parentId);
+          if (resolvedParentId) {
+            // 子任務比對相同 parentId 下同名者
+            existing = items.find(it => it.parentId === resolvedParentId && it.text && it.text.trim() === task.text.trim());
+          } else {
+            // 母任務比對同標題且非子任務
+            existing = items.find(it => it.text && it.text.trim() === task.text.trim() && !it.parentId);
+          }
         }
 
+        let currentItemId = null;
         if (existing) {
-          // 更新現有項目的完成狀態與各項屬性
           existing.done = !!task.done;
           existing.doneAt = task.done ? (task.doneAt || Date.now()) : null;
           if (task.deadline) existing.deadline = task.deadline;
           if (task.notes && !existing.notes) existing.notes = task.notes;
+          if (resolvedParentId) existing.parentId = resolvedParentId;
           existing.quadrant = getComputedQuadrant(existing);
           existing.updatedAt = Math.max(existing.updatedAt || 0, task.updatedAt || Date.now());
+          currentItemId = existing.id;
           updatedCount++;
         } else {
-          // 新建項目
           const keywordType = guessTypeByKeywords(task.text);
-          const itemSize = guessSize(task.text, keywordType);
+          const itemSize = resolvedParentId ? 'micro' : guessSize(task.text, keywordType);
           const newItem = {
             id: task.id || generateId(),
             rawId: task.rawId || null,
@@ -5662,16 +5746,47 @@
             updatedAt: task.updatedAt || Date.now(),
             typeId: keywordType,
             typeSource: keywordType ? 'rule' : 'ai',
-            parentId: null,
+            parentId: resolvedParentId,
             aiGenerated: false,
             deadline: task.deadline || null,
             manualQuadrant: null
           };
           newItem.quadrant = getComputedQuadrant(newItem);
           items.push(newItem);
+          currentItemId = newItem.id;
           addedCount++;
         }
+
+        // 登記到 idMap 便於子任務關聯
+        if (task.rawId) idMap.set(task.rawId, currentItemId);
+        if (task.id) idMap.set(task.id, currentItemId);
+        return currentItemId;
+      }
+
+      // 第一階段：先建立或更新所有母任務
+      parentTasks.forEach(t => processSingleTask(t, null));
+
+      // 第二階段：關聯並建立子任務
+      subTasks.forEach(t => {
+        let parentId = null;
+        if (t.parentRawId) {
+          parentId = idMap.get(t.parentRawId) ||
+                     idMap.get(`gt_${t.parentRawId}`) ||
+                     items.find(it => it.rawId === t.parentRawId || it.id === `gt_${t.parentRawId}` || it.id === t.parentRawId)?.id || null;
+        }
+        processSingleTask(t, parentId);
       });
+
+      // 第三階段：確保母任務與子任務完成狀態一致
+      for (const it of items) {
+        if (!it.parentId) {
+          const subs = getSubtasks(it.id);
+          if (subs.length > 0 && subs.every(s => s.done) && !it.done) {
+            it.done = true;
+            it.doneAt = Date.now();
+          }
+        }
+      }
 
       saveItems();
       renderAll();
@@ -5702,7 +5817,13 @@
         const lines = parseBatchInput(text, true);
         if (lines.length > 0) {
           addItemsToInbox(lines);
-          showToast(`已匯入 ${lines.length} 件項目至收集箱`);
+          const subCount = lines.filter(l => l.isSubtask).length;
+          const parentCount = lines.length - subCount;
+          if (subCount > 0) {
+            showToast(`已匯入 ${parentCount} 件主要任務，包含 ${subCount} 件子步驟`);
+          } else {
+            showToast(`已匯入 ${lines.length} 件項目至收集箱`);
+          }
           const modal = document.getElementById('modalImport');
           if (modal) modal.style.display = 'none';
         } else {
