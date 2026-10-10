@@ -816,7 +816,7 @@
           <div class="form-sublabel">在 Android 手機上安裝原生 Task Desk，支援離線執行與跨裝置手動同步。</div>
           <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
             <a href="https://github.com/Annie04082020/TaskDesk/releases/latest" target="_blank" rel="noopener" class="btn-primary" style="justify-content: center; text-decoration: none; padding: 10px 14px;">
-              <span>前往 GitHub Releases 下載最新 APK (v1.0.22)</span>
+              <span>前往 GitHub Releases 下載最新 APK (v1.0.23)</span>
             </a>
             <div style="font-size: 0.74rem; color: var(--meta-text); line-height: 1.45;">
               <strong>APK 更新說明：</strong>手機端安裝的 APK 屬於獨立離線封裝。更新網頁原始碼後，GitHub 會自動打包新版本 APK，點擊上方按鈕下載安裝即可直接覆蓋更新！
@@ -1060,6 +1060,79 @@
       <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
         <span style="font-size: 0.74rem; color: var(--meta-text);">每天凌晨 00:00 自動重設完成狀態</span>
         <button type="button" class="btn-secondary" id="btnDismissRoutines">完成</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Edit Task Properties (任務詳細屬性設定) -->
+  <div class="modal-overlay" id="modalItemProperties" style="display: none;">
+    <div class="modal-sheet" style="max-width: 440px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title">任務屬性設定</h3>
+          <div class="modal-subtitle" id="propTaskSubtitle" style="font-size: 0.76rem; color: var(--meta-text); margin-top: 3px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            微調任務截止死線與習慣屬性
+          </div>
+        </div>
+        <button class="modal-close" id="btnCloseItemProperties">&times;</button>
+      </div>
+
+      <div class="modal-body" style="padding-top: 14px; display: flex; flex-direction: column; gap: 14px;">
+        <!-- 任務標題修改 -->
+        <div class="form-group">
+          <label class="form-label" for="propTaskText">任務名稱</label>
+          <input type="text" id="propTaskText" class="form-input" placeholder="輸入任務內容">
+        </div>
+
+        <!-- 截止死線 (Deadline) -->
+        <div class="form-group" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+          <div class="form-label" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>截止死線 (Deadline)</span>
+            <button type="button" id="btnPropClearDeadline" class="btn-text-action" style="font-size: 0.72rem; color: var(--meta-text); background: none; border: none; cursor: pointer;">清除死線</button>
+          </div>
+          <div class="form-sublabel">選填截止日期。平時不製造焦慮，僅在臨近或過期時以低對比狀態提示。</div>
+          <input type="date" id="propTaskDeadline" class="form-input" style="margin-top: 6px; font-family: inherit; color-scheme: dark;">
+        </div>
+
+        <!-- 設為每日習慣 (Daily Routine) -->
+        <div class="form-group" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+          <div class="form-toggle-row">
+            <div>
+              <div class="form-label">設為每日習慣 (Daily Routine)</div>
+              <div class="form-sublabel">每日凌晨 00:00 自動重設完成狀態，依當前體力心流時機智慧推薦。</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="propTaskIsRoutine">
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div id="propRoutineTriggerGroup" style="display: none; margin-top: 10px;">
+            <label class="form-label" for="propTaskRoutineTrigger">推薦浮出時機</label>
+            <select id="propTaskRoutineTrigger" class="routine-select" style="width: 100%; margin-top: 4px;">
+              <option value="recharge">疲憊/卡關時浮出（休整與轉換）</option>
+              <option value="high">精力充沛時浮出（高強度推進）</option>
+              <option value="evening">傍晚/晚間時浮出（日常維護）</option>
+              <option value="any">任意契合時段浮出</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 任務耗時預估 (Size) -->
+        <div class="form-group" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+          <label class="form-label" for="propTaskSize">任務耗時預估 (Size)</label>
+          <select id="propTaskSize" class="routine-select" style="width: 100%; margin-top: 4px;">
+            <option value="micro">試水溫（5 - 10 分鐘，啟動無負擔）</option>
+            <option value="small">小任務（15 - 30 分鐘）</option>
+            <option value="medium">中型任務（1 - 2 小時）</option>
+            <option value="large">大型工程（2 小時以上）</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 8px;">
+        <button type="button" class="btn-secondary" id="btnCancelItemProperties">取消</button>
+        <button type="button" class="btn-primary" id="btnSaveItemProperties">儲存變更</button>
       </div>
     </div>
   </div>

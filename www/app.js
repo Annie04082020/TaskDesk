@@ -2617,6 +2617,19 @@
       triageBtns.appendChild(btnToInbox);
     }
 
+    const rightActions = document.createElement('div');
+    rightActions.className = 'card-right-actions';
+
+    const btnMore = document.createElement('button');
+    btnMore.type = 'button';
+    btnMore.className = 'btn-card-more';
+    btnMore.textContent = '···';
+    btnMore.title = '更多屬性設定（死線、每日習慣、任務預估）';
+    btnMore.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openItemPropertiesModal(item.id);
+    });
+
     const btnDelete = document.createElement('button');
     btnDelete.className = 'btn-delete-card';
     btnDelete.textContent = '刪除';
@@ -2624,8 +2637,11 @@
       deleteItem(item.id);
     });
 
+    rightActions.appendChild(btnMore);
+    rightActions.appendChild(btnDelete);
+
     actionsRow.appendChild(triageBtns);
-    actionsRow.appendChild(btnDelete);
+    actionsRow.appendChild(rightActions);
     card.appendChild(actionsRow);
 
     return card;
@@ -2774,7 +2790,8 @@
       showToast('專注進行中：請先完成當前任務或解除鎖定再開啟抽屜');
       return;
     }
-    currentDrawer = drawerName || 'inbox';
+    const validDrawers = ['inbox', 'keep', 'release', 'history'];
+    currentDrawer = (drawerName && validDrawers.includes(drawerName)) ? drawerName : 'inbox';
     const overlay = document.getElementById('drawerOverlay');
     const panel = document.getElementById('drawerPanel');
     if (!overlay || !panel) return;
@@ -4028,6 +4045,83 @@
     ambientDismissed = true;
     const bar = document.getElementById('ambientSuggestionBar');
     if (bar) bar.style.display = 'none';
+  }
+
+  // --- 任務屬性詳細設定視窗 (Task Properties Modal: 死線、習慣、預估時間) ---
+  let editingPropertyItemId = null;
+
+  function openItemPropertiesModal(itemId) {
+    const item = items.find(it => it.id === itemId);
+    if (!item) return;
+    editingPropertyItemId = itemId;
+
+    const modal = document.getElementById('modalItemProperties');
+    const inputTitle = document.getElementById('propTaskText');
+    const subTitle = document.getElementById('propTaskSubtitle');
+    const inputDeadline = document.getElementById('propTaskDeadline');
+    const chkRoutine = document.getElementById('propTaskIsRoutine');
+    const triggerGroup = document.getElementById('propRoutineTriggerGroup');
+    const selTrigger = document.getElementById('propTaskRoutineTrigger');
+    const selSize = document.getElementById('propTaskSize');
+
+    if (inputTitle) inputTitle.value = item.text || '';
+    if (subTitle) subTitle.textContent = item.text || '';
+    if (inputDeadline) inputDeadline.value = item.deadline || '';
+    if (chkRoutine) chkRoutine.checked = !!item.isRoutine;
+    if (triggerGroup) triggerGroup.style.display = item.isRoutine ? 'block' : 'none';
+    if (selTrigger) selTrigger.value = item.routineTrigger || 'recharge';
+    if (selSize) selSize.value = item.size || 'micro';
+
+    if (modal) modal.style.display = 'flex';
+  }
+
+  function closeItemPropertiesModal() {
+    editingPropertyItemId = null;
+    const modal = document.getElementById('modalItemProperties');
+    if (modal) modal.style.display = 'none';
+  }
+
+  function saveItemProperties() {
+    if (!editingPropertyItemId) return;
+    const item = items.find(it => it.id === editingPropertyItemId);
+    if (!item) {
+      closeItemPropertiesModal();
+      return;
+    }
+
+    const inputTitle = document.getElementById('propTaskText');
+    const inputDeadline = document.getElementById('propTaskDeadline');
+    const chkRoutine = document.getElementById('propTaskIsRoutine');
+    const selTrigger = document.getElementById('propTaskRoutineTrigger');
+    const selSize = document.getElementById('propTaskSize');
+
+    const newText = inputTitle ? inputTitle.value.trim() : '';
+    if (newText) {
+      item.text = newText;
+    }
+
+    const newDeadline = inputDeadline ? inputDeadline.value.trim() : '';
+    item.deadline = newDeadline || null;
+
+    const isRoutine = chkRoutine ? chkRoutine.checked : false;
+    item.isRoutine = isRoutine;
+    if (isRoutine) {
+      item.routineTrigger = selTrigger ? selTrigger.value : 'recharge';
+      item.routineCadence = 'daily';
+      if (!item.lastResetDate) item.lastResetDate = getTodayDateStr();
+    } else {
+      item.routineTrigger = null;
+    }
+
+    if (selSize) {
+      item.size = selSize.value;
+    }
+
+    item.updatedAt = Date.now();
+    saveItems();
+    renderAll();
+    closeItemPropertiesModal();
+    showToast(`已更新「${item.text}」屬性`);
   }
 
   // --- 每日習慣庫視窗管理 (Routines Management) ---
@@ -5541,7 +5635,19 @@
 
     const dockIndicator = document.getElementById('dockIndicator');
     if (dockIndicator) {
-      dockIndicator.addEventListener('click', () => openDrawer(currentDrawer || 'inbox'));
+      dockIndicator.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openDrawer('inbox');
+      });
+    }
+
+    const deskDrawersDock = document.getElementById('deskDrawersDock');
+    if (deskDrawersDock) {
+      deskDrawersDock.addEventListener('click', (e) => {
+        if (!e.target.closest('.dock-drawer-btn')) {
+          openDrawer('inbox');
+        }
+      });
     }
 
     // 抽屜內標籤頁切換
@@ -5824,6 +5930,32 @@
       btnAddRoutine.addEventListener('click', handleAddRoutine);
       inputNewRoutineText.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') handleAddRoutine();
+      });
+    }
+
+    // 任務屬性詳細設定 (Item Properties Modal)
+    const btnCloseItemProperties = document.getElementById('btnCloseItemProperties');
+    if (btnCloseItemProperties) btnCloseItemProperties.addEventListener('click', closeItemPropertiesModal);
+
+    const btnCancelItemProperties = document.getElementById('btnCancelItemProperties');
+    if (btnCancelItemProperties) btnCancelItemProperties.addEventListener('click', closeItemPropertiesModal);
+
+    const btnSaveItemProperties = document.getElementById('btnSaveItemProperties');
+    if (btnSaveItemProperties) btnSaveItemProperties.addEventListener('click', saveItemProperties);
+
+    const btnPropClearDeadline = document.getElementById('btnPropClearDeadline');
+    if (btnPropClearDeadline) {
+      btnPropClearDeadline.addEventListener('click', () => {
+        const inputDeadline = document.getElementById('propTaskDeadline');
+        if (inputDeadline) inputDeadline.value = '';
+      });
+    }
+
+    const propTaskIsRoutine = document.getElementById('propTaskIsRoutine');
+    if (propTaskIsRoutine) {
+      propTaskIsRoutine.addEventListener('change', (e) => {
+        const triggerGroup = document.getElementById('propRoutineTriggerGroup');
+        if (triggerGroup) triggerGroup.style.display = e.target.checked ? 'block' : 'none';
       });
     }
 
@@ -6684,6 +6816,11 @@
       }
 
       // 3. 關閉所有底座抽屜
+      const drawerOverlay = document.getElementById('drawerOverlay');
+      if (drawerOverlay && (drawerOverlay.style.display === 'flex' || drawerOverlay.classList.contains('is-open'))) {
+        closeDrawer();
+        closedSomething = true;
+      }
       const openDrawers = document.querySelectorAll('.drawer.open');
       if (openDrawers.length > 0) {
         openDrawers.forEach(drawer => drawer.classList.remove('open'));

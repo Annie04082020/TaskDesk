@@ -1270,6 +1270,32 @@ body::before {
   box-shadow: 0 0 12px rgba(0, 240, 255, 0.35);
 }
 
+.card-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-card-more {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--meta-text);
+  font-size: 0.85rem;
+  padding: 1px 6px;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.btn-card-more:hover {
+  color: var(--accent-primary);
+  border-color: var(--border-light);
+  background: rgba(255, 255, 255, 0.05);
+}
+
 .btn-delete-card {
   background: transparent;
   border: none;
@@ -1435,6 +1461,12 @@ body::before {
   gap: 8px;
   padding-left: 4px;
   user-select: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.dock-indicator:hover {
+  opacity: 0.85;
 }
 
 .dock-groove {
