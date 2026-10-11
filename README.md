@@ -123,6 +123,7 @@ graph TD
 ### 8. 艾森豪四象限矩陣與結構化子任務匯入
 * **客觀自動推估**：依據「任務尺寸 × 死線迫近程度」客觀分配象限（Q1 緊急重要、Q2 核心深耕、Q3 瑣事速辦、Q4 餘裕順手）。
 * **結構化子任務批次匯入**：純文字貼上支援縮排（Tab 或空格）自動解析建立子任務；支援 Google Tasks Takeout JSON 檔案結構化匯入並還原母子層級。
+* **母子任務分工**：子任務可透過卡片「...」獨立設定花費時間、截止死線、每日習慣與安排時段，也能獨立被推薦與專注；四象限矩陣只統計主任務，子任務沿用母任務的象限。
 
 ### 9. 多端同步與安全防護
 * **系統設定內建同步管理**：直接在「系統設定」面板進入跨裝置同步，解決導航摩擦。
@@ -175,6 +176,9 @@ cd android
 ./gradlew assembleDebug
 ```
 編譯完成的 APK 位於：`android/app/build/outputs/apk/debug/app-debug.apk`。
+
+### 4. 下載最新 Android Release
+使用者可從 [GitHub Releases 最新版本](https://github.com/Annie04082020/TaskDesk/releases/latest) 下載 APK。此連結固定指向最新 Release，不需要隨版本更新文件中的版本文字。
 
 ---
 
