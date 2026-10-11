@@ -10,9 +10,9 @@ const ROOT_DIR = __dirname;
 const WIDGETS_DIR = path.join(ROOT_DIR, 'android-widgets');
 const ANDROID_MAIN = path.join(ROOT_DIR, 'android', 'app', 'src', 'main');
 const REQUIRED_MANIFEST_ENTRIES = [
-  'com.annie.taskdesk.widgets.TodayTasksWidget',
-  'com.annie.taskdesk.widgets.NowTaskWidget',
-  'com.annie.taskdesk.widgets.QuickCaptureWidget',
+  '.widgets.TodayTasksWidget',
+  '.widgets.NowTaskWidget',
+  '.widgets.QuickCaptureWidget',
   '@xml/widget_today_tasks_info',
   '@xml/widget_now_task_info',
   '@xml/widget_quick_capture_info'
