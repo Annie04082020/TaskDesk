@@ -3618,26 +3618,27 @@
   // 支援手動指定與系統依「任務大小」與「截止死線」客觀自動分流
   function getComputedQuadrant(item) {
     if (!item) return 'q4';
-    if (item.manualQuadrant && ['q1', 'q2', 'q3', 'q4'].includes(item.manualQuadrant.toLowerCase())) {
-      return item.manualQuadrant.toLowerCase();
+    const quadrantItem = item.parentId ? (getParentItem(item) || item) : item;
+    if (quadrantItem.manualQuadrant && ['q1', 'q2', 'q3', 'q4'].includes(quadrantItem.manualQuadrant.toLowerCase())) {
+      return quadrantItem.manualQuadrant.toLowerCase();
     }
-    const size = item.size || guessSize(item.text, item.typeId) || 'small';
+    const size = quadrantItem.size || guessSize(quadrantItem.text, quadrantItem.typeId) || 'small';
     const isImportant = (size === 'large' || size === 'medium');
 
     let isUrgent = false;
-    if (item.deadline) {
+    if (quadrantItem.deadline) {
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const deadlineDate = new Date(item.deadline + 'T23:59:59');
+      const deadlineDate = new Date(quadrantItem.deadline + 'T23:59:59');
       const diffMs = deadlineDate.getTime() - now.getTime();
       const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
       // 2 天內到期或已過期皆為緊急
-      if (diffDays <= 2 || item.deadline <= todayStr) {
+      if (diffDays <= 2 || quadrantItem.deadline <= todayStr) {
         isUrgent = true;
       }
     } else {
       // 若無死線，偵測任務標題是否有急迫字眼
-      const text = (item.text || '').toLowerCase();
+      const text = (quadrantItem.text || '').toLowerCase();
       if (text.includes('急') || text.includes('馬上') || text.includes('立刻') || text.includes('今天內') || text.includes('盡快') || text.includes('asap')) {
         isUrgent = true;
       }
@@ -3650,22 +3651,23 @@
   }
 
   function getQuadrantInfo(item) {
+    const quadrantItem = item && item.parentId ? (getParentItem(item) || item) : item;
     const quadId = getComputedQuadrant(item);
-    const isManual = !!(item.manualQuadrant && ['q1', 'q2', 'q3', 'q4'].includes(item.manualQuadrant.toLowerCase()));
-    const size = item.size || guessSize(item.text, item.typeId) || 'small';
+    const isManual = !!(quadrantItem.manualQuadrant && ['q1', 'q2', 'q3', 'q4'].includes(quadrantItem.manualQuadrant.toLowerCase()));
+    const size = quadrantItem.size || guessSize(quadrantItem.text, quadrantItem.typeId) || 'small';
     const sizeMap = { micro: '試水溫 (5-10m 微步)', small: '小任務 (15-30m 瑣事)', medium: '中型任務 (1-2h 專注)', large: '大型任務 (深度專案)' };
     const sizeText = sizeMap[size] || '試水溫';
 
     let dlStatus = '未設定死線';
-    if (item.deadline) {
+    if (quadrantItem.deadline) {
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const diffMs = new Date(item.deadline + 'T23:59:59').getTime() - now.getTime();
+      const diffMs = new Date(quadrantItem.deadline + 'T23:59:59').getTime() - now.getTime();
       const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-      if (diffDays <= 0 || item.deadline <= todayStr) {
-        dlStatus = `今日或已逾期 (${item.deadline})`;
+      if (diffDays <= 0 || quadrantItem.deadline <= todayStr) {
+        dlStatus = `今日或已逾期 (${quadrantItem.deadline})`;
       } else {
-        dlStatus = `剩餘 ${diffDays} 天 (${item.deadline})`;
+        dlStatus = `剩餘 ${diffDays} 天 (${quadrantItem.deadline})`;
       }
     }
 
@@ -3869,7 +3871,8 @@
 
     const quadLabel = document.createElement('div');
     quadLabel.className = 'quadrant-selector-label';
-    quadLabel.textContent = '輕重緩急象限設定：';
+    const quadrantParent = item.parentId ? getParentItem(item) : null;
+    quadLabel.textContent = quadrantParent ? '輕重緩急象限（沿用母任務）：' : '輕重緩急象限設定：';
     quadRow.appendChild(quadLabel);
 
     const quadChips = document.createElement('div');
@@ -3885,14 +3888,17 @@
 
     function renderQuadChips() {
       quadChips.innerHTML = '';
-      const currentManual = item.manualQuadrant ? item.manualQuadrant.toLowerCase() : null;
+      const quadrantSource = quadrantParent || item;
+      const currentManual = quadrantSource.manualQuadrant ? quadrantSource.manualQuadrant.toLowerCase() : null;
       quadOptions.forEach(qOpt => {
         const qBtn = document.createElement('button');
         qBtn.type = 'button';
         const isActive = (qOpt.id === currentManual) || (!qOpt.id && !currentManual);
         qBtn.className = `quadrant-chip-btn ${isActive ? 'active' : ''}`;
         qBtn.textContent = qOpt.label;
+        qBtn.disabled = !!quadrantParent;
         qBtn.addEventListener('click', () => {
+          if (quadrantParent) return;
           item.manualQuadrant = qOpt.id;
           item.quadrant = getComputedQuadrant(item);
           item.updatedAt = Date.now();
@@ -3913,6 +3919,12 @@
     renderQuadChips();
     quadRow.appendChild(quadChips);
     menu.appendChild(quadRow);
+    if (quadrantParent) {
+      const quadrantHint = document.createElement('div');
+      quadrantHint.className = 'quadrant-picker-hint';
+      quadrantHint.textContent = `子任務的四象限只依母任務「${quadrantParent.text}」計算；deadline 與花費時間可在上方分開設定。`;
+      menu.appendChild(quadrantHint);
+    }
 
     updateInfoDisplay();
     menu.appendChild(infoBox);
@@ -4622,6 +4634,8 @@
     const inputTitle = document.getElementById('propTaskText');
     const subTitle = document.getElementById('propTaskSubtitle');
     const inputDeadline = document.getElementById('propTaskDeadline');
+    const selBucket = document.getElementById('propTaskBucket');
+    const relationHint = document.getElementById('propTaskRelationHint');
     const chkRoutine = document.getElementById('propTaskIsRoutine');
     const triggerGroup = document.getElementById('propRoutineTriggerGroup');
     const selTrigger = document.getElementById('propTaskRoutineTrigger');
@@ -4630,6 +4644,8 @@
     if (inputTitle) inputTitle.value = item.text || '';
     if (subTitle) subTitle.textContent = item.text || '';
     if (inputDeadline) inputDeadline.value = item.deadline || '';
+    if (selBucket) selBucket.value = item.bucket || 'inbox';
+    if (relationHint) relationHint.style.display = item.parentId ? 'block' : 'none';
     if (chkRoutine) chkRoutine.checked = !!item.isRoutine;
     if (triggerGroup) triggerGroup.style.display = item.isRoutine ? 'block' : 'none';
     if (selTrigger) selTrigger.value = item.routineTrigger || 'recharge';
@@ -4654,6 +4670,7 @@
 
     const inputTitle = document.getElementById('propTaskText');
     const inputDeadline = document.getElementById('propTaskDeadline');
+    const selBucket = document.getElementById('propTaskBucket');
     const chkRoutine = document.getElementById('propTaskIsRoutine');
     const selTrigger = document.getElementById('propTaskRoutineTrigger');
     const selSize = document.getElementById('propTaskSize');
@@ -4665,6 +4682,9 @@
 
     const newDeadline = inputDeadline ? inputDeadline.value.trim() : '';
     item.deadline = newDeadline || null;
+    if (selBucket && SyncEngine.ALLOWED_BUCKETS.has(selBucket.value)) {
+      item.bucket = selBucket.value;
+    }
 
     const isRoutine = chkRoutine ? chkRoutine.checked : false;
     item.isRoutine = isRoutine;
