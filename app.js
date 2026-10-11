@@ -1015,6 +1015,19 @@
     return items.filter(it => it.parentId === parentId);
   }
 
+  function getParentItem(item) {
+    return item && item.parentId ? items.find(it => it.id === item.parentId) || null : null;
+  }
+
+  function getRecommendationTag(item) {
+    return item && item.parentId ? '子任務 · 可獨立推薦' : null;
+  }
+
+  function getRecommendationDisplayText(item) {
+    const parent = getParentItem(item);
+    return parent ? `${parent.text} › ${item.text}` : item.text;
+  }
+
   // 取得本週已完成頂層任務數量
   function getWeekCompletedCount() {
     const now = new Date();
@@ -1238,9 +1251,12 @@
     item.isNow = true;
     item.updatedAt = Date.now();
 
-    // 若不在今日也不在週工作桌，自動移入目前開啟的工作桌
+    // 子任務沿用母任務工作桌；獨立推薦不會解除兩者的關聯。
     if (item.bucket !== 'today' && item.bucket !== 'week') {
-      item.bucket = activeWorkbench === 'week' ? 'week' : 'today';
+      const parent = getParentItem(item);
+      item.bucket = parent && parent.bucket
+        ? parent.bucket
+        : (activeWorkbench === 'week' ? 'week' : 'today');
     }
 
     saveItems();
@@ -1317,7 +1333,10 @@
 
       // 若該項目不在「今日」也不在「這週」，移入當前開啟的工作桌
       if (item.bucket !== 'today' && item.bucket !== 'week') {
-        const targetBucket = activeWorkbench === 'week' ? 'week' : 'today';
+        const parent = getParentItem(item);
+        const targetBucket = parent && parent.bucket
+          ? parent.bucket
+          : (activeWorkbench === 'week' ? 'week' : 'today');
         const itemSize = item.size || guessSize(item.text, item.typeId);
 
         if (targetBucket === 'today' && (itemSize === 'small' || itemSize === 'micro')) {
@@ -1524,7 +1543,8 @@
   }
 
   function getConsultCandidates(userState) {
-    // 取得候選庫：未完成的「這週」項目（及可選的「保溫」項目）
+    // 取得候選庫：未完成的「這週」項目（及可選的「保溫」項目）。
+    // 有子任務時，改以每個未完成子任務作為可獨立推薦的候選。
     const candidateTopItems = items.filter(it => {
       if (it.done || it.parentId) return false;
       if (it.bucket === 'today' || it.bucket === 'week') return true;
@@ -1543,11 +1563,13 @@
           const typeObj = getTypeById(effectiveTypeId);
           if (matchCondition(typeObj, userState)) {
             matchedEntries.push({
-              id: item.id,
+              id: sub.id,
               subtaskId: sub.id,
-              displayText: `${item.text} › ${sub.text}`,
+              displayText: getRecommendationDisplayText(sub),
+              recommendationTag: getRecommendationTag(sub),
               typeId: effectiveTypeId,
-              itemRef: item
+              itemRef: sub,
+              parentRef: item
             });
           }
         }
@@ -1559,6 +1581,7 @@
             id: item.id,
             subtaskId: null,
             displayText: item.text,
+            recommendationTag: null,
             typeId: item.typeId,
             itemRef: item
           });
@@ -4158,7 +4181,12 @@
 
   function runAutoDecideTask() {
     // 優先挑選未完成之活躍項目 (今日 > 這週 > 保溫)
-    const activeItems = items.filter(it => !it.done && !it.parentId);
+    const activeItems = items.filter(it => {
+      if (it.done) return false;
+      if (!it.parentId) return true;
+      const parent = getParentItem(it);
+      return !!parent && !parent.done;
+    });
     if (activeItems.length === 0) {
       showToast('工作桌目前沒有任何待辦任務，請先新增幾項任務！');
       return;
@@ -4307,7 +4335,7 @@
     const bucketBadge = document.getElementById('autoDecideBucketBadge');
     const reasonText = document.getElementById('autoDecideReasonText');
 
-    if (titleEl) titleEl.textContent = item.text;
+    if (titleEl) titleEl.textContent = getRecommendationDisplayText(item);
 
     const quadInfo = getQuadrantInfo(item);
     if (quadBadge) {
@@ -4324,7 +4352,10 @@
 
     const bucketLabels = { today: '今日工作桌', week: '本週工作桌', keep: '保溫', inbox: '收集箱' };
     if (bucketBadge) {
-      bucketBadge.textContent = bucketLabels[item.bucket] || '工作桌';
+      const recommendationTag = getRecommendationTag(item);
+      bucketBadge.textContent = recommendationTag
+        ? `${bucketLabels[item.bucket] || '工作桌'} · ${recommendationTag}`
+        : (bucketLabels[item.bucket] || '工作桌');
     }
 
     if (reasonText) {
@@ -4340,21 +4371,22 @@
     const currentHour = now.getHours();
     const todayStr = getTodayDateStr();
 
-    // 候選池：
-    // 1. 今日工作桌未完成主要任務
-    // 2. 這週工作桌未完成主要任務
-    // 3. 每日習慣未完成者 (isRoutine && !done)
-    const pool = items.filter(it => {
-      if (it.done || it.parentId) return false;
-      if (it.isRoutine) {
-        return true;
+    // 候選池：主要任務或其未完成子任務。子任務可獨立推薦，但仍沿用母任務關聯。
+    const pool = [];
+    items.filter(it => !it.done && !it.parentId).forEach(item => {
+      const subtasks = getSubtasks(item.id).filter(sub => !sub.done);
+      if (subtasks.length > 0 && !item.isRoutine) {
+        pool.push(...subtasks);
+      } else if (item.isRoutine || item.bucket === 'today' || item.bucket === 'week') {
+        pool.push(item);
       }
-      return it.bucket === 'today' || it.bucket === 'week';
     });
 
     if (pool.length === 0) return [];
 
     const scored = pool.map(item => {
+      const parent = getParentItem(item);
+      const contextItem = parent || item;
       let score = 0;
       const reasons = [];
 
@@ -4394,12 +4426,13 @@
         }
 
         // 2. 死線臨近度
-        if (item.deadline) {
-          if (item.deadline <= todayStr) {
+        if (item.deadline || contextItem.deadline) {
+          const deadline = item.deadline || contextItem.deadline;
+          if (deadline <= todayStr) {
             score += 60;
             reasons.push('死線就在今天');
           } else {
-            const diffDays = Math.ceil((new Date(item.deadline + 'T23:59:59').getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+            const diffDays = Math.ceil((new Date(deadline + 'T23:59:59').getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
             if (diffDays <= 2) {
               score += 35;
               reasons.push(`${diffDays} 天內到期`);
@@ -4439,6 +4472,10 @@
         } else if (item.bucket === 'week') {
           score += 10;
         }
+      }
+
+      if (parent) {
+        reasons.unshift(`子任務：${parent.text}`);
       }
 
       return {
@@ -4510,8 +4547,8 @@
     const item = pick.item;
 
     bar.style.display = 'block';
-    if (prefixEl) prefixEl.textContent = item.isRoutine ? '習慣推薦' : '環境推薦';
-    if (titleEl) titleEl.textContent = item.text;
+    if (prefixEl) prefixEl.textContent = item.isRoutine ? '習慣推薦' : (getRecommendationTag(item) || '環境推薦');
+    if (titleEl) titleEl.textContent = getRecommendationDisplayText(item);
     if (chipsEl) {
       chipsEl.innerHTML = '';
       if (item.isRoutine) {
@@ -4525,6 +4562,13 @@
         qChip.className = `chip chip-quadrant chip-quadrant-${qInfo.id}`;
         qChip.textContent = qInfo.badge;
         chipsEl.appendChild(qChip);
+        const recommendationTag = getRecommendationTag(item);
+        if (recommendationTag) {
+          const subtaskChip = document.createElement('span');
+          subtaskChip.className = 'chip chip-subtask';
+          subtaskChip.textContent = recommendationTag;
+          chipsEl.appendChild(subtaskChip);
+        }
       }
     }
     if (reasonEl) reasonEl.textContent = pick.reasonSummary;
@@ -5232,7 +5276,12 @@
   }
 
   function pickRandomWeekItem() {
-    const uncompletedActive = items.filter(it => (it.bucket === 'today' || it.bucket === 'week') && !it.parentId && !it.done);
+    const uncompletedActive = items.filter(it => {
+      if (it.done || (it.bucket !== 'today' && it.bucket !== 'week')) return false;
+      if (!it.parentId) return true;
+      const parent = getParentItem(it);
+      return !!parent && !parent.done;
+    });
     if (uncompletedActive.length === 0) {
       showToast('目前「今日」或「這週」沒有未完成項目');
       document.getElementById('modalConsult').style.display = 'none';
@@ -5260,6 +5309,14 @@
       const taskTitle = document.createElement('div');
       taskTitle.className = 'consult-task-title';
       taskTitle.textContent = rec.entry.displayText;
+
+      if (rec.entry.recommendationTag) {
+        const tag = document.createElement('span');
+        tag.className = 'chip chip-subtask';
+        tag.textContent = rec.entry.recommendationTag;
+        taskTitle.appendChild(document.createTextNode(' '));
+        taskTitle.appendChild(tag);
+      }
 
       const reason = document.createElement('div');
       reason.className = 'consult-reason';

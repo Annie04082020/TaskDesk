@@ -9,6 +9,14 @@ const path = require('path');
 const ROOT_DIR = __dirname;
 const WIDGETS_DIR = path.join(ROOT_DIR, 'android-widgets');
 const ANDROID_MAIN = path.join(ROOT_DIR, 'android', 'app', 'src', 'main');
+const REQUIRED_MANIFEST_ENTRIES = [
+  'com.annie.taskdesk.widgets.TodayTasksWidget',
+  'com.annie.taskdesk.widgets.NowTaskWidget',
+  'com.annie.taskdesk.widgets.QuickCaptureWidget',
+  '@xml/widget_today_tasks_info',
+  '@xml/widget_now_task_info',
+  '@xml/widget_quick_capture_info'
+];
 
 function copyRecursive(src, dest) {
   if (!fs.existsSync(src)) return;
@@ -31,7 +39,8 @@ function injectManifest(manifestPath) {
   }
 
   let content = fs.readFileSync(manifestPath, 'utf8');
-  if (content.includes('TodayTasksWidget')) {
+  const hasAllManifestEntries = REQUIRED_MANIFEST_ENTRIES.every(entry => content.includes(entry));
+  if (hasAllManifestEntries) {
     console.log('[Widgets] Receivers already present in AndroidManifest.xml');
     return;
   }
@@ -129,6 +138,27 @@ function main() {
   // 3. Patch AndroidManifest.xml
   const manifestPath = path.join(ANDROID_MAIN, 'AndroidManifest.xml');
   injectManifest(manifestPath);
+
+  const requiredFiles = [
+    path.join(destJava, 'com', 'annie', 'taskdesk', 'widgets', 'TodayTasksWidget.java'),
+    path.join(destJava, 'com', 'annie', 'taskdesk', 'widgets', 'NowTaskWidget.java'),
+    path.join(destJava, 'com', 'annie', 'taskdesk', 'widgets', 'QuickCaptureWidget.java'),
+    path.join(destRes, 'layout', 'widget_today_tasks.xml'),
+    path.join(destRes, 'layout', 'widget_now_task.xml'),
+    path.join(destRes, 'layout', 'widget_quick_capture.xml'),
+    path.join(destRes, 'xml', 'widget_today_tasks_info.xml'),
+    path.join(destRes, 'xml', 'widget_now_task_info.xml'),
+    path.join(destRes, 'xml', 'widget_quick_capture_info.xml')
+  ];
+  const missingFiles = requiredFiles.filter(file => !fs.existsSync(file));
+  if (missingFiles.length > 0) {
+    throw new Error(`[Widgets] Required widget files were not copied:\n${missingFiles.join('\n')}`);
+  }
+
+  const manifest = fs.readFileSync(manifestPath, 'utf8');
+  if (!REQUIRED_MANIFEST_ENTRIES.every(entry => manifest.includes(entry))) {
+    throw new Error('[Widgets] AndroidManifest.xml is missing one or more widget receivers or provider metadata entries.');
+  }
 
   console.log('[Widgets] Android AppWidgets setup completed successfully!');
 }

@@ -4973,6 +4973,13 @@ input:checked + .slider:before {
   cursor: pointer;
 }
 
+.chip-subtask {
+  border-color: rgba(34, 211, 238, 0.35);
+  color: #67e8f9;
+  background: rgba(34, 211, 238, 0.08);
+  cursor: default;
+}
+
 .routine-select-inline {
   background-color: #101524;
   border: 1px solid var(--border-subtle);
@@ -5019,5 +5026,4 @@ select option:checked {
   background-color: #1e293b !important;
   color: #00f0ff !important;
 }
-
 
