@@ -629,8 +629,9 @@
     } catch (e) {
       console.error('儲存設定失敗:', e);
     }
+  }
 
-    function getLocalNotificationsPlugin() {
+  function getLocalNotificationsPlugin() {
       if (window.capacitorLocalNotifications && window.capacitorLocalNotifications.LocalNotifications) {
         return window.capacitorLocalNotifications.LocalNotifications;
       }
@@ -659,7 +660,7 @@
       return groups.length ? groups.join('、') : '目前沒有需要提醒的任務';
     }
 
-    async function syncAndroidNotifications() {
+  async function syncAndroidNotifications() {
       const plugin = getLocalNotificationsPlugin();
       if (!plugin) return;
       try {
@@ -685,7 +686,7 @@
       }
     }
 
-    async function requestAndroidNotificationPermission() {
+  async function requestAndroidNotificationPermission() {
       const plugin = getLocalNotificationsPlugin();
       if (!plugin) return false;
       try {
@@ -697,7 +698,7 @@
       }
     }
 
-    function renderNotificationTimes() {
+  function renderNotificationTimes() {
       const container = document.getElementById('settingNotificationTimes');
       if (!container) return;
       container.innerHTML = '';
@@ -720,7 +721,6 @@
           renderNotificationTimes();
         });
       });
-    }
   }
 
   function loadUserState() {
@@ -2857,7 +2857,91 @@
     showToast('已匯出專注日誌 JSON');
   }
 
+  function sortWorkbenchItems(taskItems) {
+    taskItems.sort((a, b) => {
+      if (a.isNow && !b.isNow) return -1;
+      if (b.isNow && !a.isNow) return 1;
+      const orderA = typeof a.order === 'number' ? a.order : Number.MAX_SAFE_INTEGER;
+      const orderB = typeof b.order === 'number' ? b.order : Number.MAX_SAFE_INTEGER;
+      return orderA - orderB || (a.createdAt || 0) - (b.createdAt || 0);
+    });
+  }
 
+  function enableWorkbenchDragSort(listEl, taskItems, bucket) {
+    const draggedId = { value: null };
+    taskItems.forEach(item => {
+      const card = Array.from(listEl.querySelectorAll('[data-card-id]'))
+        .find(candidate => candidate.dataset.cardId === item.id);
+      if (!card) return;
+      card.draggable = true;
+      card.classList.add('is-sortable');
+      card.addEventListener('dragstart', (event) => {
+        draggedId.value = item.id;
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', item.id);
+        card.classList.add('is-dragging');
+      });
+      card.addEventListener('dragend', () => {
+        draggedId.value = null;
+        card.classList.remove('is-dragging');
+        listEl.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+      });
+      card.addEventListener('dragover', (event) => {
+        if (!draggedId.value || draggedId.value === item.id) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        card.classList.add('drag-over');
+      });
+      card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+      card.addEventListener('drop', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        card.classList.remove('drag-over');
+        const source = items.find(candidate => candidate.id === draggedId.value);
+        const target = items.find(candidate => candidate.id === item.id);
+        if (!source || !target || source.id === target.id) return;
+        const ordered = items
+          .filter(candidate => candidate.bucket === bucket && !candidate.parentId && !candidate.done)
+          .sort((a, b) => {
+            const aOrder = typeof a.order === 'number' ? a.order : Number.MAX_SAFE_INTEGER;
+            const bOrder = typeof b.order === 'number' ? b.order : Number.MAX_SAFE_INTEGER;
+            return aOrder - bOrder || (a.createdAt || 0) - (b.createdAt || 0);
+          })
+          .filter(candidate => candidate.id !== source.id);
+        const targetIndex = ordered.findIndex(candidate => candidate.id === target.id);
+        const insertIndex = event.clientY > card.getBoundingClientRect().top + card.offsetHeight / 2
+          ? targetIndex + 1
+          : targetIndex;
+        ordered.splice(insertIndex, 0, source);
+        ordered.forEach((candidate, index) => {
+          candidate.order = index;
+          candidate.updatedAt = Date.now();
+        });
+        saveItems();
+        renderAll();
+      });
+    });
+    listEl.addEventListener('dragover', (event) => {
+      if (event.target.closest('.task-card')) return;
+      event.preventDefault();
+    });
+    listEl.addEventListener('drop', (event) => {
+      if (event.target.closest('.task-card')) return;
+      event.preventDefault();
+      const source = items.find(candidate => candidate.id === draggedId.value);
+      if (!source) return;
+      const ordered = items
+        .filter(candidate => candidate.bucket === bucket && !candidate.parentId && !candidate.done && candidate.id !== source.id)
+        .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
+      ordered.push(source);
+      ordered.forEach((candidate, index) => {
+        candidate.order = index;
+        candidate.updatedAt = Date.now();
+      });
+      saveItems();
+      renderAll();
+    });
+  }
 
   // --- 畫面渲染 ---
   function renderAll() {
