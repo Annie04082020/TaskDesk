@@ -2815,6 +2815,20 @@ input:checked + .slider:before {
   box-shadow: 0 0 16px rgba(56, 189, 248, 0.2);
 }
 
+.task-card.is-sortable {
+  cursor: grab;
+}
+
+.task-card.is-sortable.is-dragging {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+
+.task-card.is-sortable.drag-over {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(0, 240, 255, 0.2);
+}
+
 .matrix-item-main {
   display: flex;
   align-items: flex-start;
@@ -5026,4 +5040,3 @@ select option:checked {
   background-color: #1e293b !important;
   color: #00f0ff !important;
 }
-

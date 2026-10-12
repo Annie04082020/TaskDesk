@@ -217,6 +217,9 @@
       const typeId = (typeof raw.typeId === 'string' && raw.typeId.trim()) ? raw.typeId.trim().slice(0, 50) : null;
       const typeSource = (typeof raw.typeSource === 'string') ? raw.typeSource.slice(0, 20) : 'rule';
       const aiGenerated = !!raw.aiGenerated;
+      const order = (typeof raw.order === 'number' && Number.isFinite(raw.order))
+        ? raw.order
+        : (typeof raw.position === 'number' && Number.isFinite(raw.position) ? raw.position : null);
 
       return {
         id,
@@ -241,7 +244,8 @@
         parentId,
         typeId,
         typeSource,
-        aiGenerated
+        aiGenerated,
+        order
       };
     },
 
@@ -311,6 +315,11 @@
       clean.focusLockEnabled = raw.focusLockEnabled !== false;
       clean.kairosEnabled = !!raw.kairosEnabled;
       clean.kairosUrl = (typeof raw.kairosUrl === 'string' && /^https?:\/\//i.test(raw.kairosUrl)) ? raw.kairosUrl : 'http://127.0.0.1:5050';
+      clean.notificationsEnabled = raw.notificationsEnabled !== false;
+      clean.notificationTimes = Array.isArray(raw.notificationTimes)
+        ? raw.notificationTimes.filter(time => typeof time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)).slice(0, 12)
+        : ['10:00'];
+      if (clean.notificationTimes.length === 0) clean.notificationTimes = ['10:00'];
       if (typeof raw.updatedAt === 'number' && Number.isFinite(raw.updatedAt)) {
         clean.updatedAt = Math.floor(raw.updatedAt);
       }
@@ -458,7 +467,8 @@
             quadrant: newerObj.quadrant || olderObj.quadrant || 'q2',
             typeId: newerObj.typeId || olderObj.typeId || null,
             parentId: (newerObj.parentId !== undefined) ? newerObj.parentId : olderObj.parentId,
-            isNow: (resolvedDone ? false : (newerObj.isNow !== undefined ? newerObj.isNow : olderObj.isNow))
+            isNow: (resolvedDone ? false : (newerObj.isNow !== undefined ? newerObj.isNow : olderObj.isNow)),
+            order: newerObj.order !== undefined ? newerObj.order : olderObj.order
           });
 
           itemMap.set(localIt.id, mergedItem);
@@ -512,7 +522,9 @@
     pinHash: '',
     focusLockEnabled: true,
     kairosEnabled: false,
-    kairosUrl: 'http://127.0.0.1:5050'
+    kairosUrl: 'http://127.0.0.1:5050',
+    notificationsEnabled: true,
+    notificationTimes: ['10:00']
   };
 
   let activeWorkbench = 'today'; // 'today' | 'week'
@@ -567,6 +579,7 @@
     setupEventListeners();
     setupPWA();
     renderAll();
+    syncAndroidNotifications();
     checkLockOnStartup();
     checkStartupStatePrompt();
     if (window.location.hash === '#quick_capture' || window.location.search.includes('action=quick_capture')) {
@@ -599,6 +612,11 @@
         if (parsed.kairosUrl) {
           settings.kairosUrl = parsed.kairosUrl;
         }
+        settings.notificationsEnabled = parsed.notificationsEnabled !== false;
+        settings.notificationTimes = Array.isArray(parsed.notificationTimes)
+          ? parsed.notificationTimes.filter(time => typeof time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)).slice(0, 12)
+          : ['10:00'];
+        if (settings.notificationTimes.length === 0) settings.notificationTimes = ['10:00'];
       }
     } catch (e) {
       console.warn('載入設定失敗:', e);
@@ -610,6 +628,98 @@
       localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
     } catch (e) {
       console.error('儲存設定失敗:', e);
+    }
+
+    function getLocalNotificationsPlugin() {
+      if (window.capacitorLocalNotifications && window.capacitorLocalNotifications.LocalNotifications) {
+        return window.capacitorLocalNotifications.LocalNotifications;
+      }
+      return window.Capacitor && window.Capacitor.Plugins
+        ? window.Capacitor.Plugins.LocalNotifications
+        : null;
+    }
+
+    function getNotificationSummary() {
+      const pending = items.filter(item => !item.done && item.bucket !== 'inbox' && item.bucket !== 'keep' && item.bucket !== 'release');
+      const today = pending.filter(item => item.bucket === 'today');
+      const week = pending.filter(item => item.bucket === 'week');
+      const routines = pending.filter(item => item.isRoutine);
+      const now = new Date();
+      const soon = pending.filter(item => {
+        if (!item.deadline) return false;
+        const deadline = new Date(`${item.deadline}T23:59:59`);
+        const diffDays = Math.ceil((deadline.getTime() - now.getTime()) / 86400000);
+        return diffDays <= 2;
+      });
+      const groups = [];
+      if (today.length) groups.push(`今日 ${today.length} 件`);
+      if (week.length) groups.push(`本週 ${week.length} 件`);
+      if (soon.length) groups.push(`快截止 ${soon.length} 件`);
+      if (routines.length) groups.push(`習慣 ${routines.length} 件`);
+      return groups.length ? groups.join('、') : '目前沒有需要提醒的任務';
+    }
+
+    async function syncAndroidNotifications() {
+      const plugin = getLocalNotificationsPlugin();
+      if (!plugin) return;
+      try {
+        const notificationIds = Array.from({ length: 12 }, (_, index) => ({ id: 910000 + index }));
+        await plugin.cancel({ notifications: notificationIds });
+        if (!settings.notificationsEnabled) return;
+        const permission = await plugin.checkPermissions();
+        if (permission.display !== 'granted') return;
+        await plugin.schedule({
+          notifications: settings.notificationTimes.map((time, index) => {
+            const [hour, minute] = time.split(':').map(Number);
+            return {
+              id: 910000 + index,
+              title: 'Task Desk 任務提醒',
+              body: getNotificationSummary(),
+              schedule: { on: { hour, minute }, repeats: true, allowWhileIdle: true },
+              extra: { source: 'taskdesk-daily-summary', time }
+            };
+          })
+        });
+      } catch (error) {
+        console.error('排程 Android 通知失敗:', error);
+      }
+    }
+
+    async function requestAndroidNotificationPermission() {
+      const plugin = getLocalNotificationsPlugin();
+      if (!plugin) return false;
+      try {
+        const result = await plugin.requestPermissions();
+        return result.display === 'granted';
+      } catch (error) {
+        console.error('取得 Android 通知權限失敗:', error);
+        return false;
+      }
+    }
+
+    function renderNotificationTimes() {
+      const container = document.getElementById('settingNotificationTimes');
+      if (!container) return;
+      container.innerHTML = '';
+      settings.notificationTimes.forEach((time, index) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; gap:8px; align-items:center; margin-top:6px;';
+        row.innerHTML = `<input type="time" class="form-input notification-time-input" value="${time}" data-index="${index}" style="flex:1;">
+          <button type="button" class="btn-secondary notification-remove-time" data-index="${index}" style="padding:6px 10px; font-size:0.76rem;" ${settings.notificationTimes.length === 1 ? 'disabled' : ''}>移除</button>`;
+        container.appendChild(row);
+      });
+      container.querySelectorAll('.notification-time-input').forEach(input => {
+        input.addEventListener('change', () => {
+          const index = Number(input.dataset.index);
+          if (/^([01]\d|2[0-3]):[0-5]\d$/.test(input.value)) settings.notificationTimes[index] = input.value;
+        });
+      });
+      container.querySelectorAll('.notification-remove-time').forEach(button => {
+        button.addEventListener('click', () => {
+          settings.notificationTimes.splice(Number(button.dataset.index), 1);
+          renderNotificationTimes();
+        });
+      });
     }
   }
 
@@ -807,6 +917,7 @@
       if (saved) {
         const parsed = JSON.parse(saved);
         items = SyncEngine.sanitizeItems(parsed);
+        normalizeSubtaskBuckets();
         // 補齊可能缺失的動態屬性
         items.forEach(it => {
           if (!it.size) {
@@ -830,12 +941,26 @@
 
   function saveItems() {
     try {
+      normalizeSubtaskBuckets();
       localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
       localStorage.setItem(STORAGE_KEY_TOMBSTONES, JSON.stringify(tombstones));
       syncToAndroidWidgets();
+      syncAndroidNotifications();
     } catch (e) {
       console.error('儲存任務失敗:', e);
     }
+  }
+
+  // 子任務的工作桌位置跟隨主任務；只有耗時與執行屬性可獨立設定。
+  function normalizeSubtaskBuckets() {
+    const itemMap = new Map(items.map(item => [item.id, item]));
+    items.forEach(item => {
+      if (!item.parentId) return;
+      const parent = itemMap.get(item.parentId);
+      if (parent && SyncEngine.ALLOWED_BUCKETS.has(parent.bucket)) {
+        item.bucket = parent.bucket;
+      }
+    });
   }
 
   // 同步任務資料至 Android 原生小工具 (Widgets)
@@ -2747,6 +2872,92 @@
     if (overlay && overlay.style.display !== 'none') {
       renderDrawerContent();
     }
+
+    function sortWorkbenchItems(taskItems) {
+      taskItems.sort((a, b) => {
+        if (a.isNow && !b.isNow) return -1;
+        if (b.isNow && !a.isNow) return 1;
+        const orderA = typeof a.order === 'number' ? a.order : Number.MAX_SAFE_INTEGER;
+        const orderB = typeof b.order === 'number' ? b.order : Number.MAX_SAFE_INTEGER;
+        return orderA - orderB || (a.createdAt || 0) - (b.createdAt || 0);
+      });
+    }
+
+    function enableWorkbenchDragSort(listEl, taskItems, bucket) {
+      const draggedId = { value: null };
+      taskItems.forEach(item => {
+        const card = Array.from(listEl.querySelectorAll('[data-card-id]'))
+          .find(candidate => candidate.dataset.cardId === item.id);
+        if (!card) return;
+        card.draggable = true;
+        card.classList.add('is-sortable');
+        card.addEventListener('dragstart', (event) => {
+          draggedId.value = item.id;
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', item.id);
+          card.classList.add('is-dragging');
+        });
+        card.addEventListener('dragend', () => {
+          draggedId.value = null;
+          card.classList.remove('is-dragging');
+          listEl.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        });
+        card.addEventListener('dragover', (event) => {
+          if (!draggedId.value || draggedId.value === item.id) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'move';
+          card.classList.add('drag-over');
+        });
+        card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+        card.addEventListener('drop', (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          card.classList.remove('drag-over');
+          const source = items.find(candidate => candidate.id === draggedId.value);
+          const target = items.find(candidate => candidate.id === item.id);
+          if (!source || !target || source.id === target.id) return;
+          const ordered = items
+            .filter(candidate => candidate.bucket === bucket && !candidate.parentId && !candidate.done)
+            .sort((a, b) => {
+              const aOrder = typeof a.order === 'number' ? a.order : Number.MAX_SAFE_INTEGER;
+              const bOrder = typeof b.order === 'number' ? b.order : Number.MAX_SAFE_INTEGER;
+              return aOrder - bOrder || (a.createdAt || 0) - (b.createdAt || 0);
+            })
+            .filter(candidate => candidate.id !== source.id);
+          const targetIndex = ordered.findIndex(candidate => candidate.id === target.id);
+          const insertIndex = event.clientY > card.getBoundingClientRect().top + card.offsetHeight / 2
+            ? targetIndex + 1
+            : targetIndex;
+          ordered.splice(insertIndex, 0, source);
+          ordered.forEach((candidate, index) => {
+            candidate.order = index;
+            candidate.updatedAt = Date.now();
+          });
+          saveItems();
+          renderAll();
+        });
+      });
+      listEl.addEventListener('dragover', (event) => {
+        if (event.target.closest('.task-card')) return;
+        event.preventDefault();
+      });
+      listEl.addEventListener('drop', (event) => {
+        if (event.target.closest('.task-card')) return;
+        event.preventDefault();
+        const source = items.find(candidate => candidate.id === draggedId.value);
+        if (!source) return;
+        const ordered = items
+          .filter(candidate => candidate.bucket === bucket && !candidate.parentId && !candidate.done && candidate.id !== source.id)
+          .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
+        ordered.push(source);
+        ordered.forEach((candidate, index) => {
+          candidate.order = index;
+          candidate.updatedAt = Date.now();
+        });
+        saveItems();
+        renderAll();
+      });
+    }
   }
 
   function renderWeekCounter() {
@@ -2935,6 +3146,16 @@
 
       subItemEl.appendChild(subCheck);
       subItemEl.appendChild(subTextEl);
+      const editSubBtn = document.createElement('button');
+      editSubBtn.className = 'btn-edit-subtask';
+      editSubBtn.type = 'button';
+      editSubBtn.textContent = '...';
+      editSubBtn.title = '編輯子任務名稱與耗時';
+      editSubBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        openItemPropertiesModal(sub.id);
+      });
+      subItemEl.appendChild(editSubBtn);
       subItemEl.appendChild(delSubBtn);
       subtasksContainer.appendChild(subItemEl);
     });
@@ -3179,12 +3400,8 @@
     listEl.innerHTML = '';
     const todayItems = items.filter(it => it.bucket === 'today' && !it.parentId && !it.done);
 
-    // 排序：將 isNow 項目排在最頂端
-    todayItems.sort((a, b) => {
-      if (a.isNow) return -1;
-      if (b.isNow) return 1;
-      return a.createdAt - b.createdAt;
-    });
+    // 排序：保留使用者拖曳順序，當前專注仍固定在最上方
+    sortWorkbenchItems(todayItems);
 
     const smallCount = todayItems.filter(it => ['small', 'micro'].includes(it.size || guessSize(it.text, it.typeId))).length;
 
@@ -3233,6 +3450,7 @@
     todayItems.forEach(item => {
       listEl.appendChild(createCardElement(item, 'today'));
     });
+    enableWorkbenchDragSort(listEl, todayItems, 'today');
   }
 
   // 渲染「這週」清單
@@ -3245,12 +3463,8 @@
     listEl.innerHTML = '';
     const weekItems = items.filter(it => it.bucket === 'week' && !it.parentId && !it.done);
 
-    // 排序：將 isNow 項目排在最頂端
-    weekItems.sort((a, b) => {
-      if (a.isNow) return -1;
-      if (b.isNow) return 1;
-      return a.createdAt - b.createdAt;
-    });
+    // 排序：保留使用者拖曳順序，當前專注仍固定在最上方
+    sortWorkbenchItems(weekItems);
 
     const medLargeCount = weekItems.filter(it => {
       const s = it.size || guessSize(it.text, it.typeId);
@@ -3302,6 +3516,7 @@
     weekItems.forEach(item => {
       listEl.appendChild(createCardElement(item, 'week'));
     });
+    enableWorkbenchDragSort(listEl, weekItems, 'week');
   }
 
   // --- 工作桌抽屜系統 (Desk Drawers: 收集箱 / 保溫 / 放生 / 歷史檔案) ---
@@ -4644,8 +4859,17 @@
     if (inputTitle) inputTitle.value = item.text || '';
     if (subTitle) subTitle.textContent = item.text || '';
     if (inputDeadline) inputDeadline.value = item.deadline || '';
-    if (selBucket) selBucket.value = item.bucket || 'inbox';
-    if (relationHint) relationHint.style.display = item.parentId ? 'block' : 'none';
+    const parent = item.parentId ? getParentItem(item) : null;
+    if (selBucket) {
+      selBucket.value = parent ? (parent.bucket || 'inbox') : (item.bucket || 'inbox');
+      selBucket.disabled = !!parent;
+    }
+    if (relationHint) {
+      relationHint.textContent = parent
+        ? '子任務可獨立設定耗時、截止死線與習慣；安排時段及四象限沿用主任務。'
+        : '';
+      relationHint.style.display = parent ? 'block' : 'none';
+    }
     if (chkRoutine) chkRoutine.checked = !!item.isRoutine;
     if (triggerGroup) triggerGroup.style.display = item.isRoutine ? 'block' : 'none';
     if (selTrigger) selTrigger.value = item.routineTrigger || 'recharge';
@@ -4682,8 +4906,12 @@
 
     const newDeadline = inputDeadline ? inputDeadline.value.trim() : '';
     item.deadline = newDeadline || null;
-    if (selBucket && SyncEngine.ALLOWED_BUCKETS.has(selBucket.value)) {
+    if (!item.parentId && selBucket && SyncEngine.ALLOWED_BUCKETS.has(selBucket.value)) {
       item.bucket = selBucket.value;
+    }
+    if (item.parentId) {
+      const parent = getParentItem(item);
+      if (parent) item.bucket = parent.bucket;
     }
 
     const isRoutine = chkRoutine ? chkRoutine.checked : false;
@@ -7141,6 +7369,10 @@
       const settingKairosUrlEl = document.getElementById('settingKairosUrl');
       if (settingKairosUrlEl) settingKairosUrlEl.value = settings.kairosUrl || 'http://127.0.0.1:5050';
 
+      const settingNotificationsEl = document.getElementById('settingNotificationsEnabled');
+      if (settingNotificationsEl) settingNotificationsEl.checked = settings.notificationsEnabled !== false;
+      renderNotificationTimes();
+
       const kairosConnStatus = document.getElementById('kairosConnStatusText');
       if (kairosConnStatus) kairosConnStatus.textContent = '';
 
@@ -7203,6 +7435,14 @@
 
     // 常駐設定按鈕 (桌面/手機均可直接點擊)
     safeOn('btnOpenSettings', 'click', openSettingsModal);
+    safeOn('btnAddNotificationTime', 'click', () => {
+      if (settings.notificationTimes.length >= 12) {
+        showToast('最多可設定 12 個每日提醒時間');
+        return;
+      }
+      settings.notificationTimes.push('10:00');
+      renderNotificationTimes();
+    });
 
     const settingSafeTop = document.getElementById('settingSafeTop');
     if (settingSafeTop) {
@@ -7432,6 +7672,21 @@
       const settingKairosUrlEl = document.getElementById('settingKairosUrl');
       if (settingKairosUrlEl) settings.kairosUrl = settingKairosUrlEl.value.trim() || 'http://127.0.0.1:5050';
 
+      const settingNotificationsEl = document.getElementById('settingNotificationsEnabled');
+      if (settingNotificationsEl) settings.notificationsEnabled = settingNotificationsEl.checked;
+      const notificationInputs = document.querySelectorAll('.notification-time-input');
+      const notificationTimes = Array.from(notificationInputs)
+        .map(input => input.value)
+        .filter(time => /^([01]\d|2[0-3]):[0-5]\d$/.test(time));
+      settings.notificationTimes = [...new Set(notificationTimes)].slice(0, 12);
+      if (settings.notificationTimes.length === 0) settings.notificationTimes = ['10:00'];
+      if (settings.notificationsEnabled) {
+        const permissionGranted = await requestAndroidNotificationPermission();
+        if (getLocalNotificationsPlugin() && !permissionGranted) {
+          showToast('尚未取得通知權限，請在 Android 系統設定允許 Task Desk 通知');
+        }
+      }
+
       const settingPinLockEl = document.getElementById('settingPinLock');
       const isPinLocked = settingPinLockEl ? settingPinLockEl.checked : false;
       const pinPassEl = document.getElementById('settingPinPass');
@@ -7453,6 +7708,7 @@
 
       settings.updatedAt = Date.now();
       saveSettings();
+      await syncAndroidNotifications();
       applyTheme(settings.theme);
       checkLockOnStartup();
       renderAll();

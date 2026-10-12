@@ -104,8 +104,16 @@ function injectManifest(manifestPath) {
             android:launchMode="singleTop" />
     </application>`;
 
-  if (!content.includes('android.permission.SYSTEM_ALERT_WINDOW')) {
-    content = content.replace('<application', '    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />\n    <application');
+  const permissions = [
+    'android.permission.SYSTEM_ALERT_WINDOW',
+    'android.permission.POST_NOTIFICATIONS'
+  ];
+  const missingPermissions = permissions
+    .filter(permission => !content.includes(permission))
+    .map(permission => `    <uses-permission android:name="${permission}" />`)
+    .join('\n');
+  if (missingPermissions) {
+    content = content.replace('<application', `${missingPermissions}\n    <application`);
   }
 
   if (content.includes('</application>')) {
