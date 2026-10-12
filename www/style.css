@@ -1277,6 +1277,8 @@ body::before {
 }
 
 .btn-card-more {
+  appearance: none;
+  -webkit-appearance: none;
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
@@ -1288,6 +1290,12 @@ body::before {
   line-height: 1.2;
   transition: all 0.18s ease;
   user-select: none;
+}
+
+.subtask-item .btn-card-more {
+  color: var(--meta-text);
+  background: transparent;
+  border-color: transparent;
 }
 
 .btn-card-more:hover {
