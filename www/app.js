@@ -2485,7 +2485,14 @@
   }
 
   function getCompletedTaskHistory() {
-    return items.filter(item => item.done && item.doneAt).sort((a, b) => b.doneAt - a.doneAt);
+    return items
+      .filter(item => item.done && (item.doneAt || item.updatedAt || item.createdAt))
+      .map(item => ({
+        item,
+        timestamp: item.doneAt || item.updatedAt || item.createdAt,
+        isEstimated: !item.doneAt
+      }))
+      .sort((a, b) => b.timestamp - a.timestamp);
   }
 
   function formatHistoryDate(timestamp) {
@@ -2520,22 +2527,23 @@
       return;
     }
     const groups = new Map();
-    completed.forEach(item => {
-      const key = new Date(item.doneAt).toLocaleDateString('sv-SE');
+    completed.forEach(record => {
+      const key = new Date(record.timestamp).toLocaleDateString('sv-SE');
       if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(item);
+      groups.get(key).push(record);
     });
     groups.forEach(dayItems => {
       const section = document.createElement('section');
       section.className = 'history-day-group';
       const title = document.createElement('h4');
-      title.textContent = formatHistoryDate(dayItems[0].doneAt);
+      title.textContent = formatHistoryDate(dayItems[0].timestamp);
       section.appendChild(title);
-      dayItems.forEach(item => {
+      dayItems.forEach(record => {
+        const item = record.item;
         const row = document.createElement('div');
         row.className = 'history-task-row';
         const time = document.createElement('time');
-        time.textContent = formatHistoryTime(item.doneAt);
+        time.textContent = `${record.isEstimated ? '約 ' : ''}${formatHistoryTime(record.timestamp)}`;
         const name = document.createElement('span');
         name.className = 'history-task-name';
         name.textContent = item.text + (item.parentId ? '（子任務）' : '');
@@ -2550,15 +2558,15 @@
     const month = analyticsState.historyMonth;
     const year = month.getFullYear();
     const monthIndex = month.getMonth();
-    const monthItems = completed.filter(item => {
-      const date = new Date(item.doneAt);
+    const monthItems = completed.filter(record => {
+      const date = new Date(record.timestamp);
       return date.getFullYear() === year && date.getMonth() === monthIndex;
     });
     const byDay = new Map();
-    monthItems.forEach(item => {
-      const day = new Date(item.doneAt).getDate();
+    monthItems.forEach(record => {
+      const day = new Date(record.timestamp).getDate();
       if (!byDay.has(day)) byDay.set(day, []);
-      byDay.get(day).push(item);
+      byDay.get(day).push(record);
     });
     const firstDay = new Date(year, monthIndex, 1).getDay();
     const offset = firstDay === 0 ? 6 : firstDay - 1;
@@ -2583,7 +2591,7 @@
         const detail = container.querySelector('.history-calendar-detail');
         const dayItems = byDay.get(Number(button.dataset.historyDay)) || [];
         detail.innerHTML = dayItems.length
-          ? dayItems.map(item => `<div class="history-task-row"><time>${formatHistoryTime(item.doneAt)}</time><span class="history-task-name">${escapeHtml(item.text)}</span></div>`).join('')
+          ? dayItems.map(record => `<div class="history-task-row"><time>${record.isEstimated ? '約 ' : ''}${formatHistoryTime(record.timestamp)}</time><span class="history-task-name">${escapeHtml(record.item.text)}</span></div>`).join('')
           : '這天沒有完成任務。';
       });
     });
