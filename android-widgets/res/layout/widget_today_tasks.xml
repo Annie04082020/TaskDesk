@@ -21,7 +21,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Task Desk · 今日"
+            android:text="Task Desk · 今日 / 這週"
             android:textColor="#f0f3f8"
             android:textSize="13sp"
             android:textStyle="bold" />
@@ -30,7 +30,7 @@
             android:id="@+id/widget_count_badge"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="0/3 件"
+            android:text="今日 0 · 這週 0"
             android:textColor="#9ba3b5"
             android:textSize="11sp"
             android:paddingStart="6dp"
@@ -225,6 +225,86 @@
 
         <TextView
             android:id="@+id/widget_task_size_4"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="小"
+            android:textColor="#9ba3b5"
+            android:textSize="10sp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:background="@drawable/widget_tag_bg" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_row_5"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="•"
+            android:textColor="#7c6cff"
+            android:textSize="14sp"
+            android:paddingEnd="6dp" />
+
+        <TextView
+            android:id="@+id/widget_task_text_5"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="#e6edf3"
+            android:textSize="12sp"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/widget_task_size_5"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="小"
+            android:textColor="#9ba3b5"
+            android:textSize="10sp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:background="@drawable/widget_tag_bg" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_row_6"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="•"
+            android:textColor="#7c6cff"
+            android:textSize="14sp"
+            android:paddingEnd="6dp" />
+
+        <TextView
+            android:id="@+id/widget_task_text_6"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="#e6edf3"
+            android:textSize="12sp"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/widget_task_size_6"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="小"

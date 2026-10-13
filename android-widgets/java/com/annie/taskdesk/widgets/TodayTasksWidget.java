@@ -62,12 +62,11 @@ public class TodayTasksWidget extends AppWidgetProvider {
         String rawJson = prefs.getString("raw_json", null);
 
         List<JSONObject> todayTasks = new ArrayList<>();
-        int todaySmallLimit = 3;
+        List<JSONObject> weekTasks = new ArrayList<>();
 
         if (rawJson != null) {
             try {
                 JSONObject data = new JSONObject(rawJson);
-                todaySmallLimit = data.optInt("todaySmallLimit", 3);
                 JSONArray items = data.optJSONArray("items");
                 if (items != null) {
                     for (int i = 0; i < items.length(); i++) {
@@ -76,8 +75,13 @@ public class TodayTasksWidget extends AppWidgetProvider {
                             boolean isDone = it.optBoolean("done", false);
                             String bucket = it.optString("bucket", "");
                             String parentId = it.optString("parentId", "");
-                            if ("today".equals(bucket) && !isDone && parentId.isEmpty()) {
+                            if (!parentId.isEmpty() || isDone) {
+                                continue;
+                            }
+                            if ("today".equals(bucket)) {
                                 todayTasks.add(it);
+                            } else if ("week".equals(bucket)) {
+                                weekTasks.add(it);
                             }
                         }
                     }
@@ -87,25 +91,41 @@ public class TodayTasksWidget extends AppWidgetProvider {
             }
         }
 
-        // Update count badge
-        String countBadge = todayTasks.size() + "/" + todaySmallLimit + " 件";
-        views.setTextViewText(R.id.widget_count_badge, countBadge);
+        // The web app sends only confirmed workbench tasks, so the widget never
+        // exposes inbox, keep/release, or child-task items.
+        views.setTextViewText(
+                R.id.widget_count_badge,
+                "今日 " + todayTasks.size() + " · 這週 " + weekTasks.size()
+        );
+        views.setTextViewText(R.id.widget_title, "Task Desk · 今日 / 這週");
 
         // Slots
-        int[] rowIds = {R.id.widget_row_1, R.id.widget_row_2, R.id.widget_row_3, R.id.widget_row_4};
-        int[] textIds = {R.id.widget_task_text_1, R.id.widget_task_text_2, R.id.widget_task_text_3, R.id.widget_task_text_4};
-        int[] sizeIds = {R.id.widget_task_size_1, R.id.widget_task_size_2, R.id.widget_task_size_3, R.id.widget_task_size_4};
+        int[] rowIds = {
+                R.id.widget_row_1, R.id.widget_row_2, R.id.widget_row_3,
+                R.id.widget_row_4, R.id.widget_row_5, R.id.widget_row_6
+        };
+        int[] textIds = {
+                R.id.widget_task_text_1, R.id.widget_task_text_2, R.id.widget_task_text_3,
+                R.id.widget_task_text_4, R.id.widget_task_text_5, R.id.widget_task_text_6
+        };
+        int[] sizeIds = {
+                R.id.widget_task_size_1, R.id.widget_task_size_2, R.id.widget_task_size_3,
+                R.id.widget_task_size_4, R.id.widget_task_size_5, R.id.widget_task_size_6
+        };
+        List<JSONObject> visibleTasks = new ArrayList<>();
+        visibleTasks.addAll(todayTasks.subList(0, Math.min(todayTasks.size(), 3)));
+        visibleTasks.addAll(weekTasks.subList(0, Math.min(weekTasks.size(), 3)));
 
-        if (todayTasks.isEmpty()) {
+        if (visibleTasks.isEmpty()) {
             views.setViewVisibility(R.id.widget_empty_view, View.VISIBLE);
             for (int rowId : rowIds) {
                 views.setViewVisibility(rowId, View.GONE);
             }
         } else {
             views.setViewVisibility(R.id.widget_empty_view, View.GONE);
-            for (int i = 0; i < 4; i++) {
-                if (i < todayTasks.size()) {
-                    JSONObject task = todayTasks.get(i);
+            for (int i = 0; i < rowIds.length; i++) {
+                if (i < visibleTasks.size()) {
+                    JSONObject task = visibleTasks.get(i);
                     String text = task.optString("text", "未命名任務");
                     String size = task.optString("size", "small");
                     String sizeLabel = "小";

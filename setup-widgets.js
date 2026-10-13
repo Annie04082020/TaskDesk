@@ -11,11 +11,7 @@ const WIDGETS_DIR = path.join(ROOT_DIR, 'android-widgets');
 const ANDROID_MAIN = path.join(ROOT_DIR, 'android', 'app', 'src', 'main');
 const REQUIRED_MANIFEST_ENTRIES = [
   '.widgets.TodayTasksWidget',
-  '.widgets.NowTaskWidget',
-  '.widgets.QuickCaptureWidget',
-  '@xml/widget_today_tasks_info',
-  '@xml/widget_now_task_info',
-  '@xml/widget_quick_capture_info'
+  '@xml/widget_today_tasks_info'
 ];
 
 function copyRecursive(src, dest) {
@@ -38,9 +34,20 @@ function injectManifest(manifestPath) {
     return;
   }
 
-  let content = fs.readFileSync(manifestPath, 'utf8');
+  const originalContent = fs.readFileSync(manifestPath, 'utf8');
+  let content = originalContent;
+  // Keep one predictable widget entry point. Older releases registered two
+  // additional providers whose UI is no longer part of the supported widget.
+  content = content.replace(
+    /\s*<receiver\b[^>]*android:name="\.widgets\.(NowTaskWidget|QuickCaptureWidget)"[^>]*>[\s\S]*?<\/receiver>/g,
+    ''
+  );
   const hasAllManifestEntries = REQUIRED_MANIFEST_ENTRIES.every(entry => content.includes(entry));
   if (hasAllManifestEntries) {
+    if (content !== originalContent) {
+      fs.writeFileSync(manifestPath, content, 'utf8');
+      console.log('[Widgets] Removed deprecated widget receivers from AndroidManifest.xml');
+    }
     console.log('[Widgets] Receivers already present in AndroidManifest.xml');
     return;
   }

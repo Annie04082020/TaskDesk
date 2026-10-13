@@ -982,8 +982,22 @@
   function syncToAndroidWidgets() {
     try {
       if (window.AndroidWidgetBridge && typeof window.AndroidWidgetBridge.updateWidgetsData === 'function') {
+        const widgetItems = items
+          .filter(item => !item.done && !item.parentId && (item.bucket === 'today' || item.bucket === 'week'))
+          .sort((a, b) => {
+            const orderA = Number.isFinite(a.order) ? a.order : Number.MAX_SAFE_INTEGER;
+            const orderB = Number.isFinite(b.order) ? b.order : Number.MAX_SAFE_INTEGER;
+            return orderA - orderB || (a.createdAt || 0) - (b.createdAt || 0);
+          })
+          .map(item => ({
+            id: item.id,
+            text: item.text,
+            bucket: item.bucket,
+            size: item.size,
+            order: item.order
+          }));
         const payload = {
-          items: items,
+          items: widgetItems,
           todaySmallLimit: settings.todaySmallLimit || 3,
           weekMediumLargeLimit: settings.weekMediumLargeLimit || 3
         };

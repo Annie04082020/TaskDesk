@@ -1476,6 +1476,29 @@ body::before {
   color: var(--meta-text);
 }
 
+.btn-edit-subtask {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  background: var(--bg-surface);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  color: var(--meta-text);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  font-family: var(--font-body);
+  font-size: 0.76rem;
+  line-height: 1.2;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.btn-edit-subtask:hover {
+  color: var(--accent-primary);
+  border-color: var(--border-hover);
+  background: var(--bg-surface-elevated);
+}
+
 .btn-delete-subtask {
   background: transparent;
   border: none;
