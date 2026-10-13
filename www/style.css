@@ -4505,6 +4505,91 @@ input:checked + .slider:before {
   border-bottom-color: var(--accent-primary);
 }
 
+@media (max-width: 639px) {
+  .analytics-modal-sheet {
+    width: calc(100% - 16px);
+    max-width: none;
+    height: 88vh;
+    max-height: 88vh;
+  }
+
+  .analytics-modal-sheet > .modal-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 10px;
+    padding: 14px 12px 12px;
+  }
+
+  .analytics-modal-sheet .modal-title-wrap {
+    min-width: 0;
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .analytics-modal-sheet .modal-title {
+    font-size: 1.08rem;
+    line-height: 1.25;
+    white-space: normal;
+    word-break: keep-all;
+  }
+
+  .analytics-modal-sheet .modal-subtitle {
+    margin-top: 5px;
+    font-size: 0.72rem;
+    line-height: 1.45;
+    word-break: keep-all;
+  }
+
+  .analytics-modal-sheet .analytics-time-filter {
+    grid-column: 1;
+    grid-row: 2;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .analytics-modal-sheet .analytics-filter-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 8px 4px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
+  .analytics-modal-sheet .modal-close {
+    grid-column: 2;
+    grid-row: 1;
+    margin-top: -4px;
+  }
+
+  .analytics-tabs-bar {
+    gap: 2px;
+    padding: 0 8px;
+    min-height: 42px;
+  }
+
+  .analytics-tab-btn {
+    padding: 10px 11px;
+    font-size: 0.8rem;
+  }
+
+  .analytics-modal-body {
+    padding: 14px 12px 20px;
+  }
+
+  .history-tool-toolbar {
+    flex-direction: column;
+  }
+
+  .history-view-switch {
+    width: 100%;
+  }
+
+  .history-view-btn {
+    flex: 1 1 0;
+  }
+}
+
 /* 分頁面板容器 */
 .analytics-tab-panel {
   display: flex;

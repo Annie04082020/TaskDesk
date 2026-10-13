@@ -2426,6 +2426,10 @@
     tabBtns.forEach(btn => {
       btn.classList.toggle('active', btn.dataset.tab === tabId);
     });
+    const activeTabButton = document.querySelector(`.analytics-tab-btn[data-tab="${tabId}"]`);
+    if (activeTabButton && typeof activeTabButton.scrollIntoView === 'function') {
+      activeTabButton.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    }
     const panels = {
       overview: document.getElementById('panelAnalyticsOverview'),
       intent: document.getElementById('panelAnalyticsIntent'),
