@@ -1411,22 +1411,6 @@
               <button type="button" class="btn-secondary" id="btnExportSessionsJson">匯出 JSON</button>
               <button type="button" class="btn-secondary btn-analytics-danger" id="btnClearSessions">清除紀錄</button>
             </div>
-
-            <!-- TAB 5: 完成任務歷史 -->
-            <div class="analytics-tab-panel" id="panelAnalyticsHistory" style="display: none;">
-              <div class="history-tool-toolbar">
-                <div>
-                  <div class="analytics-section-title">完成任務歷史</div>
-                  <div class="analytics-section-desc">回顧之前哪一天、哪個時間完成了哪些任務。</div>
-                </div>
-                <div class="history-view-switch" role="group" aria-label="歷史任務檢視方式">
-                  <button type="button" class="history-view-btn active" data-history-view="timeline">時間軸</button>
-                  <button type="button" class="history-view-btn" data-history-view="calendar">月曆</button>
-                </div>
-              </div>
-              <div id="historyTimelineView" class="history-tool-view"></div>
-              <div id="historyCalendarView" class="history-tool-view" style="display: none;"></div>
-            </div>
           </div>
 
           <!-- 日誌流水帳清單 -->
@@ -1448,6 +1432,22 @@
             </table>
             <div id="analyticsEmptyLogs" class="analytics-empty-hint" style="display: none;">尚無專注紀錄</div>
           </div>
+        </div>
+
+        <!-- TAB 5: 完成任務歷史 -->
+        <div class="analytics-tab-panel" id="panelAnalyticsHistory" style="display: none;">
+          <div class="history-tool-toolbar">
+            <div>
+              <div class="analytics-section-title">完成任務歷史</div>
+              <div class="analytics-section-desc">回顧之前哪一天、哪個時間完成了哪些任務。</div>
+            </div>
+            <div class="history-view-switch" role="group" aria-label="歷史任務檢視方式">
+              <button type="button" class="history-view-btn active" data-history-view="timeline">時間軸</button>
+              <button type="button" class="history-view-btn" data-history-view="calendar">月曆</button>
+            </div>
+          </div>
+          <div id="historyTimelineView" class="history-tool-view"></div>
+          <div id="historyCalendarView" class="history-tool-view" style="display: none;"></div>
         </div>
       </div>
 
