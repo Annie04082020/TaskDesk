@@ -805,7 +805,7 @@
           </div>
         </div>
 
-        <div class="form-group android-app-only" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+        <div class="form-group" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
           <div class="form-toggle-row">
             <div>
               <div class="form-label">啟用存取密碼鎖 (PIN Lock)</div>
@@ -825,7 +825,7 @@
           </div>
         </div>
 
-        <div class="form-group web-only" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+        <div class="form-group android-app-only" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
           <div class="form-toggle-row">
             <div>
               <div class="form-label">Android 任務通知</div>
@@ -840,7 +840,7 @@
           <button type="button" id="btnAddNotificationTime" class="btn-secondary" style="margin-top: 8px; padding: 7px 12px; font-size: 0.78rem;">＋新增提醒時間</button>
         </div>
 
-        <div class="form-group" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+        <div class="form-group web-only" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
           <div class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
             <span>Android App 下載 (APK)</span>
             <span class="folder-badge" style="background: rgba(16, 185, 129, 0.1); color: var(--accent-green); border-color: rgba(16, 185, 129, 0.3);">Android 原生</span>
@@ -881,19 +881,19 @@
         <div class="form-group" id="guardianTrustDashboard" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
           <div class="form-label">守護權限狀態</div>
           <div class="guardian-trust-grid">
-            <div class="guardian-trust-item desktop-web-only">
+            <div class="guardian-trust-item">
               <span class="guardian-trust-label">站內鎖定</span>
               <span class="guardian-trust-state" id="trustFocusLockState">未檢查</span>
               <span class="guardian-trust-desc">只限制 TaskDesk 內的切換與操作</span>
               <button type="button" class="btn-secondary guardian-trust-action" id="btnToggleFocusGuardian">關閉站內鎖定</button>
             </div>
-            <div class="guardian-trust-item android-app-only">
+            <div class="guardian-trust-item desktop-web-only">
               <span class="guardian-trust-label">瀏覽器擴充</span>
               <span class="guardian-trust-state" id="trustExtensionState">未檢查</span>
               <span class="guardian-trust-desc">專注時攔截設定的分心網站</span>
               <button type="button" class="btn-secondary guardian-trust-action" id="btnOpenExtensionGuide">查看擴充說明</button>
             </div>
-            <div class="guardian-trust-item desktop-web-only">
+            <div class="guardian-trust-item android-app-only">
               <span class="guardian-trust-label">Android 守護</span>
               <span class="guardian-trust-state" id="trustAndroidState">未檢查</span>
               <span class="guardian-trust-desc">透過無障礙服務攔截分心 App</span>
@@ -975,13 +975,13 @@
       <div class="modal-body">
         <div class="form-sublabel" style="margin-bottom: 10px;">
           平時資料存放於各裝置本機，聯網時可手動上傳或下載同步（Web 與 Android App 雙向通用）。
-          <div style="margin-top: 4px;">
+          <div class="web-only" style="margin-top: 4px;">
             手機尚未安裝 App？ <a href="https://github.com/Annie04082020/TaskDesk/releases/latest" target="_blank" rel="noopener" style="color: var(--accent-primary); text-decoration: underline;">點此下載 Android APK</a>
           </div>
         </div>
 
         <!-- Section 1: GitHub Gist Private Sync -->
-        <div class="consult-card desktop-web-only" id="syncGistSection" style="padding: 16px;">
+        <div class="consult-card" id="syncGistSection" style="padding: 16px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div class="consult-task-title" style="display: flex; align-items: center; gap: 8px;">
               <span class="brand-dot" style="background: var(--accent-primary);"></span>
