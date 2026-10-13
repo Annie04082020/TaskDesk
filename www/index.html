@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://api.github.com http://127.0.0.1:* http://localhost:*; manifest-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://api.github.com; manifest-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Task Desk 個人任務工作桌</title>
   <meta name="description" content="零壓力、高專注的個人任務工作桌，三堆分流與狀態輔助。">
@@ -128,7 +128,7 @@
           <span class="nav-tool-card-title">立即鎖定工作桌</span>
           <span class="nav-tool-card-desc">需輸入 PIN 碼才能存取</span>
         </button>
-        <a href="https://github.com/Annie04082020/TaskDesk/releases/latest" target="_blank" rel="noopener" class="nav-tool-card" id="menuItemDownloadApk">
+        <a href="https://github.com/Annie04082020/TaskDesk/releases/latest" target="_blank" rel="noopener" class="nav-tool-card web-only" id="menuItemDownloadApk">
           <span class="nav-tool-card-title">下載 Android APK</span>
           <span class="nav-tool-card-desc">前往 GitHub Releases 下載離線版</span>
         </a>
@@ -805,28 +805,7 @@
           </div>
         </div>
 
-        <div class="form-group" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
-          <div class="form-toggle-row">
-            <div>
-              <div class="form-label">啟用 Kairos 本機專注守護連動 (Windows)</div>
-              <div class="form-sublabel">當啟動「現在」時，自動通知本機運行的 Kairos 啟動視窗攔截與防分心鎖定。</div>
-            </div>
-            <label class="switch">
-              <input type="checkbox" id="settingKairosEnabled">
-              <span class="slider"></span>
-            </label>
-          </div>
-          <div id="kairosConfigGroup" style="display: none; margin-top: 8px;">
-            <label class="form-label" for="settingKairosUrl">Kairos 本機 API 位址</label>
-            <div style="display: flex; gap: 6px; margin-top: 4px;">
-              <input type="text" id="settingKairosUrl" class="form-input" style="flex: 1;" placeholder="http://127.0.0.1:5050" value="http://127.0.0.1:5050">
-              <button type="button" id="btnTestKairosConn" class="btn-secondary" style="padding: 6px 10px; font-size: 0.75rem;">測試連線</button>
-            </div>
-            <div id="kairosConnStatusText" style="font-size: 0.72rem; color: var(--meta-text); margin-top: 4px;"></div>
-          </div>
-        </div>
-
-        <div class="form-group" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+        <div class="form-group android-app-only" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
           <div class="form-toggle-row">
             <div>
               <div class="form-label">啟用存取密碼鎖 (PIN Lock)</div>
@@ -846,7 +825,7 @@
           </div>
         </div>
 
-        <div class="form-group" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+        <div class="form-group web-only" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
           <div class="form-toggle-row">
             <div>
               <div class="form-label">Android 任務通知</div>
@@ -882,7 +861,7 @@
           </div>
         </div>
 
-        <div class="form-group" id="androidGuardianSettingsGroup" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+        <div class="form-group android-app-only" id="androidGuardianSettingsGroup" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
           <div class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
             <span>手機 App 專注守護 (取代 StayFree)</span>
             <span class="folder-badge" id="androidGuardianBadge" style="background: rgba(45, 212, 191, 0.1); color: var(--accent-teal); border-color: rgba(45, 212, 191, 0.3);">分心 App 攔截</span>
@@ -902,19 +881,19 @@
         <div class="form-group" id="guardianTrustDashboard" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
           <div class="form-label">守護權限狀態</div>
           <div class="guardian-trust-grid">
-            <div class="guardian-trust-item">
+            <div class="guardian-trust-item desktop-web-only">
               <span class="guardian-trust-label">站內鎖定</span>
               <span class="guardian-trust-state" id="trustFocusLockState">未檢查</span>
               <span class="guardian-trust-desc">只限制 TaskDesk 內的切換與操作</span>
               <button type="button" class="btn-secondary guardian-trust-action" id="btnToggleFocusGuardian">關閉站內鎖定</button>
             </div>
-            <div class="guardian-trust-item">
+            <div class="guardian-trust-item android-app-only">
               <span class="guardian-trust-label">瀏覽器擴充</span>
               <span class="guardian-trust-state" id="trustExtensionState">未檢查</span>
               <span class="guardian-trust-desc">專注時攔截設定的分心網站</span>
               <button type="button" class="btn-secondary guardian-trust-action" id="btnOpenExtensionGuide">查看擴充說明</button>
             </div>
-            <div class="guardian-trust-item">
+            <div class="guardian-trust-item desktop-web-only">
               <span class="guardian-trust-label">Android 守護</span>
               <span class="guardian-trust-state" id="trustAndroidState">未檢查</span>
               <span class="guardian-trust-desc">透過無障礙服務攔截分心 App</span>
@@ -927,19 +906,13 @@
               <button type="button" class="btn-secondary guardian-trust-action" id="btnClearGuardianToken">清除 Token</button>
             </div>
             <div class="guardian-trust-item">
-              <span class="guardian-trust-label">Kairos 本機守護</span>
-              <span class="guardian-trust-state" id="trustKairosState">未檢查</span>
-              <span class="guardian-trust-desc">連線至本機 API，協助攔截桌面分心操作</span>
-              <button type="button" class="btn-secondary guardian-trust-action" id="btnToggleKairosGuardian">關閉 Kairos</button>
-            </div>
-            <div class="guardian-trust-item">
               <span class="guardian-trust-label">本機 PIN 畫面鎖</span>
               <span class="guardian-trust-state" id="trustPinState">未檢查</span>
               <span class="guardian-trust-desc">隱私畫面鎖，不是完整資料加密</span>
               <button type="button" class="btn-secondary guardian-trust-action" id="btnTogglePinGuardian">關閉 PIN 鎖</button>
             </div>
           </div>
-          <div class="form-sublabel trust-dashboard-note">每一層守護都可單獨關閉。Android 無障礙服務仍需在系統設定中停用；PIN 是本機畫面鎖，不代表資料已加密。</div>
+          <div class="form-sublabel trust-dashboard-note">每一層守護都可單獨關閉。Android 無障礙服務需在系統設定中停用；PIN 是本機畫面鎖，不代表資料已加密。</div>
         </div>
 
         <div class="form-group" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
@@ -1008,7 +981,7 @@
         </div>
 
         <!-- Section 1: GitHub Gist Private Sync -->
-        <div class="consult-card" style="padding: 16px;">
+        <div class="consult-card desktop-web-only" id="syncGistSection" style="padding: 16px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div class="consult-task-title" style="display: flex; align-items: center; gap: 8px;">
               <span class="brand-dot" style="background: var(--accent-primary);"></span>
@@ -1101,7 +1074,7 @@
         <!-- Section 2: Direct Sync Code Transfer (免 Token) -->
         <div class="consult-card" style="padding: 16px;">
           <div class="consult-task-title" style="margin-bottom: 4px;">裝置直傳同步碼 (免 Token)</div>
-          <div class="form-sublabel">在電腦複製同步碼，發送到手機 App 貼上即可無痛同步。</div>
+          <div class="form-sublabel">在另一台裝置複製同步碼，貼到這裡即可手動合併。</div>
           <div style="display: flex; gap: 8px; margin-top: 10px;">
             <button id="btnCopySyncCode" class="btn-secondary" style="flex: 1;">複製本機同步碼</button>
             <button id="btnPasteSyncTrigger" class="btn-secondary" style="flex: 1;">貼上同步碼合併</button>

@@ -31,9 +31,22 @@
           <span>返回 TaskDesk 工作桌</span>
         </button>
 
-        <button id="btnFrictionPass" class="btn btn-secondary">
-          <span>需要查資料？深呼吸 5 秒通行 3 分鐘</span>
-        </button>
+        <div class="pass-panel">
+          <div class="pass-panel-title">臨時通行這個網站</div>
+          <div class="pass-options" role="group" aria-label="通行時間">
+            <label><input type="radio" name="passMinutes" value="3" checked>3 分鐘</label>
+            <label><input type="radio" name="passMinutes" value="5">5 分鐘</label>
+            <label><input type="radio" name="passMinutes" value="10">10 分鐘</label>
+            <label><input type="radio" name="passMinutes" value="25">25 分鐘</label>
+          </div>
+          <label class="custom-pass-row">
+            <span>自訂</span>
+            <input type="number" id="customPassMinutes" min="1" max="120" placeholder="分鐘">
+          </label>
+          <button id="btnFrictionPass" class="btn btn-secondary">
+            <span id="frictionPassText">深呼吸 5 秒後通行 3 分鐘</span>
+          </button>
+        </div>
 
         <button id="btnCloseTab" class="btn btn-ghost">
           <span>關閉此分頁</span>

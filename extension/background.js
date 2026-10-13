@@ -50,6 +50,34 @@ function isExtensionUrl(urlStr) {
   }
 }
 
+function getHostname(urlStr) {
+  try {
+    return new URL(urlStr).hostname.toLowerCase();
+  } catch (e) {
+    return '';
+  }
+}
+
+function getPassKeyForUrl(urlStr, blockedDomains) {
+  const hostname = getHostname(urlStr);
+  if (!hostname) return '';
+  const matchedDomain = (blockedDomains || DEFAULT_BLOCKED_DOMAINS).find(domain => {
+    const clean = String(domain || '').trim().toLowerCase();
+    return clean && (hostname === clean || hostname.endsWith('.' + clean));
+  });
+  return matchedDomain || hostname;
+}
+
+function hasActiveDomainPass(urlStr, blockedDomains, passByDomain) {
+  const key = getPassKeyForUrl(urlStr, blockedDomains);
+  return !!(key && passByDomain && passByDomain[key] && Date.now() < passByDomain[key]);
+}
+
+function getCurrentPassUntil(passByDomain) {
+  const now = Date.now();
+  return Object.values(passByDomain || {}).filter(ts => ts && ts > now).sort((a, b) => b - a)[0] || null;
+}
+
 function normalizeFocusPayload(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
   const allowedBuckets = ['inbox', 'today', 'week', 'keep', 'release'];
@@ -99,15 +127,16 @@ function isBlockedUrl(urlStr, blockedDomains) {
 
 // 更新工具列徽章 (Badge)
 async function updateBadge() {
-  const data = await chrome.storage.local.get(['focusActive', 'activeTask', 'guardianEnabled', 'emergencyPassUntil']);
+  const data = await chrome.storage.local.get(['focusActive', 'activeTask', 'guardianEnabled', 'passByDomain']);
   if (!data.guardianEnabled) {
     chrome.action.setBadgeText({ text: 'OFF' });
     chrome.action.setBadgeBackgroundColor({ color: '#64748b' });
     return;
   }
 
-  if (data.emergencyPassUntil && Date.now() < data.emergencyPassUntil) {
-    const remainSec = Math.max(0, Math.ceil((data.emergencyPassUntil - Date.now()) / 1000));
+  const passUntil = getCurrentPassUntil(data.passByDomain);
+  if (passUntil && Date.now() < passUntil) {
+    const remainSec = Math.max(0, Math.ceil((passUntil - Date.now()) / 1000));
     chrome.action.setBadgeText({ text: `${Math.ceil(remainSec / 60)}m` });
     chrome.action.setBadgeBackgroundColor({ color: '#f59e0b' }); // 琥珀色提示通行中
     return;
@@ -131,17 +160,16 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     'activeTask',
     'guardianEnabled',
     'blockedDomains',
-    'emergencyPassUntil',
+    'passByDomain',
     'distractionLogs'
   ]);
 
   // 未開啟專注或已關閉守護，直接放行
   if (!data.focusActive || !data.guardianEnabled) return;
 
-  // 若處於緊急通行放行時間窗口內，直接放行
-  if (data.emergencyPassUntil && Date.now() < data.emergencyPassUntil) return;
-
   const blockedList = data.blockedDomains || DEFAULT_BLOCKED_DOMAINS;
+  if (hasActiveDomainPass(targetUrl, blockedList, data.passByDomain)) return;
+
   if (isBlockedUrl(targetUrl, blockedList)) {
     // 記錄一次分心衝動紀錄
     try {
@@ -184,26 +212,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === 'TASKDESK_PING_GUARDIAN') {
+  if (message.type === 'TASKDESK_GET_GUARDIAN_STATUS') {
     if (!isAllowedTaskDeskUrl(sender.url)) {
       sendResponse({ available: false, error: 'unauthorized_sender' });
       return true;
     }
-
-    if (message.type === 'TASKDESK_GET_GUARDIAN_STATUS') {
-      if (!isAllowedTaskDeskUrl(sender.url)) {
-        sendResponse({ available: false, error: 'unauthorized_sender' });
-        return true;
-      }
-      chrome.storage.local.get(['focusActive', 'guardianEnabled', 'blockedDomains', 'emergencyPassUntil']).then(data => {
-        sendResponse({
-          available: true,
-          guardianEnabled: data.guardianEnabled !== false,
-          focusActive: !!data.focusActive,
-          blockedDomainCount: Array.isArray(data.blockedDomains) ? data.blockedDomains.length : 0,
-          emergencyPassActive: !!(data.emergencyPassUntil && Date.now() < data.emergencyPassUntil)
-        });
+    chrome.storage.local.get(['focusActive', 'guardianEnabled', 'blockedDomains', 'passByDomain']).then(data => {
+      const passUntil = getCurrentPassUntil(data.passByDomain);
+      sendResponse({
+        available: true,
+        guardianEnabled: data.guardianEnabled !== false,
+        focusActive: !!data.focusActive,
+        blockedDomainCount: Array.isArray(data.blockedDomains) ? data.blockedDomains.length : 0,
+        emergencyPassActive: !!(passUntil && Date.now() < passUntil)
       });
+    });
+    return true;
+  }
+
+  if (message.type === 'TASKDESK_PING_GUARDIAN') {
+    if (!isAllowedTaskDeskUrl(sender.url)) {
+      sendResponse({ available: false, error: 'unauthorized_sender' });
       return true;
     }
     chrome.storage.local.get(['focusActive', 'activeTask', 'guardianEnabled']).then(data => {
@@ -223,12 +252,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ success: false, error: 'unauthorized_sender' });
       return true;
     }
-    // 申請緊急通行 3 分鐘
+    // 申請指定網域臨時通行
     const duration = Number.isFinite(message.durationMinutes) ? message.durationMinutes : 3;
-    const safeDurationMinutes = Math.min(10, Math.max(1, Math.floor(duration)));
+    const safeDurationMinutes = Math.min(120, Math.max(1, Math.floor(duration)));
     const passDurationMs = safeDurationMinutes * 60 * 1000;
     const until = Date.now() + passDurationMs;
-    chrome.storage.local.set({ emergencyPassUntil: until }).then(() => {
+    chrome.storage.local.get(['blockedDomains', 'passByDomain']).then(data => {
+      const key = getPassKeyForUrl(message.targetUrl || sender.url, data.blockedDomains || DEFAULT_BLOCKED_DOMAINS);
+      const passByDomain = data.passByDomain || {};
+      if (key) passByDomain[key] = until;
+      chrome.storage.local.set({ passByDomain, emergencyPassUntil: null }).then(() => {
+        updateBadge();
+        sendResponse({ success: true, until: until, domain: key || '' });
+      });
+    }).catch(() => {
       updateBadge();
       sendResponse({ success: true, until: until });
     });
@@ -254,14 +291,16 @@ async function handleFocusEvent(action, payload) {
       focusActive: true,
       activeTask: payload || null,
       focusStartTime: Date.now(),
-      emergencyPassUntil: null
+      emergencyPassUntil: null,
+      passByDomain: {}
     });
     await updateBadge();
   } else if (action === 'STOP') {
     await chrome.storage.local.set({
       focusActive: false,
       activeTask: null,
-      emergencyPassUntil: null
+      emergencyPassUntil: null,
+      passByDomain: {}
     });
     await updateBadge();
   } else if (action === 'PAUSE') {
@@ -275,14 +314,27 @@ async function handleFocusEvent(action, payload) {
   }
 }
 
-// 定時巡檢 (清除到期的 emergencyPass)
+// 定時巡檢 (清除到期的 domain pass)
 chrome.alarms.create('checkPassExpiry', { periodInMinutes: 1 });
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'checkPassExpiry') {
-    const data = await chrome.storage.local.get(['emergencyPassUntil']);
+    const data = await chrome.storage.local.get(['emergencyPassUntil', 'passByDomain']);
+    const passByDomain = data.passByDomain || {};
+    const now = Date.now();
+    let changed = false;
+    Object.keys(passByDomain).forEach(domain => {
+      if (!passByDomain[domain] || passByDomain[domain] <= now) {
+        delete passByDomain[domain];
+        changed = true;
+      }
+    });
     if (data.emergencyPassUntil && Date.now() >= data.emergencyPassUntil) {
-      await chrome.storage.local.set({ emergencyPassUntil: null });
-      await updateBadge();
+      data.emergencyPassUntil = null;
+      changed = true;
     }
+    if (changed) {
+      await chrome.storage.local.set({ emergencyPassUntil: data.emergencyPassUntil || null, passByDomain });
+    }
+    await updateBadge();
   }
 });

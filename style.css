@@ -74,6 +74,8 @@
 /* Keep the primary Inbox, Today, and Now flow visible in simple mode. */
 .simple-mode #menuItemAnalytics,
 .simple-mode #menuItemMatrix,
+.simple-mode #menuItemSync,
+.simple-mode #menuItemRoutines,
 .simple-mode #tabWorkbenchWeek {
   display: none;
 }
@@ -83,6 +85,12 @@
 }
 
 .simple-mode #advancedSyncActions {
+  display: none !important;
+}
+
+body:not(.is-android-app) .android-app-only,
+body.is-android-app .web-only,
+body.is-android-app .desktop-web-only {
   display: none !important;
 }
 

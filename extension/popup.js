@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const toggleGuardian = document.getElementById('toggleGuardian');
   const passRow = document.getElementById('passRow');
   const passDescText = document.getElementById('passDescText');
+  const passDurationSelect = document.getElementById('passDurationSelect');
+  const passCustomMinutes = document.getElementById('passCustomMinutes');
   const btnTriggerPass = document.getElementById('btnTriggerPass');
   const domainChipsContainer = document.getElementById('domainChipsContainer');
   const blockedCount = document.getElementById('blockedCount');
@@ -28,6 +30,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       'guardianEnabled',
       'blockedDomains',
       'emergencyPassUntil',
+      'passByDomain',
       'distractionLogs'
     ]);
 
@@ -39,24 +42,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     toggleGuardian.checked = data.guardianEnabled !== false;
 
     // 2. 狀態顯示
-    const isPass = data.emergencyPassUntil && Date.now() < data.emergencyPassUntil;
+    const activePassUntil = getActivePassUntil(data.passByDomain) || data.emergencyPassUntil;
+    const isPass = activePassUntil && Date.now() < activePassUntil;
     statusIndicator.className = 'status-indicator';
 
     if (isPass) {
       statusIndicator.classList.add('is-pass');
-      const remainMin = Math.ceil((data.emergencyPassUntil - Date.now()) / 60000);
+      const remainMin = Math.ceil((activePassUntil - Date.now()) / 60000);
       statusText.textContent = `通行中 (餘 ${remainMin}m)`;
-      passDescText.textContent = `臨時放行中，剩餘約 ${remainMin} 分鐘`;
-      btnTriggerPass.textContent = '延長 3m';
+      passDescText.textContent = `目前有網站通行中，剩餘約 ${remainMin} 分鐘`;
+      btnTriggerPass.textContent = '延長';
     } else if (data.focusActive) {
       statusIndicator.classList.add('is-focusing');
       statusText.textContent = '專注保護中';
-      passDescText.textContent = '需要查資料時暫時解除攔截 3 分鐘';
-      btnTriggerPass.textContent = '通行 3m';
+      passDescText.textContent = '只放行目前分頁的網站，不解除整份名單';
+      btnTriggerPass.textContent = '通行';
     } else {
       statusText.textContent = '待命中 (等待開工)';
-      passDescText.textContent = '需要查資料時暫時解除攔截 3 分鐘';
-      btnTriggerPass.textContent = '通行 3m';
+      passDescText.textContent = '專注開始後可為目前網站設定臨時通行';
+      btnTriggerPass.textContent = '通行';
     }
 
     // 3. 當前任務
@@ -99,6 +103,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  function getActivePassUntil(passByDomain) {
+    const now = Date.now();
+    return Object.values(passByDomain || {}).filter(ts => ts && ts > now).sort((a, b) => b - a)[0] || null;
+  }
+
+  function getSelectedPassMinutes() {
+    if (passDurationSelect && passDurationSelect.value === 'custom') {
+      const custom = passCustomMinutes ? Number(passCustomMinutes.value) : 15;
+      return Math.min(120, Math.max(1, Math.floor(Number.isFinite(custom) ? custom : 15)));
+    }
+    const selected = passDurationSelect ? Number(passDurationSelect.value) : 3;
+    return Math.min(120, Math.max(1, Math.floor(Number.isFinite(selected) ? selected : 3)));
+  }
+
   // 切換守護開關
   toggleGuardian.addEventListener('change', async () => {
     await chrome.storage.local.set({ guardianEnabled: toggleGuardian.checked });
@@ -106,14 +124,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // 申請臨時通行
-  btnTriggerPass.addEventListener('click', () => {
+  btnTriggerPass.addEventListener('click', async () => {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const targetUrl = tabs && tabs[0] ? tabs[0].url : '';
     chrome.runtime.sendMessage({
       type: 'GUARDIAN_REQUEST_PASS',
-      durationMinutes: 3
+      durationMinutes: getSelectedPassMinutes(),
+      targetUrl: targetUrl
     }, () => {
       loadState();
     });
   });
+
+  if (passDurationSelect && passCustomMinutes) {
+    passDurationSelect.addEventListener('change', () => {
+      passCustomMinutes.style.display = passDurationSelect.value === 'custom' ? 'block' : 'none';
+    });
+  }
 
   // 快速切換回 TaskDesk 分頁
   btnQuickOpenDesk.addEventListener('click', async () => {

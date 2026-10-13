@@ -14,6 +14,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnCloseTab = document.getElementById('btnCloseTab');
   const frictionOverlay = document.getElementById('frictionCountdown');
   const countdownNumber = document.getElementById('countdownNumber');
+  const customPassMinutes = document.getElementById('customPassMinutes');
+  const frictionPassText = document.getElementById('frictionPassText');
+
+  function getSelectedPassMinutes() {
+    const customVal = customPassMinutes ? Number(customPassMinutes.value) : 0;
+    if (Number.isFinite(customVal) && customVal >= 1) {
+      return Math.min(120, Math.max(1, Math.floor(customVal)));
+    }
+    const selected = document.querySelector('input[name="passMinutes"]:checked');
+    const minutes = selected ? Number(selected.value) : 3;
+    return Math.min(120, Math.max(1, Math.floor(Number.isFinite(minutes) ? minutes : 3)));
+  }
+
+  function updatePassText() {
+    if (frictionPassText) {
+      frictionPassText.textContent = `深呼吸 5 秒後通行 ${getSelectedPassMinutes()} 分鐘`;
+    }
+  }
 
   // 渲染任務名稱與目標網域
   if (taskText) {
@@ -35,6 +53,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       targetSiteText.textContent = `攔截分心目標：外部網站`;
     }
   }
+
+  document.querySelectorAll('input[name="passMinutes"]').forEach(input => {
+    input.addEventListener('change', () => {
+      if (customPassMinutes) customPassMinutes.value = '';
+      updatePassText();
+    });
+  });
+  if (customPassMinutes) {
+    customPassMinutes.addEventListener('input', updatePassText);
+  }
+  updatePassText();
 
   // 1. 返回 TaskDesk 工作桌
   btnReturnDesk.addEventListener('click', async () => {
@@ -76,10 +105,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         countdownNumber.textContent = count;
       } else {
         clearInterval(interval);
-        // 通知 Background 申請緊急通行 3 分鐘
+        const durationMinutes = getSelectedPassMinutes();
         chrome.runtime.sendMessage({
           type: 'GUARDIAN_REQUEST_PASS',
-          durationMinutes: 3
+          durationMinutes,
+          targetUrl
         }, () => {
           // 放行跳轉至原目標網址
           window.location.href = targetUrl;

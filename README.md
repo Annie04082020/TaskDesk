@@ -135,7 +135,7 @@ graph TD
 * **安全同步與復原**：主要入口是「安全同步」；Pull、Push 與手動合併收在進階操作。每次 Pull、合併或貼上同步碼前會先保存本機快照，可從進階操作復原上次同步。
 * **敏感資料邊界**：匯出、Gist 與同步碼只攜帶可攜設定，不包含本機 PIN hash、PIN 鎖定狀態或 GitHub Token。Token 只保存在目前裝置，請避免在共用裝置保存。
 * **簡易模式與推薦理由**：可在設定中開啟簡易模式降低畫面資訊量；推薦卡片的「原因」可查看精力、期限、耗時與安排情境。
-* **Guardian 狀態儀表板**：設定頁會分別顯示站內鎖定、瀏覽器擴充、Android 無障礙守護、Kairos、本機 PIN 與 GitHub Token 狀態；可直接關閉可控項目或前往系統設定。
+* **Guardian 狀態儀表板**：設定頁會分別顯示站內鎖定、瀏覽器擴充、Android 無障礙守護、本機 PIN 與 GitHub Token 狀態；可直接關閉可控項目或前往系統設定。
 * **裝置代碼直傳**：免 Token 複製 Base64 代碼，跨設備即時合併。
 * **本機 PIN 碼鎖定**：原生 Web Crypto SHA-256 單向雜湊，公用設備防窺。
 
@@ -193,13 +193,13 @@ cd android
 ## 專注守護系統 (Focus Guardian)
 
 ### 電腦端擴充功能 (Chrome / Edge Extension)
-* **跨分頁網站攔截**：專注啟動時自動阻擋 YouTube、Bilibili、社群媒體等干擾網站。
+* **網站層級攔截**：專注啟動時自動阻擋 YouTube、Bilibili、社群媒體等干擾網站；臨時通行只放行當前網站，可選 3、5、10、25 分鐘或自訂 1-120 分鐘。
 * **背景免凍結計時**：獨立 Service Worker 執行緒與真實時間戳記差值，切換視窗寫作業工時絕不中斷漏計。
 * **安裝方式**：至 `chrome://extensions` 或 `edge://extensions` 開啟開發者模式，載入專案中之 `extension/` 目錄。
 
 ### 手機端守護服務 (Android Mobile Focus Guardian)
 * **原生無障礙即時攔截**：開工專注時自動覆蓋攔截 YouTube、Instagram、TikTok、Threads、Twitter 等分心 App。
-* **深呼吸彈性通行通道 (Friction Pass)**：遇臨時查資料需求，提供 5 秒冷卻倒數後放行 3 分鐘，杜絕逆反。
+* **深呼吸彈性通行通道 (Friction Pass)**：遇臨時查資料需求，提供 5 秒冷卻倒數後限時放行當前目標。
 * **低功耗與隱私**：僅監聽視窗變更事件，不讀取螢幕內容文字，零後台額外耗電。
 
 ---

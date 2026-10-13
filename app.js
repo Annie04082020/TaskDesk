@@ -322,8 +322,6 @@
         clean.pinHash = (typeof raw.pinHash === 'string') ? raw.pinHash.slice(0, 128) : '';
       }
       clean.focusLockEnabled = raw.focusLockEnabled !== false;
-      clean.kairosEnabled = !!raw.kairosEnabled;
-      clean.kairosUrl = (typeof raw.kairosUrl === 'string' && /^https?:\/\//i.test(raw.kairosUrl)) ? raw.kairosUrl : 'http://127.0.0.1:5050';
       clean.notificationsEnabled = raw.notificationsEnabled !== false;
       clean.notificationTimes = Array.isArray(raw.notificationTimes)
         ? raw.notificationTimes.filter(time => typeof time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)).slice(0, 12)
@@ -539,8 +537,6 @@
     pinLock: false,
     pinHash: '',
     focusLockEnabled: true,
-    kairosEnabled: false,
-    kairosUrl: 'http://127.0.0.1:5050',
     notificationsEnabled: true,
     notificationTimes: ['10:00']
   };
@@ -551,7 +547,6 @@
   let focusTimerInterval = null;
   let activeFocusTaskId = null;
   let focusRemainingSeconds = 25 * 60;
-  let kairosOnline = false;
   let guardianExtensionOnline = false;
   let kairosSession = {
     status: 'IDLE', // 'IDLE' | 'FOCUSING' | 'PAUSED'
@@ -591,6 +586,7 @@
     loadSyncConfig();
     applyTheme(settings.theme);
     applyExperienceMode();
+    applyPlatformVisibility();
     applySafeTop(settings.safeTop);
     loadItems();
     checkAndResetRoutines();
@@ -624,12 +620,6 @@
         }
         if (parsed.focusLockEnabled !== undefined) {
           settings.focusLockEnabled = parsed.focusLockEnabled;
-        }
-        if (parsed.kairosEnabled !== undefined) {
-          settings.kairosEnabled = parsed.kairosEnabled;
-        }
-        if (parsed.kairosUrl) {
-          settings.kairosUrl = parsed.kairosUrl;
         }
         settings.notificationsEnabled = parsed.notificationsEnabled !== false;
         settings.notificationTimes = Array.isArray(parsed.notificationTimes)
@@ -1055,6 +1045,21 @@
       activeWorkbench = 'today';
     }
     document.body.classList.toggle('simple-mode', !!settings.simpleMode);
+  }
+
+  function isAndroidAppRuntime() {
+    if (typeof window === 'undefined') return false;
+    if (window.AndroidWidgetBridge) return true;
+    return !!(window.Capacitor
+      && typeof window.Capacitor.getPlatform === 'function'
+      && window.Capacitor.getPlatform() === 'android');
+  }
+
+  function applyPlatformVisibility() {
+    if (typeof document === 'undefined' || !document.body) return;
+    const isAndroidApp = isAndroidAppRuntime();
+    document.body.classList.toggle('is-android-app', isAndroidApp);
+    document.body.classList.toggle('is-web-browser', !isAndroidApp);
   }
 
   // 手機頂部避讓前鏡頭挖孔
@@ -1758,7 +1763,7 @@
     return matchedEntries;
   }
 
-  // --- 專注鎖定與 Kairos 本機專注守護系統 ---
+  // --- 專注鎖定與本機沉浸計時 ---
   function getTaskFocusDurationMinutes(item) {
     if (!item) return 25;
     if (typeof item.estimateMinutes === 'number' && item.estimateMinutes > 0) {
@@ -1770,63 +1775,6 @@
     if (size === 'medium') return 50;
     if (size === 'large') return 90;
     return 25;
-  }
-
-  async function notifyKairosFocusStart(item, minutes) {
-    if (!settings.kairosEnabled || !settings.kairosUrl) return;
-    const targetUrl = settings.kairosUrl.replace(/\/$/, '');
-    try {
-      const resp = await fetch(`${targetUrl}/api/pomodoro/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'focus',
-          duration_minutes: minutes || 25,
-          task_name: item ? item.text : 'TaskDesk Focus'
-        })
-      });
-      if (resp.ok) {
-        kairosOnline = true;
-      } else {
-        kairosOnline = false;
-      }
-    } catch (err) {
-      console.warn('無法連線至 Kairos (可能未啟動或非本地環境):', err);
-      kairosOnline = false;
-    }
-    updateFocusGuardStatusBadge();
-  }
-
-  async function notifyKairosFocusStop() {
-    if (!settings.kairosEnabled || !settings.kairosUrl) return;
-    const targetUrl = settings.kairosUrl.replace(/\/$/, '');
-    try {
-      await fetch(`${targetUrl}/api/pomodoro/reset`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-    } catch (err) {
-      console.warn('無法通知 Kairos 重設:', err);
-    }
-  }
-
-  async function testKairosConnection(url) {
-    const targetUrl = (url || settings.kairosUrl || 'http://127.0.0.1:5050').replace(/\/$/, '');
-    try {
-      const res = await fetch(`${targetUrl}/api/status`, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(3000)
-      });
-      if (res.ok) {
-        kairosOnline = true;
-        return { success: true, message: '連線成功！Kairos 本機專注守護服務正常運行中。' };
-      }
-      return { success: false, message: `連線失敗 (HTTP ${res.status})，請確認 Kairos 狀態。` };
-    } catch (err) {
-      kairosOnline = false;
-      return { success: false, message: '無法連線至 Kairos。請確認本機已執行 Kairos (python api.py)。' };
-    }
   }
 
   // --- Kairos 沉浸引擎日誌與工時記錄 (v2.0) ---
@@ -1912,16 +1860,6 @@
       badge.textContent = 'Guardian 擴充守護中 (已阻擋分心網站)';
       badge.style.color = '#2dd4bf';
       badge.style.borderColor = 'rgba(45, 212, 191, 0.4)';
-    } else if (settings.kairosEnabled) {
-      if (kairosOnline) {
-        badge.textContent = 'Kairos 本機守護中';
-        badge.style.color = '#38bdf8';
-        badge.style.borderColor = 'rgba(56, 189, 248, 0.4)';
-      } else {
-        badge.textContent = 'Kairos 離線/未連線';
-        badge.style.color = '#f59e0b';
-        badge.style.borderColor = 'rgba(245, 158, 11, 0.4)';
-      }
     } else {
       badge.textContent = '站內專注鎖定中';
       badge.style.color = 'var(--accent-primary)';
@@ -1970,11 +1908,6 @@
       syncConfig.githubToken ? 'is-warn' : 'is-off'
     );
     setTrustState(
-      'trustKairosState',
-      settings.kairosEnabled ? (kairosOnline ? '已連線' : '未連線') : '關閉',
-      settings.kairosEnabled ? (kairosOnline ? 'is-on' : 'is-warn') : 'is-off'
-    );
-    setTrustState(
       'trustPinState',
       settings.pinLock ? '已啟用' : '關閉',
       settings.pinLock ? 'is-warn' : 'is-off'
@@ -1988,10 +1921,6 @@
     if (tokenButton) {
       tokenButton.disabled = !syncConfig.githubToken;
       tokenButton.textContent = syncConfig.githubToken ? '清除 Token' : '尚未保存 Token';
-    }
-    const kairosButton = document.getElementById('btnToggleKairosGuardian');
-    if (kairosButton) {
-      kairosButton.textContent = settings.kairosEnabled ? '關閉 Kairos' : '開啟 Kairos';
     }
     const pinButton = document.getElementById('btnTogglePinGuardian');
     if (pinButton) {
@@ -2094,9 +2023,6 @@
     updateKairosTimerDisplay();
 
     const durMinutes = getTaskFocusDurationMinutes(item);
-    if (settings.kairosEnabled) {
-      notifyKairosFocusStart(item, durMinutes);
-    }
     broadcastFocusToExtension('START', {
       id: item.id,
       text: item.text,
@@ -2127,9 +2053,6 @@
     kairosSession.status = 'IDLE';
     kairosSession.taskId = null;
     kairosSession.currentSliceStart = null;
-    if (settings.kairosEnabled) {
-      notifyKairosFocusStop();
-    }
     broadcastFocusToExtension('STOP');
     if (window.AndroidWidgetBridge && typeof window.AndroidWidgetBridge.setFocusActive === 'function') {
       try {
@@ -7761,6 +7684,7 @@
       if (inputTodaySmall) inputTodaySmall.value = settings.todaySmallLimit || 3;
       const inputWeekMedLarge = document.getElementById('settingWeekMediumLargeLimit');
       if (inputWeekMedLarge) inputWeekMedLarge.value = settings.weekMediumLargeLimit || 3;
+      applyPlatformVisibility();
 
       const settingThemeEl = document.getElementById('settingTheme');
       if (settingThemeEl) settingThemeEl.value = settings.theme;
@@ -7779,21 +7703,9 @@
       const settingFocusLockEl = document.getElementById('settingFocusLock');
       if (settingFocusLockEl) settingFocusLockEl.checked = settings.focusLockEnabled !== false;
 
-      const settingKairosEl = document.getElementById('settingKairosEnabled');
-      if (settingKairosEl) settingKairosEl.checked = !!settings.kairosEnabled;
-
-      const kairosConfigGroup = document.getElementById('kairosConfigGroup');
-      if (kairosConfigGroup) kairosConfigGroup.style.display = settings.kairosEnabled ? 'block' : 'none';
-
-      const settingKairosUrlEl = document.getElementById('settingKairosUrl');
-      if (settingKairosUrlEl) settingKairosUrlEl.value = settings.kairosUrl || 'http://127.0.0.1:5050';
-
       const settingNotificationsEl = document.getElementById('settingNotificationsEnabled');
       if (settingNotificationsEl) settingNotificationsEl.checked = settings.notificationsEnabled !== false;
       renderNotificationTimes();
-
-      const kairosConnStatus = document.getElementById('kairosConnStatusText');
-      if (kairosConnStatus) kairosConnStatus.textContent = '';
 
       const settingPinLockEl = document.getElementById('settingPinLock');
       if (settingPinLockEl) settingPinLockEl.checked = !!settings.pinLock;
@@ -7887,18 +7799,6 @@
       showToast('已清除本機 GitHub Token 與 Gist 綁定');
     });
 
-    safeOn('btnToggleKairosGuardian', 'click', () => {
-      settings.kairosEnabled = !settings.kairosEnabled;
-      settings.updatedAt = Date.now();
-      saveSettings();
-      if (!settings.kairosEnabled && kairosSession.status !== 'IDLE') {
-        notifyKairosFocusStop();
-      }
-      updateGuardianTrustDashboard();
-      updateFocusGuardStatusBadge();
-      showToast(settings.kairosEnabled ? '已開啟 Kairos 本機守護' : '已關閉 Kairos 本機守護');
-    });
-
     safeOn('btnTogglePinGuardian', 'click', () => {
       const pinToggle = document.getElementById('settingPinLock');
       if (pinToggle) {
@@ -7933,26 +7833,6 @@
     safeOn('settingPinLock', 'change', (e) => {
       const pinGroup = document.getElementById('pinInputGroup');
       if (pinGroup) pinGroup.style.display = e.target.checked ? 'block' : 'none';
-    });
-
-    safeOn('settingKairosEnabled', 'change', (e) => {
-      const kairosConfigGroup = document.getElementById('kairosConfigGroup');
-      if (kairosConfigGroup) kairosConfigGroup.style.display = e.target.checked ? 'block' : 'none';
-    });
-
-    safeOn('btnTestKairosConn', 'click', async () => {
-      const urlInput = document.getElementById('settingKairosUrl');
-      const statusText = document.getElementById('kairosConnStatusText');
-      const testUrl = urlInput ? urlInput.value.trim() : '';
-      if (statusText) {
-        statusText.textContent = '連線測試中...';
-        statusText.style.color = 'var(--meta-text)';
-      }
-      const res = await testKairosConnection(testUrl);
-      if (statusText) {
-        statusText.textContent = res.message;
-        statusText.style.color = res.success ? '#10b981' : '#f87171';
-      }
     });
 
     // Kairos Mode v2.0 控制項綁定
@@ -8145,12 +8025,6 @@
       const settingFocusLockEl = document.getElementById('settingFocusLock');
       if (settingFocusLockEl) settings.focusLockEnabled = settingFocusLockEl.checked;
 
-      const settingKairosEl = document.getElementById('settingKairosEnabled');
-      if (settingKairosEl) settings.kairosEnabled = settingKairosEl.checked;
-
-      const settingKairosUrlEl = document.getElementById('settingKairosUrl');
-      if (settingKairosUrlEl) settings.kairosUrl = settingKairosUrlEl.value.trim() || 'http://127.0.0.1:5050';
-
       const settingNotificationsEl = document.getElementById('settingNotificationsEnabled');
       if (settingNotificationsEl) settings.notificationsEnabled = settingNotificationsEl.checked;
       const notificationInputs = document.querySelectorAll('.notification-time-input');
@@ -8190,6 +8064,7 @@
       await syncAndroidNotifications();
       applyTheme(settings.theme);
       applyExperienceMode();
+      applyPlatformVisibility();
       checkLockOnStartup();
       renderAll();
       const modalSettings = document.getElementById('modalSettings');

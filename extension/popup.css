@@ -136,6 +136,35 @@ body {
   gap: 8px;
 }
 
+.pass-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.pass-select,
+.pass-custom {
+  min-height: 28px;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-main);
+  font-size: 0.72rem;
+  padding: 4px 6px;
+  outline: none;
+}
+
+.pass-select:focus,
+.pass-custom:focus {
+  border-color: var(--accent-blue);
+}
+
+.pass-custom {
+  width: 58px;
+}
+
 .control-info {
   flex: 1;
 }

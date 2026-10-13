@@ -40,9 +40,19 @@
       <div class="control-row" id="passRow">
         <div class="control-info">
           <div class="control-title">臨時放行通道</div>
-          <div class="control-desc" id="passDescText">需要查資料時暫時解除攔截 3 分鐘</div>
+          <div class="control-desc" id="passDescText">只放行指定網站，不會解除整份名單</div>
         </div>
-        <button id="btnTriggerPass" class="btn btn-sm btn-secondary">通行 3m</button>
+        <div class="pass-controls">
+          <select id="passDurationSelect" class="pass-select" aria-label="通行時間">
+            <option value="3">3m</option>
+            <option value="5">5m</option>
+            <option value="10">10m</option>
+            <option value="25">25m</option>
+            <option value="custom">自訂</option>
+          </select>
+          <input type="number" id="passCustomMinutes" class="pass-custom" min="1" max="120" value="15" aria-label="自訂通行分鐘" style="display: none;">
+          <button id="btnTriggerPass" class="btn btn-sm btn-secondary">通行</button>
+        </div>
       </div>
     </section>
 

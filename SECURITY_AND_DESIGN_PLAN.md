@@ -58,7 +58,7 @@
 ## Phase 4 - Human Factors and Trust
 
 1. Add a Guardian status dashboard.
-   - show whether browser extension, Android guardian, Kairos, and local lock are active
+   - show whether browser extension, Android guardian, local focus lock, PIN, and sync token are active
    - show exactly what each one can access or block
    - provide one-click disable for each guardian layer
 
