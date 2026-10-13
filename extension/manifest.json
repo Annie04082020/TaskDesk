@@ -45,7 +45,7 @@
     {
       "resources": ["blocked.html", "blocked.css", "blocked.js", "icons/*"],
       "matches": [
-        "https://annie04082020.github.io/TaskDesk/*",
+        "https://annie04082020.github.io/*",
         "http://localhost/*",
         "http://127.0.0.1/*"
       ]
