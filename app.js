@@ -163,6 +163,10 @@
           const n = parseInt(val, 10);
           if (Number.isFinite(n)) return Math.max(0, n);
         }
+        if (typeof val === 'string' && val.trim()) {
+          const parsed = Date.parse(val.trim());
+          if (Number.isFinite(parsed)) return Math.max(0, parsed);
+        }
         return null;
       };
 
@@ -2387,7 +2391,10 @@
     timeRange: 'today', // 'today' | 'week' | 'month' | 'all'
     activeTab: 'overview', // 'overview' | 'intent' | 'friction' | 'logs' | 'history'
     historyView: 'timeline',
-    historyMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+    historyMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+    historyDate: '',
+    historyQuery: '',
+    historyType: ''
   };
 
   function escapeHtml(str) {
@@ -2490,13 +2497,54 @@
 
   function getCompletedTaskHistory() {
     return items
-      .filter(item => item.done && (item.doneAt || item.updatedAt || item.createdAt))
+      .filter(item => item.done && item.doneAt)
       .map(item => ({
         item,
-        timestamp: item.doneAt || item.updatedAt || item.createdAt,
-        isEstimated: !item.doneAt
+        timestamp: item.doneAt,
+        parent: getParentItem(item),
+        typeId: getHistoryTaskTypeId(item)
       }))
       .sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  function getHistoryTaskTypeId(item) {
+    const parent = getParentItem(item);
+    return item.typeId || (parent && parent.typeId) || guessTypeByKeywords(item.text) || 'other';
+  }
+
+  function getHistoryTaskTypeName(typeId) {
+    const typeObj = getTypeById(typeId);
+    return typeObj ? typeObj.name : '其他';
+  }
+
+  function getHistoryDateKey(timestamp) {
+    return new Date(timestamp).toLocaleDateString('sv-SE');
+  }
+
+  function getHistoryRelationText(record) {
+    if (!record.parent) return '主任務';
+    return `子任務 · ${record.parent.text}`;
+  }
+
+  function getFilteredCompletedTaskHistory() {
+    const dateFilter = analyticsState.historyDate;
+    const query = (analyticsState.historyQuery || '').trim().toLowerCase();
+    const typeFilter = analyticsState.historyType;
+
+    return getCompletedTaskHistory().filter(record => {
+      if (dateFilter && getHistoryDateKey(record.timestamp) !== dateFilter) return false;
+      if (typeFilter && record.typeId !== typeFilter) return false;
+      if (query) {
+        const haystack = [
+          record.item.text,
+          record.parent ? record.parent.text : '',
+          getHistoryTaskTypeName(record.typeId),
+          getHistoryRelationText(record)
+        ].join(' ').toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      return true;
+    });
   }
 
   function formatHistoryDate(timestamp) {
@@ -2511,10 +2559,11 @@
   }
 
   function renderCompletedTaskHistory() {
-    const completed = getCompletedTaskHistory();
+    const completed = getFilteredCompletedTaskHistory();
     const timeline = document.getElementById('historyTimelineView');
     const calendar = document.getElementById('historyCalendarView');
     if (!timeline || !calendar) return;
+    renderHistoryFilters();
     document.querySelectorAll('.history-view-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.historyView === analyticsState.historyView);
     });
@@ -2524,10 +2573,33 @@
     else renderHistoryCalendar(completed, calendar);
   }
 
+  function renderHistoryFilters() {
+    const dateInput = document.getElementById('historyDateFilter');
+    const queryInput = document.getElementById('historyKeywordFilter');
+    const typeSelect = document.getElementById('historyTypeFilter');
+    if (dateInput && dateInput.value !== analyticsState.historyDate) dateInput.value = analyticsState.historyDate;
+    if (queryInput && queryInput.value !== analyticsState.historyQuery) queryInput.value = analyticsState.historyQuery;
+    if (typeSelect) {
+      const typeCounts = new Map();
+      getCompletedTaskHistory().forEach(record => {
+        typeCounts.set(record.typeId, (typeCounts.get(record.typeId) || 0) + 1);
+      });
+      const options = ['<option value="">全部類型</option>'];
+      Array.from(typeCounts.keys())
+        .sort((a, b) => getHistoryTaskTypeName(a).localeCompare(getHistoryTaskTypeName(b), 'zh-Hant'))
+        .forEach(typeId => {
+          const selected = typeId === analyticsState.historyType ? ' selected' : '';
+          options.push(`<option value="${escapeHtml(typeId)}"${selected}>${escapeHtml(getHistoryTaskTypeName(typeId))} (${typeCounts.get(typeId)})</option>`);
+        });
+      typeSelect.innerHTML = options.join('');
+    }
+  }
+
   function renderHistoryTimeline(completed, container) {
     container.innerHTML = '';
     if (!completed.length) {
-      container.innerHTML = '<div class="analytics-empty-hint">尚無完成任務紀錄</div>';
+      const hasAnyDoneAt = getCompletedTaskHistory().length > 0;
+      container.innerHTML = `<div class="analytics-empty-hint">${hasAnyDoneAt ? '沒有符合篩選條件的完成任務' : '尚無含完成時間的任務紀錄'}</div>`;
       return;
     }
     const groups = new Map();
@@ -2547,11 +2619,17 @@
         const row = document.createElement('div');
         row.className = 'history-task-row';
         const time = document.createElement('time');
-        time.textContent = `${record.isEstimated ? '約 ' : ''}${formatHistoryTime(record.timestamp)}`;
+        time.textContent = formatHistoryTime(record.timestamp);
+        const body = document.createElement('div');
+        body.className = 'history-task-body';
         const name = document.createElement('span');
         name.className = 'history-task-name';
-        name.textContent = item.text + (item.parentId ? '（子任務）' : '');
-        row.append(time, name);
+        name.textContent = item.text;
+        const meta = document.createElement('span');
+        meta.className = 'history-task-meta';
+        meta.textContent = `${getHistoryRelationText(record)} · ${getHistoryTaskTypeName(record.typeId)}`;
+        body.append(name, meta);
+        row.append(time, body);
         section.appendChild(row);
       });
       container.appendChild(section);
@@ -2595,7 +2673,7 @@
         const detail = container.querySelector('.history-calendar-detail');
         const dayItems = byDay.get(Number(button.dataset.historyDay)) || [];
         detail.innerHTML = dayItems.length
-          ? dayItems.map(record => `<div class="history-task-row"><time>${record.isEstimated ? '約 ' : ''}${formatHistoryTime(record.timestamp)}</time><span class="history-task-name">${escapeHtml(record.item.text)}</span></div>`).join('')
+          ? dayItems.map(record => `<div class="history-task-row"><time>${formatHistoryTime(record.timestamp)}</time><div class="history-task-body"><span class="history-task-name">${escapeHtml(record.item.text)}</span><span class="history-task-meta">${escapeHtml(getHistoryRelationText(record))} · ${escapeHtml(getHistoryTaskTypeName(record.typeId))}</span></div></div>`).join('')
           : '這天沒有完成任務。';
       });
     });
@@ -6816,6 +6894,24 @@
         analyticsState.historyView = btn.dataset.historyView;
         renderCompletedTaskHistory();
       });
+    });
+    safeOn('historyDateFilter', 'input', (event) => {
+      analyticsState.historyDate = event.target.value;
+      renderCompletedTaskHistory();
+    });
+    safeOn('historyKeywordFilter', 'input', (event) => {
+      analyticsState.historyQuery = event.target.value;
+      renderCompletedTaskHistory();
+    });
+    safeOn('historyTypeFilter', 'change', (event) => {
+      analyticsState.historyType = event.target.value;
+      renderCompletedTaskHistory();
+    });
+    safeOn('btnHistoryFilterClear', 'click', () => {
+      analyticsState.historyDate = '';
+      analyticsState.historyQuery = '';
+      analyticsState.historyType = '';
+      renderCompletedTaskHistory();
     });
 
     safeOn('btnExportSessionsCsv', 'click', exportFocusSessionsCsv);

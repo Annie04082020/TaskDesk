@@ -1446,6 +1446,14 @@
               <button type="button" class="history-view-btn" data-history-view="calendar">月曆</button>
             </div>
           </div>
+          <div class="history-filter-bar" aria-label="歷史任務搜尋">
+            <input type="date" id="historyDateFilter" class="history-filter-input" aria-label="依完成日期篩選">
+            <input type="search" id="historyKeywordFilter" class="history-filter-input history-filter-keyword" placeholder="搜尋任務、主任務或關鍵字" aria-label="依關鍵字搜尋">
+            <select id="historyTypeFilter" class="history-filter-input" aria-label="依任務類型篩選">
+              <option value="">全部類型</option>
+            </select>
+            <button type="button" class="btn-secondary" id="btnHistoryFilterClear">清除</button>
+          </div>
           <div id="historyTimelineView" class="history-tool-view"></div>
           <div id="historyCalendarView" class="history-tool-view" style="display: none;"></div>
         </div>
