@@ -1060,6 +1060,15 @@
     const isAndroidApp = isAndroidAppRuntime();
     document.body.classList.toggle('is-android-app', isAndroidApp);
     document.body.classList.toggle('is-web-browser', !isAndroidApp);
+    document.querySelectorAll('.android-app-only').forEach(el => {
+      el.style.display = isAndroidApp ? '' : 'none';
+    });
+    document.querySelectorAll('.web-only').forEach(el => {
+      el.style.display = isAndroidApp ? 'none' : '';
+    });
+    document.querySelectorAll('.desktop-web-only').forEach(el => {
+      el.style.display = isAndroidApp ? 'none' : '';
+    });
   }
 
   // 手機頂部避讓前鏡頭挖孔
@@ -1876,6 +1885,8 @@
   }
 
   function updateGuardianTrustDashboard() {
+    applyPlatformVisibility();
+    const isAndroidApp = isAndroidAppRuntime();
     setTrustState(
       'trustFocusLockState',
       settings.focusLockEnabled !== false ? '啟用' : '關閉',
@@ -1887,21 +1898,23 @@
       guardianExtensionOnline ? 'is-on' : 'is-off'
     );
 
-    let androidGranted = false;
-    let androidAvailable = false;
-    if (window.AndroidWidgetBridge && typeof window.AndroidWidgetBridge.isAccessibilityGranted === 'function') {
-      androidAvailable = true;
-      try {
-        androidGranted = !!window.AndroidWidgetBridge.isAccessibilityGranted();
-      } catch (e) {
-        androidGranted = false;
+    if (isAndroidApp) {
+      let androidGranted = false;
+      let androidAvailable = false;
+      if (window.AndroidWidgetBridge && typeof window.AndroidWidgetBridge.isAccessibilityGranted === 'function') {
+        androidAvailable = true;
+        try {
+          androidGranted = !!window.AndroidWidgetBridge.isAccessibilityGranted();
+        } catch (e) {
+          androidGranted = false;
+        }
       }
+      setTrustState(
+        'trustAndroidState',
+        androidGranted ? '已授權' : (androidAvailable ? '待授權' : '未安裝'),
+        androidGranted ? 'is-on' : (androidAvailable ? 'is-warn' : 'is-off')
+      );
     }
-    setTrustState(
-      'trustAndroidState',
-      androidGranted ? '已授權' : (androidAvailable ? '待授權' : '未安裝'),
-      androidGranted ? 'is-on' : (androidAvailable ? 'is-warn' : 'is-off')
-    );
     setTrustState(
       'trustTokenState',
       syncConfig.githubToken ? '已保存' : '未保存',
@@ -1926,12 +1939,14 @@
     if (pinButton) {
       pinButton.textContent = settings.pinLock ? '關閉 PIN 鎖' : '前往 PIN 設定';
     }
-    const androidButton = document.getElementById('btnTrustAndroidAction');
-    const androidBridgeAvailable = !!(window.AndroidWidgetBridge
-      && typeof window.AndroidWidgetBridge.openAccessibilitySettings === 'function');
-    if (androidButton) {
-      androidButton.disabled = !androidBridgeAvailable;
-      androidButton.textContent = androidBridgeAvailable ? '前往 Android 設定' : '僅限 Android App';
+    if (isAndroidApp) {
+      const androidButton = document.getElementById('btnTrustAndroidAction');
+      const androidBridgeAvailable = !!(window.AndroidWidgetBridge
+        && typeof window.AndroidWidgetBridge.openAccessibilitySettings === 'function');
+      if (androidButton) {
+        androidButton.disabled = !androidBridgeAvailable;
+        androidButton.textContent = androidBridgeAvailable ? '前往 Android 設定' : '僅限 Android App';
+      }
     }
   }
 
