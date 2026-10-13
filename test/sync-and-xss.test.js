@@ -217,6 +217,39 @@ test('Case 10: XSS 防護與 Schema 驗證 - 惡意 Payload 無害化', () => {
   assert.equal(typeof sanitizedList[0].text, 'string');
 });
 
+test('Case 11: 可攜設定不得包含本機 PIN 資料', () => {
+  const portable = SyncEngine.getPortableSettings({
+    theme: 'light',
+    pinLock: true,
+    pinHash: 'secret-hash',
+    updatedAt: 1234
+  });
+
+  assert.equal(portable.pinLock, undefined);
+  assert.equal(portable.pinHash, undefined);
+  assert.equal(portable.theme, 'light');
+  assert.equal(portable.updatedAt, 1234);
+});
+
+test('Case 12: 可攜設定匯入時保留本機 PIN 欄位', () => {
+  const portable = SyncEngine.getPortableSettings({
+    pinLock: false,
+    pinHash: 'remote-hash',
+    simpleMode: true
+  });
+
+  const localSettings = {
+    pinLock: true,
+    pinHash: 'local-hash',
+    simpleMode: false
+  };
+  const merged = Object.assign({}, localSettings, portable);
+
+  assert.equal(merged.pinLock, true);
+  assert.equal(merged.pinHash, 'local-hash');
+  assert.equal(merged.simpleMode, true);
+});
+
 test('Case 11: 可攜備份設定不得包含 PIN hash 或鎖定狀態', () => {
   const settings = {
     todaySmallLimit: 3,

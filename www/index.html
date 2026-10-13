@@ -2,6 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://api.github.com http://127.0.0.1:* http://localhost:*; manifest-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'; upgrade-insecure-requests">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Task Desk 個人任務工作桌</title>
   <meta name="description" content="零壓力、高專注的個人任務工作桌，三堆分流與狀態輔助。">
@@ -310,7 +311,11 @@
             <span class="ambient-task-title" id="ambientTaskTitle">任務名稱</span>
             <span class="ambient-task-chips" id="ambientTaskChips"></span>
           </div>
-          <div class="ambient-reason-text" id="ambientReasonText">推薦理由說明</div>
+          <div class="ambient-reason-line">
+            <div class="ambient-reason-text" id="ambientReasonText">推薦理由說明</div>
+            <button type="button" class="ambient-why-btn" id="btnAmbientWhy">原因</button>
+          </div>
+          <div class="ambient-reason-detail" id="ambientReasonDetail" style="display: none;"></div>
         </div>
       </section>
 
@@ -758,6 +763,19 @@
           </div>
         </div>
 
+        <div class="form-group">
+          <div class="form-toggle-row">
+            <div>
+              <div class="form-label">簡化模式</div>
+              <div class="form-sublabel">只保留收集箱、今日與現在任務，暫時收起進階分析、四象限與本週視覺負擔。</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="settingSimpleMode">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
         <div class="form-group" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
         <div class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
           <span>專案與使用說明</span>
@@ -881,6 +899,49 @@
           </div>
         </div>
 
+        <div class="form-group" id="guardianTrustDashboard" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+          <div class="form-label">守護權限狀態</div>
+          <div class="guardian-trust-grid">
+            <div class="guardian-trust-item">
+              <span class="guardian-trust-label">站內鎖定</span>
+              <span class="guardian-trust-state" id="trustFocusLockState">未檢查</span>
+              <span class="guardian-trust-desc">只限制 TaskDesk 內的切換與操作</span>
+              <button type="button" class="btn-secondary guardian-trust-action" id="btnToggleFocusGuardian">關閉站內鎖定</button>
+            </div>
+            <div class="guardian-trust-item">
+              <span class="guardian-trust-label">瀏覽器擴充</span>
+              <span class="guardian-trust-state" id="trustExtensionState">未檢查</span>
+              <span class="guardian-trust-desc">專注時攔截設定的分心網站</span>
+              <button type="button" class="btn-secondary guardian-trust-action" id="btnOpenExtensionGuide">查看擴充說明</button>
+            </div>
+            <div class="guardian-trust-item">
+              <span class="guardian-trust-label">Android 守護</span>
+              <span class="guardian-trust-state" id="trustAndroidState">未檢查</span>
+              <span class="guardian-trust-desc">透過無障礙服務攔截分心 App</span>
+              <button type="button" class="btn-secondary guardian-trust-action" id="btnTrustAndroidAction">前往 Android 設定</button>
+            </div>
+            <div class="guardian-trust-item">
+              <span class="guardian-trust-label">GitHub Token</span>
+              <span class="guardian-trust-state" id="trustTokenState">未檢查</span>
+              <span class="guardian-trust-desc">只用於 Gist，同步資料不含 PIN</span>
+              <button type="button" class="btn-secondary guardian-trust-action" id="btnClearGuardianToken">清除 Token</button>
+            </div>
+            <div class="guardian-trust-item">
+              <span class="guardian-trust-label">Kairos 本機守護</span>
+              <span class="guardian-trust-state" id="trustKairosState">未檢查</span>
+              <span class="guardian-trust-desc">連線至本機 API，協助攔截桌面分心操作</span>
+              <button type="button" class="btn-secondary guardian-trust-action" id="btnToggleKairosGuardian">關閉 Kairos</button>
+            </div>
+            <div class="guardian-trust-item">
+              <span class="guardian-trust-label">本機 PIN 畫面鎖</span>
+              <span class="guardian-trust-state" id="trustPinState">未檢查</span>
+              <span class="guardian-trust-desc">隱私畫面鎖，不是完整資料加密</span>
+              <button type="button" class="btn-secondary guardian-trust-action" id="btnTogglePinGuardian">關閉 PIN 鎖</button>
+            </div>
+          </div>
+          <div class="form-sublabel trust-dashboard-note">每一層守護都可單獨關閉。Android 無障礙服務仍需在系統設定中停用；PIN 是本機畫面鎖，不代表資料已加密。</div>
+        </div>
+
         <div class="form-group" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
           <div class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
             <span>跨裝置同步 (GitHub Gist / 同步碼)</span>
@@ -964,28 +1025,33 @@
             <div>
               <div>本機任務：<b id="syncLocalCountText" style="color: var(--accent-primary);">0 筆</b></div>
               <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;" id="syncRemoteCountText">雲端 Gist：尚未讀取</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;" id="syncDeletedCountText">待同步刪除：尚未讀取</div>
             </div>
             <button type="button" id="btnCheckRemoteGist" class="btn-secondary" style="font-size: 0.72rem; padding: 3px 8px;">檢查雲端狀態</button>
           </div>
 
-          <!-- Helpful workflow tip -->
-          <div id="syncFlowTip" style="font-size: 0.72rem; color: var(--text-muted); line-height: 1.4; margin-top: 8px; padding: 6px 10px; background: rgba(78, 136, 255, 0.06); border-radius: 6px; border-left: 3px solid var(--accent-primary);">
-            <b>跨裝置同步流程：</b><br>
-            • 在<b>有任務的裝置</b>（如手機）點擊 <b>「上傳本機」</b> 或 <b>「智慧雙向合併」</b> 將任務推送到 Gist。<br>
-            • 在<b>要接收任務的裝置</b>（如電腦）點擊 <b>「智慧雙向合併」</b> 即可無縫同步！
+          <div id="syncFlowTip" class="sync-flow-tip">
+            安全同步會先讀取雲端，再以時間戳與刪除紀錄合併，最後回寫同一份 Gist。Push/Pull 已移到進階操作。
           </div>
 
           <!-- Main Actions -->
-          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
-            <button id="btnSyncMerge" class="btn-primary" style="justify-content: center; padding: 9px 14px;">
-              智慧雙向合併 (推薦：保留最新)
+          <div class="sync-main-actions">
+            <button id="btnSafeSync" class="btn-primary sync-safe-btn">
+              安全同步
             </button>
-            <div style="display: flex; gap: 8px;">
+            <button type="button" id="btnToggleAdvancedSync" class="btn-secondary sync-advanced-toggle">進階操作</button>
+            <div id="advancedSyncActions" class="sync-advanced-actions" style="display: none;">
+              <button id="btnSyncMerge" class="btn-secondary" style="flex: 1; justify-content: center;">
+                智慧雙向合併
+              </button>
               <button id="btnSyncPush" class="btn-secondary" style="flex: 1; justify-content: center;">
                 上傳本機 (Push)
               </button>
               <button id="btnSyncPull" class="btn-secondary" style="flex: 1; justify-content: center;">
                 從雲端下載 (Pull)
+              </button>
+              <button id="btnRestoreSyncSnapshot" class="btn-secondary" style="flex: 1; justify-content: center;">
+                復原上次同步
               </button>
             </div>
           </div>
@@ -999,7 +1065,7 @@
             <div id="syncConfigBody" style="display: none; flex-direction: column; gap: 10px; margin-top: 10px;">
               <div class="form-group">
                 <label class="form-label" for="syncGithubToken">GitHub Personal Access Token (Classic)</label>
-                <div class="form-sublabel">只需勾選 <code>gist</code> 權限即可，Token 100% 僅儲存在本機。</div>
+                <div class="form-sublabel">只需勾選 <code>gist</code> 權限即可。Token 僅儲存在本機瀏覽器，請避免在共用裝置上保存。</div>
                 <div style="margin-top: 3px;">
                   <a href="https://github.com/settings/tokens/new?scopes=gist&description=TaskDesk+Sync" target="_blank" rel="noopener" style="color: var(--accent-primary); font-size: 0.76rem; text-decoration: underline;">前往 GitHub 產生 Token (已自動預選 gist 權限)</a>
                 </div>
@@ -1380,7 +1446,7 @@
       <div class="brand-dot" style="width: 10px; height: 10px; margin: 0 auto; box-shadow: 0 0 15px var(--accent-primary);"></div>
       <h2 class="lock-screen-title">Task Desk 已鎖定</h2>
       <p class="lock-screen-desc">請輸入您的個人存取密碼以進入工作桌</p>
-      <form id="formUnlock" onsubmit="return false;" style="display: flex; flex-direction: column; gap: 12px; margin-top: 14px;">
+      <form id="formUnlock" style="display: flex; flex-direction: column; gap: 12px; margin-top: 14px;">
         <input type="password" id="inputUnlockPin" class="form-input" style="text-align: center; font-size: 1.15rem; letter-spacing: 0.25em;" placeholder="••••" autocomplete="current-password">
         <button type="submit" id="btnDoUnlock" class="btn-primary" style="justify-content: center; padding: 10px; font-size: 0.92rem;">解鎖工作桌</button>
       </form>

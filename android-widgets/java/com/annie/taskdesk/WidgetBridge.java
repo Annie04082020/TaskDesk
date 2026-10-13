@@ -15,6 +15,9 @@ import com.annie.taskdesk.widgets.QuickCaptureWidget;
  * Bridge exposing Android Widget update & Focus Guardian functionality to Web App.
  */
 public class WidgetBridge {
+    private static final int MAX_WIDGET_JSON_LENGTH = 250_000;
+    private static final int MAX_TASK_TEXT_LENGTH = 300;
+    private static final int MAX_BLOCKED_PACKAGES = 50;
     private final Context context;
 
     public WidgetBridge(Context context) {
@@ -23,7 +26,7 @@ public class WidgetBridge {
 
     @JavascriptInterface
     public void updateWidgetsData(String jsonData) {
-        if (jsonData == null) return;
+        if (jsonData == null || jsonData.length() > MAX_WIDGET_JSON_LENGTH) return;
         try {
             SharedPreferences prefs = context.getSharedPreferences("taskdesk_widgets_data", Context.MODE_PRIVATE);
             prefs.edit().putString("raw_json", jsonData).putLong("last_updated", System.currentTimeMillis()).apply();
@@ -42,10 +45,14 @@ public class WidgetBridge {
     @JavascriptInterface
     public void setFocusActive(boolean active, String taskText) {
         try {
+            String safeTaskText = taskText == null ? "" : taskText.trim();
+            if (safeTaskText.length() > MAX_TASK_TEXT_LENGTH) {
+                safeTaskText = safeTaskText.substring(0, MAX_TASK_TEXT_LENGTH);
+            }
             SharedPreferences prefs = context.getSharedPreferences(FocusGuardianAccessibilityService.PREFS_NAME, Context.MODE_PRIVATE);
             SharedPreferences.Editor editor = prefs.edit();
             editor.putBoolean(FocusGuardianAccessibilityService.KEY_FOCUS_ACTIVE, active);
-            editor.putString(FocusGuardianAccessibilityService.KEY_ACTIVE_TASK, taskText != null ? taskText : "");
+            editor.putString(FocusGuardianAccessibilityService.KEY_ACTIVE_TASK, safeTaskText);
             if (!active) {
                 editor.putLong(FocusGuardianAccessibilityService.KEY_EMERGENCY_PASS_UNTIL, 0);
             }
@@ -105,8 +112,18 @@ public class WidgetBridge {
     @JavascriptInterface
     public void setBlockedPackages(String commaSeparatedPackages) {
         try {
+            if (commaSeparatedPackages == null || commaSeparatedPackages.length() > 4000) return;
+            StringBuilder safePackages = new StringBuilder();
+            int packageCount = 0;
+            for (String rawPackage : commaSeparatedPackages.split(",")) {
+                String packageName = rawPackage.trim();
+                if (!packageName.matches("[a-zA-Z0-9_]+(\\.[a-zA-Z0-9_]+)+")) continue;
+                if (packageCount++ >= MAX_BLOCKED_PACKAGES) break;
+                if (safePackages.length() > 0) safePackages.append(',');
+                safePackages.append(packageName);
+            }
             SharedPreferences prefs = context.getSharedPreferences(FocusGuardianAccessibilityService.PREFS_NAME, Context.MODE_PRIVATE);
-            prefs.edit().putString(FocusGuardianAccessibilityService.KEY_BLOCKED_PACKAGES, commaSeparatedPackages).apply();
+            prefs.edit().putString(FocusGuardianAccessibilityService.KEY_BLOCKED_PACKAGES, safePackages.toString()).apply();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -115,7 +132,8 @@ public class WidgetBridge {
     @JavascriptInterface
     public void requestEmergencyPass(int durationMinutes) {
         try {
-            long until = System.currentTimeMillis() + (long) durationMinutes * 60 * 1000;
+            int safeDurationMinutes = Math.max(1, Math.min(10, durationMinutes));
+            long until = System.currentTimeMillis() + (long) safeDurationMinutes * 60 * 1000;
             SharedPreferences prefs = context.getSharedPreferences(FocusGuardianAccessibilityService.PREFS_NAME, Context.MODE_PRIVATE);
             prefs.edit().putLong(FocusGuardianAccessibilityService.KEY_EMERGENCY_PASS_UNTIL, until).apply();
         } catch (Exception e) {

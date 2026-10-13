@@ -71,6 +71,82 @@
   --max-w: 680px;
 }
 
+/* Keep the primary Inbox, Today, and Now flow visible in simple mode. */
+.simple-mode #menuItemAnalytics,
+.simple-mode #menuItemMatrix,
+.simple-mode #tabWorkbenchWeek {
+  display: none;
+}
+
+.simple-mode #sectionWeek {
+  display: none !important;
+}
+
+.simple-mode #advancedSyncActions {
+  display: none !important;
+}
+
+.guardian-trust-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.guardian-trust-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.guardian-trust-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.guardian-trust-state {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.guardian-trust-state.is-on {
+  color: var(--accent-green);
+}
+
+.guardian-trust-state.is-warn {
+  color: var(--accent-orange);
+}
+
+.guardian-trust-state.is-off {
+  color: var(--meta-text);
+}
+
+.guardian-trust-desc {
+  min-height: 2.4em;
+  color: var(--meta-text);
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+.guardian-trust-action {
+  width: 100%;
+  margin-top: auto;
+  padding: 5px 7px;
+  font-size: 0.68rem;
+}
+
+@media (max-width: 520px) {
+  .guardian-trust-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Light Theme: Nordic Clean Surface & Crisp Contrast */
 [data-theme="light"] {
   color-scheme: light;

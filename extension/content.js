@@ -19,11 +19,13 @@
 
   function normalizePayload(payload) {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+    const allowedBuckets = ['inbox', 'today', 'week', 'keep', 'release'];
+    const allowedSizes = ['micro', 'small', 'medium', 'large'];
     return {
       id: typeof payload.id === 'string' ? payload.id.slice(0, 120) : '',
       text: typeof payload.text === 'string' ? payload.text.slice(0, 300) : '',
-      bucket: typeof payload.bucket === 'string' ? payload.bucket.slice(0, 30) : '',
-      size: typeof payload.size === 'string' ? payload.size.slice(0, 30) : ''
+      bucket: typeof payload.bucket === 'string' && allowedBuckets.includes(payload.bucket) ? payload.bucket : 'inbox',
+      size: typeof payload.size === 'string' && allowedSizes.includes(payload.size) ? payload.size : 'small'
     };
   }
 
@@ -56,6 +58,19 @@
             version: response?.version || '1.0.0',
             focusActive: !!response?.focusActive,
             guardianEnabled: !!response?.guardianEnabled
+          }, window.location.origin);
+        });
+      } catch (err) {}
+    } else if (type === 'TASKDESK_GET_GUARDIAN_STATUS') {
+      try {
+        chrome.runtime.sendMessage({ type: 'TASKDESK_GET_GUARDIAN_STATUS' }, (response) => {
+          window.postMessage({
+            type: 'TASKDESK_GUARDIAN_STATUS',
+            installed: !!response?.available,
+            guardianEnabled: !!response?.guardianEnabled,
+            focusActive: !!response?.focusActive,
+            blockedDomainCount: Number(response?.blockedDomainCount) || 0,
+            emergencyPassActive: !!response?.emergencyPassActive
           }, window.location.origin);
         });
       } catch (err) {}

@@ -1951,6 +1951,47 @@
       syncConfig.githubToken ? '已保存' : '未保存',
       syncConfig.githubToken ? 'is-warn' : 'is-off'
     );
+    setTrustState(
+      'trustKairosState',
+      settings.kairosEnabled ? (kairosOnline ? '已連線' : '未連線') : '關閉',
+      settings.kairosEnabled ? (kairosOnline ? 'is-on' : 'is-warn') : 'is-off'
+    );
+    setTrustState(
+      'trustPinState',
+      settings.pinLock ? '已啟用' : '關閉',
+      settings.pinLock ? 'is-warn' : 'is-off'
+    );
+
+    const focusButton = document.getElementById('btnToggleFocusGuardian');
+    if (focusButton) {
+      focusButton.textContent = settings.focusLockEnabled !== false ? '關閉站內鎖定' : '開啟站內鎖定';
+    }
+    const tokenButton = document.getElementById('btnClearGuardianToken');
+    if (tokenButton) {
+      tokenButton.disabled = !syncConfig.githubToken;
+      tokenButton.textContent = syncConfig.githubToken ? '清除 Token' : '尚未保存 Token';
+    }
+    const kairosButton = document.getElementById('btnToggleKairosGuardian');
+    if (kairosButton) {
+      kairosButton.textContent = settings.kairosEnabled ? '關閉 Kairos' : '開啟 Kairos';
+    }
+    const pinButton = document.getElementById('btnTogglePinGuardian');
+    if (pinButton) {
+      pinButton.textContent = settings.pinLock ? '關閉 PIN 鎖' : '前往 PIN 設定';
+    }
+    const androidButton = document.getElementById('btnTrustAndroidAction');
+    const androidBridgeAvailable = !!(window.AndroidWidgetBridge
+      && typeof window.AndroidWidgetBridge.openAccessibilitySettings === 'function');
+    if (androidButton) {
+      androidButton.disabled = !androidBridgeAvailable;
+      androidButton.textContent = androidBridgeAvailable ? '前往 Android 設定' : '僅限 Android App';
+    }
+  }
+
+  function requestGuardianExtensionStatus() {
+    try {
+      window.postMessage({ type: 'TASKDESK_GET_GUARDIAN_STATUS' }, window.location.origin);
+    } catch (e) {}
   }
 
   // Done 完成時的微慶祝動畫 (Web Audio + CSS Particles)
@@ -3022,91 +3063,6 @@
       renderDrawerContent();
     }
 
-    function sortWorkbenchItems(taskItems) {
-      taskItems.sort((a, b) => {
-        if (a.isNow && !b.isNow) return -1;
-        if (b.isNow && !a.isNow) return 1;
-        const orderA = typeof a.order === 'number' ? a.order : Number.MAX_SAFE_INTEGER;
-        const orderB = typeof b.order === 'number' ? b.order : Number.MAX_SAFE_INTEGER;
-        return orderA - orderB || (a.createdAt || 0) - (b.createdAt || 0);
-      });
-    }
-
-    function enableWorkbenchDragSort(listEl, taskItems, bucket) {
-      const draggedId = { value: null };
-      taskItems.forEach(item => {
-        const card = Array.from(listEl.querySelectorAll('[data-card-id]'))
-          .find(candidate => candidate.dataset.cardId === item.id);
-        if (!card) return;
-        card.draggable = true;
-        card.classList.add('is-sortable');
-        card.addEventListener('dragstart', (event) => {
-          draggedId.value = item.id;
-          event.dataTransfer.effectAllowed = 'move';
-          event.dataTransfer.setData('text/plain', item.id);
-          card.classList.add('is-dragging');
-        });
-        card.addEventListener('dragend', () => {
-          draggedId.value = null;
-          card.classList.remove('is-dragging');
-          listEl.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-        });
-        card.addEventListener('dragover', (event) => {
-          if (!draggedId.value || draggedId.value === item.id) return;
-          event.preventDefault();
-          event.dataTransfer.dropEffect = 'move';
-          card.classList.add('drag-over');
-        });
-        card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
-        card.addEventListener('drop', (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          card.classList.remove('drag-over');
-          const source = items.find(candidate => candidate.id === draggedId.value);
-          const target = items.find(candidate => candidate.id === item.id);
-          if (!source || !target || source.id === target.id) return;
-          const ordered = items
-            .filter(candidate => candidate.bucket === bucket && !candidate.parentId && !candidate.done)
-            .sort((a, b) => {
-              const aOrder = typeof a.order === 'number' ? a.order : Number.MAX_SAFE_INTEGER;
-              const bOrder = typeof b.order === 'number' ? b.order : Number.MAX_SAFE_INTEGER;
-              return aOrder - bOrder || (a.createdAt || 0) - (b.createdAt || 0);
-            })
-            .filter(candidate => candidate.id !== source.id);
-          const targetIndex = ordered.findIndex(candidate => candidate.id === target.id);
-          const insertIndex = event.clientY > card.getBoundingClientRect().top + card.offsetHeight / 2
-            ? targetIndex + 1
-            : targetIndex;
-          ordered.splice(insertIndex, 0, source);
-          ordered.forEach((candidate, index) => {
-            candidate.order = index;
-            candidate.updatedAt = Date.now();
-          });
-          saveItems();
-          renderAll();
-        });
-      });
-      listEl.addEventListener('dragover', (event) => {
-        if (event.target.closest('.task-card')) return;
-        event.preventDefault();
-      });
-      listEl.addEventListener('drop', (event) => {
-        if (event.target.closest('.task-card')) return;
-        event.preventDefault();
-        const source = items.find(candidate => candidate.id === draggedId.value);
-        if (!source) return;
-        const ordered = items
-          .filter(candidate => candidate.bucket === bucket && !candidate.parentId && !candidate.done && candidate.id !== source.id)
-          .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
-        ordered.push(source);
-        ordered.forEach((candidate, index) => {
-          candidate.order = index;
-          candidate.updatedAt = Date.now();
-        });
-        saveItems();
-        renderAll();
-      });
-    }
   }
 
   function renderWeekCounter() {
@@ -5833,6 +5789,48 @@
   }
 
   // --- 跨裝置手動同步 (GitHub Gist & Direct Sync Code) ---
+  const SYNC_UNDO_SNAPSHOT_KEY = 'taskdesk-last-sync-snapshot';
+
+  function createSyncUndoSnapshot() {
+    try {
+      localStorage.setItem(SYNC_UNDO_SNAPSHOT_KEY, JSON.stringify({
+        savedAt: Date.now(),
+        items: items,
+        tombstones: tombstones,
+        settings: SyncEngine.getPortableSettings(settings)
+      }));
+    } catch (err) {
+      console.error('無法建立同步復原快照', err);
+    }
+  }
+
+  function restoreLastSyncSnapshot() {
+    try {
+      const raw = localStorage.getItem(SYNC_UNDO_SNAPSHOT_KEY);
+      if (!raw) {
+        showToast('目前沒有可復原的同步快照');
+        return;
+      }
+      const snapshot = JSON.parse(raw);
+      if (!snapshot || !Array.isArray(snapshot.items)) {
+        throw new Error('同步快照格式不正確');
+      }
+      items = SyncEngine.sanitizeItems(snapshot.items);
+      tombstones = SyncEngine.sanitizeTombstones(snapshot.tombstones);
+      const cleanSettings = SyncEngine.getPortableSettings(snapshot.settings);
+      if (cleanSettings) settings = Object.assign({}, settings, cleanSettings);
+      saveItems();
+      saveSettings();
+      applyTheme(settings.theme);
+      applySafeTop(settings.safeTop);
+      renderAll();
+      showToast(`已復原同步前狀態（${items.length} 筆任務）`);
+    } catch (err) {
+      console.error(err);
+      showToast('同步快照無法復原');
+    }
+  }
+
   function updateSyncModalStatus() {
     const badge = document.getElementById('syncStatusBadge');
     const timeText = document.getElementById('syncLastTimeText');
@@ -5937,10 +5935,15 @@
       }
       const remotePayload = JSON.parse(fileData.content);
       const count = Array.isArray(remotePayload.items) ? remotePayload.items.length : 0;
+      const deletedCount = remotePayload.tombstones && typeof remotePayload.tombstones === 'object'
+        ? Object.keys(remotePayload.tombstones).length
+        : 0;
       const syncTimeStr = remotePayload.syncedAt ? new Date(remotePayload.syncedAt).toLocaleTimeString() : '未知';
       if (remoteCountText) {
         remoteCountText.textContent = `雲端 Gist：共 ${count} 筆任務 (${syncTimeStr})`;
       }
+      const deletedCountText = document.getElementById('syncDeletedCountText');
+      if (deletedCountText) deletedCountText.textContent = `雲端刪除記錄：${deletedCount} 筆`;
       if (showToastMsg) {
         showToast(`雲端 Gist 目前儲存了 ${count} 筆任務`);
       }
@@ -6170,12 +6173,13 @@
         }
       }
 
+      createSyncUndoSnapshot();
       items = SyncEngine.sanitizeItems(remotePayload.items);
       if (remotePayload.tombstones) {
         tombstones = SyncEngine.sanitizeTombstones(remotePayload.tombstones);
       }
       if (remotePayload.settings) {
-        const cleanSettings = SyncEngine.sanitizeSettings(remotePayload.settings);
+        const cleanSettings = SyncEngine.getPortableSettings(remotePayload.settings);
         if (cleanSettings) {
           settings = Object.assign({}, settings, cleanSettings);
           saveSettings();
@@ -6226,6 +6230,7 @@
 
     try {
       showToast('正在與雲端進行雙向合併…');
+      createSyncUndoSnapshot();
       const resp = await fetch(`https://api.github.com/gists/${gistId}`, {
         headers: {
           'Authorization': `token ${token}`,
@@ -6263,7 +6268,7 @@
       tombstones = mergeRes.tombstones;
 
       if (remotePayload && remotePayload.settings) {
-        const cleanSettings = SyncEngine.sanitizeSettings(remotePayload.settings);
+        const cleanSettings = SyncEngine.getPortableSettings(remotePayload.settings);
         if (cleanSettings) {
           const localSettingsTime = settings.updatedAt || 0;
           const remoteSettingsTime = cleanSettings.updatedAt || 0;
@@ -6361,6 +6366,7 @@
         showToast('同步碼內容無效');
         return;
       }
+      createSyncUndoSnapshot();
       const mergeRes = SyncEngine.smartMergeData({
         items: items,
         tombstones: tombstones
@@ -6371,7 +6377,7 @@
       items = mergeRes.items;
       tombstones = mergeRes.tombstones;
       if (data.settings) {
-        const cleanSettings = SyncEngine.sanitizeSettings(data.settings);
+        const cleanSettings = SyncEngine.getPortableSettings(data.settings);
         if (cleanSettings) {
           settings = Object.assign({}, settings, cleanSettings);
           saveSettings();
@@ -7598,6 +7604,7 @@
       }
 
       updateGuardianTrustDashboard();
+      requestGuardianExtensionStatus();
       modalSettings.style.display = 'flex';
     }
 
@@ -7607,6 +7614,61 @@
       } else {
         showToast('目前非 Android App 環境');
       }
+    });
+
+    safeOn('btnTrustAndroidAction', 'click', () => {
+      if (window.AndroidWidgetBridge && typeof window.AndroidWidgetBridge.openAccessibilitySettings === 'function') {
+        window.AndroidWidgetBridge.openAccessibilitySettings();
+      } else {
+        showToast('目前非 Android App 環境');
+      }
+    });
+
+    safeOn('btnToggleFocusGuardian', 'click', () => {
+      settings.focusLockEnabled = settings.focusLockEnabled === false;
+      settings.updatedAt = Date.now();
+      saveSettings();
+      updateGuardianTrustDashboard();
+      updateFocusGuardStatusBadge();
+      renderAll();
+      showToast(settings.focusLockEnabled ? '已開啟站內專注鎖定' : '已關閉站內專注鎖定');
+    });
+
+    safeOn('btnOpenExtensionGuide', 'click', () => {
+      showToast('瀏覽器擴充只會在 TaskDesk 網頁上接收專注狀態，專注時攔截您設定的分心網站；可在瀏覽器擴充功能管理頁停用。');
+    });
+
+    safeOn('btnClearGuardianToken', 'click', () => {
+      if (!syncConfig.githubToken) return;
+      if (!confirm('清除 GitHub Token？之後需要重新輸入才能使用 Gist 同步。')) return;
+      syncConfig.githubToken = '';
+      syncConfig.gistId = '';
+      saveSyncConfig();
+      updateSyncModalStatus();
+      updateGuardianTrustDashboard();
+      showToast('已清除本機 GitHub Token 與 Gist 綁定');
+    });
+
+    safeOn('btnToggleKairosGuardian', 'click', () => {
+      settings.kairosEnabled = !settings.kairosEnabled;
+      settings.updatedAt = Date.now();
+      saveSettings();
+      if (!settings.kairosEnabled && kairosSession.status !== 'IDLE') {
+        notifyKairosFocusStop();
+      }
+      updateGuardianTrustDashboard();
+      updateFocusGuardStatusBadge();
+      showToast(settings.kairosEnabled ? '已開啟 Kairos 本機守護' : '已關閉 Kairos 本機守護');
+    });
+
+    safeOn('btnTogglePinGuardian', 'click', () => {
+      const pinToggle = document.getElementById('settingPinLock');
+      if (pinToggle) {
+        pinToggle.checked = !settings.pinLock;
+        pinToggle.dispatchEvent(new Event('change'));
+      }
+      updateGuardianTrustDashboard();
+      showToast('請在設定區輸入 PIN 並按「儲存設定」完成變更');
     });
 
     // 常駐設定按鈕 (桌面/手機均可直接點擊)
@@ -8043,6 +8105,7 @@
     safeOn('btnSyncMerge', 'click', mergeWithGist);
     safeOn('btnSyncPush', 'click', pushToGist);
     safeOn('btnSyncPull', 'click', pullFromGist);
+    safeOn('btnRestoreSyncSnapshot', 'click', restoreLastSyncSnapshot);
 
     // 裝置直傳碼
     safeOn('btnCopySyncCode', 'click', copySyncCode);
@@ -8090,10 +8153,17 @@
       if (event.data.type === 'TASKDESK_GUARDIAN_READY' || event.data.type === 'TASKDESK_GUARDIAN_PONG') {
         guardianExtensionOnline = true;
         updateFocusGuardStatusBadge();
+        updateGuardianTrustDashboard();
+      }
+      if (event.data.type === 'TASKDESK_GUARDIAN_STATUS') {
+        guardianExtensionOnline = !!event.data.installed;
+        updateFocusGuardStatusBadge();
+        updateGuardianTrustDashboard();
       }
     });
     try {
       window.postMessage({ type: 'TASKDESK_PING_GUARDIAN' }, window.location.origin);
+      requestGuardianExtensionStatus();
     } catch (e) {}
   }
 

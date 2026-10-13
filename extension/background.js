@@ -52,11 +52,13 @@ function isExtensionUrl(urlStr) {
 
 function normalizeFocusPayload(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const allowedBuckets = ['inbox', 'today', 'week', 'keep', 'release'];
+  const allowedSizes = ['micro', 'small', 'medium', 'large'];
   return {
     id: typeof payload.id === 'string' ? payload.id.slice(0, 120) : '',
     text: typeof payload.text === 'string' ? payload.text.slice(0, 300) : '',
-    bucket: typeof payload.bucket === 'string' ? payload.bucket.slice(0, 30) : '',
-    size: typeof payload.size === 'string' ? payload.size.slice(0, 30) : ''
+    bucket: typeof payload.bucket === 'string' && allowedBuckets.includes(payload.bucket) ? payload.bucket : 'inbox',
+    size: typeof payload.size === 'string' && allowedSizes.includes(payload.size) ? payload.size : 'small'
   };
 }
 
@@ -185,6 +187,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'TASKDESK_PING_GUARDIAN') {
     if (!isAllowedTaskDeskUrl(sender.url)) {
       sendResponse({ available: false, error: 'unauthorized_sender' });
+      return true;
+    }
+
+    if (message.type === 'TASKDESK_GET_GUARDIAN_STATUS') {
+      if (!isAllowedTaskDeskUrl(sender.url)) {
+        sendResponse({ available: false, error: 'unauthorized_sender' });
+        return true;
+      }
+      chrome.storage.local.get(['focusActive', 'guardianEnabled', 'blockedDomains', 'emergencyPassUntil']).then(data => {
+        sendResponse({
+          available: true,
+          guardianEnabled: data.guardianEnabled !== false,
+          focusActive: !!data.focusActive,
+          blockedDomainCount: Array.isArray(data.blockedDomains) ? data.blockedDomains.length : 0,
+          emergencyPassActive: !!(data.emergencyPassUntil && Date.now() < data.emergencyPassUntil)
+        });
+      });
       return true;
     }
     chrome.storage.local.get(['focusActive', 'activeTask', 'guardianEnabled']).then(data => {

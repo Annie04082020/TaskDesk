@@ -905,21 +905,41 @@
             <div class="guardian-trust-item">
               <span class="guardian-trust-label">站內鎖定</span>
               <span class="guardian-trust-state" id="trustFocusLockState">未檢查</span>
+              <span class="guardian-trust-desc">只限制 TaskDesk 內的切換與操作</span>
+              <button type="button" class="btn-secondary guardian-trust-action" id="btnToggleFocusGuardian">關閉站內鎖定</button>
             </div>
             <div class="guardian-trust-item">
               <span class="guardian-trust-label">瀏覽器擴充</span>
               <span class="guardian-trust-state" id="trustExtensionState">未檢查</span>
+              <span class="guardian-trust-desc">專注時攔截設定的分心網站</span>
+              <button type="button" class="btn-secondary guardian-trust-action" id="btnOpenExtensionGuide">查看擴充說明</button>
             </div>
             <div class="guardian-trust-item">
               <span class="guardian-trust-label">Android 守護</span>
               <span class="guardian-trust-state" id="trustAndroidState">未檢查</span>
+              <span class="guardian-trust-desc">透過無障礙服務攔截分心 App</span>
+              <button type="button" class="btn-secondary guardian-trust-action" id="btnTrustAndroidAction">前往 Android 設定</button>
             </div>
             <div class="guardian-trust-item">
               <span class="guardian-trust-label">GitHub Token</span>
               <span class="guardian-trust-state" id="trustTokenState">未檢查</span>
+              <span class="guardian-trust-desc">只用於 Gist，同步資料不含 PIN</span>
+              <button type="button" class="btn-secondary guardian-trust-action" id="btnClearGuardianToken">清除 Token</button>
+            </div>
+            <div class="guardian-trust-item">
+              <span class="guardian-trust-label">Kairos 本機守護</span>
+              <span class="guardian-trust-state" id="trustKairosState">未檢查</span>
+              <span class="guardian-trust-desc">連線至本機 API，協助攔截桌面分心操作</span>
+              <button type="button" class="btn-secondary guardian-trust-action" id="btnToggleKairosGuardian">關閉 Kairos</button>
+            </div>
+            <div class="guardian-trust-item">
+              <span class="guardian-trust-label">本機 PIN 畫面鎖</span>
+              <span class="guardian-trust-state" id="trustPinState">未檢查</span>
+              <span class="guardian-trust-desc">隱私畫面鎖，不是完整資料加密</span>
+              <button type="button" class="btn-secondary guardian-trust-action" id="btnTogglePinGuardian">關閉 PIN 鎖</button>
             </div>
           </div>
-          <div class="form-sublabel trust-dashboard-note">高權限功能只在專注或同步時使用；可在本頁逐一關閉或清除設定。</div>
+          <div class="form-sublabel trust-dashboard-note">每一層守護都可單獨關閉。Android 無障礙服務仍需在系統設定中停用；PIN 是本機畫面鎖，不代表資料已加密。</div>
         </div>
 
         <div class="form-group" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
@@ -1005,6 +1025,7 @@
             <div>
               <div>本機任務：<b id="syncLocalCountText" style="color: var(--accent-primary);">0 筆</b></div>
               <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;" id="syncRemoteCountText">雲端 Gist：尚未讀取</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;" id="syncDeletedCountText">待同步刪除：尚未讀取</div>
             </div>
             <button type="button" id="btnCheckRemoteGist" class="btn-secondary" style="font-size: 0.72rem; padding: 3px 8px;">檢查雲端狀態</button>
           </div>
@@ -1028,6 +1049,9 @@
               </button>
               <button id="btnSyncPull" class="btn-secondary" style="flex: 1; justify-content: center;">
                 從雲端下載 (Pull)
+              </button>
+              <button id="btnRestoreSyncSnapshot" class="btn-secondary" style="flex: 1; justify-content: center;">
+                復原上次同步
               </button>
             </div>
           </div>
