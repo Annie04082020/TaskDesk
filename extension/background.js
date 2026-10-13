@@ -21,6 +21,45 @@ const DEFAULT_BLOCKED_DOMAINS = [
   'weibo.com'
 ];
 
+const TASKDESK_ALLOWED_ORIGINS = [
+  'https://annie04082020.github.io',
+  'http://localhost',
+  'http://127.0.0.1'
+];
+
+function isAllowedTaskDeskUrl(urlStr) {
+  if (!urlStr) return false;
+  try {
+    const parsed = new URL(urlStr);
+    if (!TASKDESK_ALLOWED_ORIGINS.includes(parsed.origin)) return false;
+    if (parsed.hostname === 'annie04082020.github.io') {
+      return parsed.pathname === '/TaskDesk/' || parsed.pathname.startsWith('/TaskDesk/');
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function isExtensionUrl(urlStr) {
+  if (!urlStr) return false;
+  try {
+    return new URL(urlStr).origin === chrome.runtime.getURL('').slice(0, -1);
+  } catch (e) {
+    return false;
+  }
+}
+
+function normalizeFocusPayload(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  return {
+    id: typeof payload.id === 'string' ? payload.id.slice(0, 120) : '',
+    text: typeof payload.text === 'string' ? payload.text.slice(0, 300) : '',
+    bucket: typeof payload.bucket === 'string' ? payload.bucket.slice(0, 30) : '',
+    size: typeof payload.size === 'string' ? payload.size.slice(0, 30) : ''
+  };
+}
+
 // 初始化儲存庫預設值
 chrome.runtime.onInstalled.addListener(async () => {
   const data = await chrome.storage.local.get(['blockedDomains', 'guardianEnabled', 'distractionLogs']);
@@ -130,12 +169,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !message.type) return;
 
   if (message.type === 'TASKDESK_FOCUS_EVENT') {
-    handleFocusEvent(message.action, message.payload);
+    if (!isAllowedTaskDeskUrl(sender.url)) {
+      sendResponse({ success: false, error: 'unauthorized_sender' });
+      return true;
+    }
+    if (!['START', 'STOP', 'PAUSE', 'RESUME'].includes(message.action)) {
+      sendResponse({ success: false, error: 'invalid_action' });
+      return true;
+    }
+    handleFocusEvent(message.action, normalizeFocusPayload(message.payload));
     sendResponse({ success: true });
     return true;
   }
 
   if (message.type === 'TASKDESK_PING_GUARDIAN') {
+    if (!isAllowedTaskDeskUrl(sender.url)) {
+      sendResponse({ available: false, error: 'unauthorized_sender' });
+      return true;
+    }
     chrome.storage.local.get(['focusActive', 'activeTask', 'guardianEnabled']).then(data => {
       sendResponse({
         available: true,
@@ -149,8 +200,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'GUARDIAN_REQUEST_PASS') {
+    if (!isExtensionUrl(sender.url)) {
+      sendResponse({ success: false, error: 'unauthorized_sender' });
+      return true;
+    }
     // 申請緊急通行 3 分鐘
-    const passDurationMs = (message.durationMinutes || 3) * 60 * 1000;
+    const duration = Number.isFinite(message.durationMinutes) ? message.durationMinutes : 3;
+    const safeDurationMinutes = Math.min(10, Math.max(1, Math.floor(duration)));
+    const passDurationMs = safeDurationMinutes * 60 * 1000;
     const until = Date.now() + passDurationMs;
     chrome.storage.local.set({ emergencyPassUntil: until }).then(() => {
       updateBadge();
@@ -160,6 +217,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'GET_STATE') {
+    if (!isExtensionUrl(sender.url)) {
+      sendResponse({ success: false, error: 'unauthorized_sender' });
+      return true;
+    }
     chrome.storage.local.get(null).then(allData => {
       sendResponse({ success: true, data: allData });
     });

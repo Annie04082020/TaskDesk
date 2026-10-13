@@ -216,3 +216,46 @@ test('Case 10: XSS 防護與 Schema 驗證 - 惡意 Payload 無害化', () => {
   assert.equal(sanitizedList[1].deadline, '2026-10-15', '合法的 YYYY-MM-DD deadline 予以保留');
   assert.equal(typeof sanitizedList[0].text, 'string');
 });
+
+test('Case 11: 可攜備份設定不得包含 PIN hash 或鎖定狀態', () => {
+  const settings = {
+    todaySmallLimit: 3,
+    weekMediumLargeLimit: 3,
+    theme: 'dark',
+    safeTop: 56,
+    includeKeepInConsult: true,
+    pinLock: true,
+    pinHash: 'abc123-sensitive-hash',
+    focusLockEnabled: true,
+    kairosEnabled: false,
+    kairosUrl: 'http://127.0.0.1:5050',
+    notificationsEnabled: true,
+    notificationTimes: ['10:00'],
+    updatedAt: 123456
+  };
+
+  const portable = SyncEngine.getPortableSettings(settings);
+  assert.equal(portable.pinLock, undefined, '可攜設定不可匯出 pinLock');
+  assert.equal(portable.pinHash, undefined, '可攜設定不可匯出 pinHash');
+  assert.equal(portable.theme, 'dark');
+  assert.equal(portable.notificationTimes[0], '10:00');
+});
+
+test('Case 12: 匯入不含 PIN 欄位的設定時，不應覆寫本機 PIN 狀態', () => {
+  const existingSettings = {
+    pinLock: true,
+    pinHash: 'local-pin-hash',
+    theme: 'dark'
+  };
+  const incoming = SyncEngine.sanitizeSettings({
+    theme: 'light',
+    safeTop: 56,
+    todaySmallLimit: 3,
+    weekMediumLargeLimit: 3
+  });
+
+  const merged = Object.assign({}, existingSettings, incoming);
+  assert.equal(merged.pinLock, true, '缺少 pinLock 的遠端設定不可關閉本機鎖');
+  assert.equal(merged.pinHash, 'local-pin-hash', '缺少 pinHash 的遠端設定不可清除本機 hash');
+  assert.equal(merged.theme, 'light');
+});

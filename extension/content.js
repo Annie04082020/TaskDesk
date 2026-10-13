@@ -4,6 +4,31 @@
  */
 
 (function () {
+  function isAllowedTaskDeskPage() {
+    const allowedOrigins = [
+      'https://annie04082020.github.io',
+      'http://localhost',
+      'http://127.0.0.1'
+    ];
+    if (!allowedOrigins.includes(window.location.origin)) return false;
+    if (window.location.hostname === 'annie04082020.github.io') {
+      return window.location.pathname === '/TaskDesk/' || window.location.pathname.startsWith('/TaskDesk/');
+    }
+    return true;
+  }
+
+  function normalizePayload(payload) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+    return {
+      id: typeof payload.id === 'string' ? payload.id.slice(0, 120) : '',
+      text: typeof payload.text === 'string' ? payload.text.slice(0, 300) : '',
+      bucket: typeof payload.bucket === 'string' ? payload.bucket.slice(0, 30) : '',
+      size: typeof payload.size === 'string' ? payload.size.slice(0, 30) : ''
+    };
+  }
+
+  if (!isAllowedTaskDeskPage()) return;
+
   // 監聽來自 TaskDesk 網頁應用的 postMessage
   window.addEventListener('message', (event) => {
     // 僅接收來自當前 window 的安全訊息
@@ -12,11 +37,12 @@
     const { type, action, payload } = event.data;
 
     if (type === 'TASKDESK_FOCUS_EVENT') {
+      if (!['START', 'STOP', 'PAUSE', 'RESUME'].includes(action)) return;
       try {
         chrome.runtime.sendMessage({
           type: 'TASKDESK_FOCUS_EVENT',
           action: action,
-          payload: payload
+          payload: normalizePayload(payload)
         });
       } catch (err) {
         // Extension context 可能失效
@@ -30,7 +56,7 @@
             version: response?.version || '1.0.0',
             focusActive: !!response?.focusActive,
             guardianEnabled: !!response?.guardianEnabled
-          }, '*');
+          }, window.location.origin);
         });
       } catch (err) {}
     }
@@ -42,6 +68,6 @@
       type: 'TASKDESK_GUARDIAN_READY',
       installed: true,
       version: '1.0.0'
-    }, '*');
+    }, window.location.origin);
   } catch (e) {}
 })();

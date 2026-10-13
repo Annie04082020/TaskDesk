@@ -310,8 +310,13 @@
       clean.safeTop = (typeof raw.safeTop === 'number' && Number.isFinite(raw.safeTop) && raw.safeTop >= 0 && raw.safeTop <= 200)
         ? Math.floor(raw.safeTop) : 56;
       clean.includeKeepInConsult = !!raw.includeKeepInConsult;
-      clean.pinLock = !!raw.pinLock;
-      clean.pinHash = (typeof raw.pinHash === 'string') ? raw.pinHash.slice(0, 128) : '';
+      clean.simpleMode = !!raw.simpleMode;
+      if (Object.prototype.hasOwnProperty.call(raw, 'pinLock')) {
+        clean.pinLock = !!raw.pinLock;
+      }
+      if (Object.prototype.hasOwnProperty.call(raw, 'pinHash')) {
+        clean.pinHash = (typeof raw.pinHash === 'string') ? raw.pinHash.slice(0, 128) : '';
+      }
       clean.focusLockEnabled = raw.focusLockEnabled !== false;
       clean.kairosEnabled = !!raw.kairosEnabled;
       clean.kairosUrl = (typeof raw.kairosUrl === 'string' && /^https?:\/\//i.test(raw.kairosUrl)) ? raw.kairosUrl : 'http://127.0.0.1:5050';
@@ -323,6 +328,14 @@
       if (typeof raw.updatedAt === 'number' && Number.isFinite(raw.updatedAt)) {
         clean.updatedAt = Math.floor(raw.updatedAt);
       }
+      return clean;
+    },
+
+    getPortableSettings(raw) {
+      const clean = this.sanitizeSettings(raw);
+      if (!clean) return null;
+      delete clean.pinLock;
+      delete clean.pinHash;
       return clean;
     },
 
@@ -518,6 +531,7 @@
     theme: 'dark',
     safeTop: 56,
     includeKeepInConsult: false,
+    simpleMode: false,
     pinLock: false,
     pinHash: '',
     focusLockEnabled: true,
@@ -572,6 +586,7 @@
     loadUserState();
     loadSyncConfig();
     applyTheme(settings.theme);
+    applyExperienceMode();
     applySafeTop(settings.safeTop);
     loadItems();
     checkAndResetRoutines();
@@ -1014,6 +1029,14 @@
     } else {
       document.documentElement.removeAttribute('data-theme');
     }
+  }
+
+  function applyExperienceMode() {
+    if (typeof document === 'undefined' || !document.body) return;
+    if (settings.simpleMode && activeWorkbench === 'week') {
+      activeWorkbench = 'today';
+    }
+    document.body.classList.toggle('simple-mode', !!settings.simpleMode);
   }
 
   // 手機頂部避讓前鏡頭挖孔
@@ -1844,7 +1867,7 @@
         type: 'TASKDESK_FOCUS_EVENT',
         action: action,
         payload: payload || null
-      }, '*');
+      }, window.location.origin);
     } catch (e) {}
   }
 
@@ -1886,6 +1909,48 @@
       badge.style.color = 'var(--accent-primary)';
       badge.style.borderColor = 'rgba(14, 165, 233, 0.3)';
     }
+  }
+
+  function setTrustState(id, text, tone) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text;
+    el.classList.remove('is-on', 'is-warn', 'is-off');
+    if (tone) el.classList.add(tone);
+  }
+
+  function updateGuardianTrustDashboard() {
+    setTrustState(
+      'trustFocusLockState',
+      settings.focusLockEnabled !== false ? '啟用' : '關閉',
+      settings.focusLockEnabled !== false ? 'is-on' : 'is-off'
+    );
+    setTrustState(
+      'trustExtensionState',
+      guardianExtensionOnline ? '已連線' : '未偵測',
+      guardianExtensionOnline ? 'is-on' : 'is-off'
+    );
+
+    let androidGranted = false;
+    let androidAvailable = false;
+    if (window.AndroidWidgetBridge && typeof window.AndroidWidgetBridge.isAccessibilityGranted === 'function') {
+      androidAvailable = true;
+      try {
+        androidGranted = !!window.AndroidWidgetBridge.isAccessibilityGranted();
+      } catch (e) {
+        androidGranted = false;
+      }
+    }
+    setTrustState(
+      'trustAndroidState',
+      androidGranted ? '已授權' : (androidAvailable ? '待授權' : '未安裝'),
+      androidGranted ? 'is-on' : (androidAvailable ? 'is-warn' : 'is-off')
+    );
+    setTrustState(
+      'trustTokenState',
+      syncConfig.githubToken ? '已保存' : '未保存',
+      syncConfig.githubToken ? 'is-warn' : 'is-off'
+    );
   }
 
   // Done 完成時的微慶祝動畫 (Web Audio + CSS Particles)
@@ -4792,7 +4857,8 @@
       return {
         item,
         score,
-        reasonSummary: reasons.slice(0, 2).join(' · ') || '符合目前節奏'
+        reasonSummary: reasons.slice(0, 2).join(' · ') || '符合目前節奏',
+        reasonDetails: reasons
       };
     });
 
@@ -4814,6 +4880,7 @@
     const titleEl = document.getElementById('ambientTaskTitle');
     const chipsEl = document.getElementById('ambientTaskChips');
     const reasonEl = document.getElementById('ambientReasonText');
+    const reasonDetailEl = document.getElementById('ambientReasonDetail');
     const btnAccept = document.getElementById('btnAmbientAccept');
 
     const stateLabels = {
@@ -4838,6 +4905,10 @@
         chipsEl.appendChild(chip);
       }
       if (reasonEl) reasonEl.textContent = '目前工作桌已鎖定此任務，點擊右側可直接開啟沉浸專注。';
+      if (reasonDetailEl) {
+        reasonDetailEl.style.display = 'none';
+        reasonDetailEl.textContent = '';
+      }
       if (btnAccept) btnAccept.textContent = '進入專注';
       return;
     }
@@ -4883,6 +4954,10 @@
       }
     }
     if (reasonEl) reasonEl.textContent = pick.reasonSummary;
+    if (reasonDetailEl) {
+      reasonDetailEl.style.display = 'none';
+      reasonDetailEl.textContent = (pick.reasonDetails || []).join(' / ');
+    }
     if (btnAccept) btnAccept.textContent = '聚焦現在';
   }
 
@@ -4919,6 +4994,13 @@
     ambientDismissed = true;
     const bar = document.getElementById('ambientSuggestionBar');
     if (bar) bar.style.display = 'none';
+  }
+
+  function toggleAmbientReasonDetail() {
+    const detail = document.getElementById('ambientReasonDetail');
+    if (!detail || !detail.textContent) return;
+    const isHidden = detail.style.display === 'none' || !detail.style.display;
+    detail.style.display = isHidden ? 'block' : 'none';
   }
 
   // --- 任務屬性詳細設定視窗 (Task Properties Modal: 死線、習慣、預估時間) ---
@@ -5697,13 +5779,14 @@
 
   // --- 資料匯出與匯入 ---
   function exportBackupJson() {
+    const portableSettings = SyncEngine.getPortableSettings(settings);
     const payload = {
       app: 'Task Desk',
       version: 2,
       exportedAt: new Date().toISOString(),
       items: items,
       tombstones: tombstones,
-      settings: settings
+      settings: portableSettings
     };
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -5943,6 +6026,7 @@
   async function pushToGist() {
     if (!(await prepareGistAuth())) return;
     const token = syncConfig.githubToken.trim();
+    const portableSettings = SyncEngine.getPortableSettings(settings);
 
     const payload = {
       app: 'Task Desk',
@@ -5950,7 +6034,7 @@
       syncedAt: Date.now(),
       items: items,
       tombstones: tombstones,
-      settings: settings
+      settings: portableSettings
     };
 
     const filesBody = {
@@ -6202,7 +6286,7 @@
         syncedAt: Date.now(),
         items: items,
         tombstones: tombstones,
-        settings: settings
+        settings: SyncEngine.getPortableSettings(settings)
       };
 
       const patchResp = await fetch(`https://api.github.com/gists/${gistId}`, {
@@ -6245,13 +6329,14 @@
 
   // 裝置直傳：複製本機同步碼
   function copySyncCode() {
+    const portableSettings = SyncEngine.getPortableSettings(settings);
     const payload = {
       app: 'Task Desk',
       version: 2,
       syncedAt: Date.now(),
       items: items,
       tombstones: tombstones,
-      settings: settings
+      settings: portableSettings
     };
     const jsonStr = JSON.stringify(payload);
     // Base64 編碼
@@ -6680,6 +6765,9 @@
 
     const btnAmbientDismiss = document.getElementById('btnAmbientDismiss');
     if (btnAmbientDismiss) btnAmbientDismiss.addEventListener('click', handleAmbientDismiss);
+
+    const btnAmbientWhy = document.getElementById('btnAmbientWhy');
+    if (btnAmbientWhy) btnAmbientWhy.addEventListener('click', toggleAmbientReasonDetail);
 
     const ambientStatePill = document.getElementById('ambientStatePill');
     if (ambientStatePill) {
@@ -7441,6 +7529,9 @@
       const settingIncludeKeepEl = document.getElementById('settingIncludeKeep');
       if (settingIncludeKeepEl) settingIncludeKeepEl.checked = settings.includeKeepInConsult;
 
+      const settingSimpleModeEl = document.getElementById('settingSimpleMode');
+      if (settingSimpleModeEl) settingSimpleModeEl.checked = !!settings.simpleMode;
+
       const settingFocusLockEl = document.getElementById('settingFocusLock');
       if (settingFocusLockEl) settingFocusLockEl.checked = settings.focusLockEnabled !== false;
 
@@ -7506,6 +7597,7 @@
         if (btnOpenAccessibility) btnOpenAccessibility.style.display = 'none';
       }
 
+      updateGuardianTrustDashboard();
       modalSettings.style.display = 'flex';
     }
 
@@ -7747,6 +7839,9 @@
       const settingIncludeKeepEl = document.getElementById('settingIncludeKeep');
       if (settingIncludeKeepEl) settings.includeKeepInConsult = settingIncludeKeepEl.checked;
 
+      const settingSimpleModeEl = document.getElementById('settingSimpleMode');
+      if (settingSimpleModeEl) settings.simpleMode = settingSimpleModeEl.checked;
+
       const settingFocusLockEl = document.getElementById('settingFocusLock');
       if (settingFocusLockEl) settings.focusLockEnabled = settingFocusLockEl.checked;
 
@@ -7794,6 +7889,7 @@
       saveSettings();
       await syncAndroidNotifications();
       applyTheme(settings.theme);
+      applyExperienceMode();
       checkLockOnStartup();
       renderAll();
       const modalSettings = document.getElementById('modalSettings');
@@ -7803,7 +7899,10 @@
 
     // 密碼鎖定與解鎖事件
     safeOn('btnLockApp', 'click', lockApp);
-    safeOn('formUnlock', 'submit', unlockApp);
+    safeOn('formUnlock', 'submit', (e) => {
+      e.preventDefault();
+      unlockApp();
+    });
     safeOn('btnDoUnlock', 'click', unlockApp);
 
     // 匯出 / 匯入 JSON
@@ -7932,6 +8031,15 @@
     });
 
     // 同步操作按鈕
+    safeOn('btnSafeSync', 'click', mergeWithGist);
+    safeOn('btnToggleAdvancedSync', 'click', () => {
+      const panel = document.getElementById('advancedSyncActions');
+      const btn = document.getElementById('btnToggleAdvancedSync');
+      if (!panel) return;
+      const isHidden = panel.style.display === 'none' || !panel.style.display;
+      panel.style.display = isHidden ? 'flex' : 'none';
+      if (btn) btn.textContent = isHidden ? '收合進階操作' : '進階操作';
+    });
     safeOn('btnSyncMerge', 'click', mergeWithGist);
     safeOn('btnSyncPush', 'click', pushToGist);
     safeOn('btnSyncPull', 'click', pullFromGist);
@@ -7985,7 +8093,7 @@
       }
     });
     try {
-      window.postMessage({ type: 'TASKDESK_PING_GUARDIAN' }, '*');
+      window.postMessage({ type: 'TASKDESK_PING_GUARDIAN' }, window.location.origin);
     } catch (e) {}
   }
 
