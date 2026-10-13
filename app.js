@@ -2385,7 +2385,9 @@
   // --- 專注與工時分析儀表板 (Focus Analytics Dashboard) ---
   let analyticsState = {
     timeRange: 'today', // 'today' | 'week' | 'month' | 'all'
-    activeTab: 'overview' // 'overview' | 'intent' | 'friction' | 'logs'
+    activeTab: 'overview', // 'overview' | 'intent' | 'friction' | 'logs' | 'history'
+    historyView: 'timeline',
+    historyMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
   };
 
   function escapeHtml(str) {
@@ -2428,11 +2430,13 @@
       overview: document.getElementById('panelAnalyticsOverview'),
       intent: document.getElementById('panelAnalyticsIntent'),
       friction: document.getElementById('panelAnalyticsFriction'),
-      logs: document.getElementById('panelAnalyticsLogs')
+      logs: document.getElementById('panelAnalyticsLogs'),
+      history: document.getElementById('panelAnalyticsHistory')
     };
     Object.keys(panels).forEach(key => {
       if (panels[key]) panels[key].style.display = key === tabId ? 'flex' : 'none';
     });
+    if (tabId === 'history') renderCompletedTaskHistory();
   }
 
   function getFilteredFocusSessions() {
@@ -2477,6 +2481,112 @@
     renderAnalyticsIntent(sessions);
     renderAnalyticsFriction(sessions);
     renderAnalyticsLogs(sessions);
+    if (analyticsState.activeTab === 'history') renderCompletedTaskHistory();
+  }
+
+  function getCompletedTaskHistory() {
+    return items.filter(item => item.done && item.doneAt).sort((a, b) => b.doneAt - a.doneAt);
+  }
+
+  function formatHistoryDate(timestamp) {
+    return new Intl.DateTimeFormat('zh-TW', {
+      year: 'numeric', month: 'long', day: 'numeric', weekday: 'short'
+    }).format(new Date(timestamp));
+  }
+
+  function formatHistoryTime(timestamp) {
+    return new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit' })
+      .format(new Date(timestamp));
+  }
+
+  function renderCompletedTaskHistory() {
+    const completed = getCompletedTaskHistory();
+    const timeline = document.getElementById('historyTimelineView');
+    const calendar = document.getElementById('historyCalendarView');
+    if (!timeline || !calendar) return;
+    document.querySelectorAll('.history-view-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.historyView === analyticsState.historyView);
+    });
+    timeline.style.display = analyticsState.historyView === 'timeline' ? 'block' : 'none';
+    calendar.style.display = analyticsState.historyView === 'calendar' ? 'block' : 'none';
+    if (analyticsState.historyView === 'timeline') renderHistoryTimeline(completed, timeline);
+    else renderHistoryCalendar(completed, calendar);
+  }
+
+  function renderHistoryTimeline(completed, container) {
+    container.innerHTML = '';
+    if (!completed.length) {
+      container.innerHTML = '<div class="analytics-empty-hint">尚無完成任務紀錄</div>';
+      return;
+    }
+    const groups = new Map();
+    completed.forEach(item => {
+      const key = new Date(item.doneAt).toLocaleDateString('sv-SE');
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(item);
+    });
+    groups.forEach(dayItems => {
+      const section = document.createElement('section');
+      section.className = 'history-day-group';
+      const title = document.createElement('h4');
+      title.textContent = formatHistoryDate(dayItems[0].doneAt);
+      section.appendChild(title);
+      dayItems.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'history-task-row';
+        const time = document.createElement('time');
+        time.textContent = formatHistoryTime(item.doneAt);
+        const name = document.createElement('span');
+        name.className = 'history-task-name';
+        name.textContent = item.text + (item.parentId ? '（子任務）' : '');
+        row.append(time, name);
+        section.appendChild(row);
+      });
+      container.appendChild(section);
+    });
+  }
+
+  function renderHistoryCalendar(completed, container) {
+    const month = analyticsState.historyMonth;
+    const year = month.getFullYear();
+    const monthIndex = month.getMonth();
+    const monthItems = completed.filter(item => {
+      const date = new Date(item.doneAt);
+      return date.getFullYear() === year && date.getMonth() === monthIndex;
+    });
+    const byDay = new Map();
+    monthItems.forEach(item => {
+      const day = new Date(item.doneAt).getDate();
+      if (!byDay.has(day)) byDay.set(day, []);
+      byDay.get(day).push(item);
+    });
+    const firstDay = new Date(year, monthIndex, 1).getDay();
+    const offset = firstDay === 0 ? 6 : firstDay - 1;
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+    let html = `<div class="history-calendar-header"><button type="button" class="btn-secondary" data-history-month="-1">上一月</button><strong>${year} 年 ${monthIndex + 1} 月</strong><button type="button" class="btn-secondary" data-history-month="1">下一月</button></div>`;
+    html += `<div class="history-calendar-weekdays">${['一', '二', '三', '四', '五', '六', '日'].map(day => `<span>${day}</span>`).join('')}</div><div class="history-calendar-grid">`;
+    for (let i = 0; i < offset; i++) html += '<span class="history-calendar-cell is-empty"></span>';
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayItems = byDay.get(day) || [];
+      html += `<button type="button" class="history-calendar-cell${dayItems.length ? ' has-completions' : ''}" data-history-day="${day}"><b>${day}</b>${dayItems.length ? `<small>${dayItems.length} 件</small>` : ''}</button>`;
+    }
+    html += '</div><div class="history-calendar-detail">點選有完成紀錄的日期查看任務。</div>';
+    container.innerHTML = html;
+    container.querySelectorAll('[data-history-month]').forEach(button => {
+      button.addEventListener('click', () => {
+        analyticsState.historyMonth = new Date(year, monthIndex + Number(button.dataset.historyMonth), 1);
+        renderCompletedTaskHistory();
+      });
+    });
+    container.querySelectorAll('[data-history-day]').forEach(button => {
+      button.addEventListener('click', () => {
+        const detail = container.querySelector('.history-calendar-detail');
+        const dayItems = byDay.get(Number(button.dataset.historyDay)) || [];
+        detail.innerHTML = dayItems.length
+          ? dayItems.map(item => `<div class="history-task-row"><time>${formatHistoryTime(item.doneAt)}</time><span class="history-task-name">${escapeHtml(item.text)}</span></div>`).join('')
+          : '這天沒有完成任務。';
+      });
+    });
   }
 
   function renderAnalyticsOverview(sessions) {
@@ -6687,6 +6797,12 @@
     document.querySelectorAll('.analytics-tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         switchAnalyticsTab(btn.dataset.tab);
+      });
+    });
+    document.querySelectorAll('.history-view-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        analyticsState.historyView = btn.dataset.historyView;
+        renderCompletedTaskHistory();
       });
     });
 
