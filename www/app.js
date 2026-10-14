@@ -341,6 +341,74 @@
       return clean;
     },
 
+    sanitizeFocusSession(raw) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+      const parseTimestamp = (val) => {
+        if (typeof val === 'number' && Number.isFinite(val)) return Math.max(0, Math.floor(val));
+        if (typeof val === 'string' && /^\d+$/.test(val)) {
+          const n = parseInt(val, 10);
+          return Number.isFinite(n) ? Math.max(0, n) : null;
+        }
+        if (typeof val === 'string' && val.trim()) {
+          const parsed = Date.parse(val.trim());
+          return Number.isFinite(parsed) ? Math.max(0, parsed) : null;
+        }
+        return null;
+      };
+      const id = typeof raw.id === 'string' && raw.id.trim()
+        ? raw.id.trim().slice(0, 120)
+        : null;
+      const startedAt = parseTimestamp(raw.startedAt);
+      const endedAt = parseTimestamp(raw.endedAt);
+      if (!id || (!startedAt && !endedAt)) return null;
+      const elapsedSeconds = typeof raw.elapsedSeconds === 'number' && Number.isFinite(raw.elapsedSeconds)
+        ? Math.max(0, Math.floor(raw.elapsedSeconds))
+        : 0;
+      const allowedStatuses = new Set(['COMPLETED', 'ABORTED_TOO_LARGE', 'ABORTED_POSTPONE', 'ABORTED_QUIT']);
+      const status = typeof raw.status === 'string' && allowedStatuses.has(raw.status)
+        ? raw.status
+        : 'COMPLETED';
+      return {
+        id,
+        taskId: typeof raw.taskId === 'string' ? raw.taskId.slice(0, 120) : null,
+        taskText: typeof raw.taskText === 'string' ? raw.taskText.slice(0, 300) : '未知任務',
+        startedAt: startedAt || endedAt || 0,
+        endedAt: endedAt || startedAt || 0,
+        elapsedSeconds,
+        elapsedMinutes: typeof raw.elapsedMinutes === 'number' && Number.isFinite(raw.elapsedMinutes)
+          ? Math.max(0, Math.round(raw.elapsedMinutes * 10) / 10)
+          : Math.round((elapsedSeconds / 60) * 10) / 10,
+        status,
+        reason: typeof raw.reason === 'string' ? raw.reason.slice(0, 120) : '',
+        note: typeof raw.note === 'string' ? raw.note.slice(0, 500) : ''
+      };
+    },
+
+    sanitizeFocusSessions(rawList) {
+      if (!Array.isArray(rawList)) return [];
+      return rawList
+        .map(session => this.sanitizeFocusSession(session))
+        .filter(Boolean)
+        .sort((a, b) => (b.endedAt || b.startedAt || 0) - (a.endedAt || a.startedAt || 0))
+        .slice(0, 500);
+    },
+
+    mergeFocusSessions(localList, remoteList) {
+      const merged = new Map();
+      this.sanitizeFocusSessions(localList).forEach(session => merged.set(session.id, session));
+      this.sanitizeFocusSessions(remoteList).forEach(session => {
+        const existing = merged.get(session.id);
+        const existingTime = existing ? Math.max(existing.endedAt || 0, existing.startedAt || 0) : -1;
+        const sessionTime = Math.max(session.endedAt || 0, session.startedAt || 0);
+        if (!existing || sessionTime >= existingTime) {
+          merged.set(session.id, session);
+        }
+      });
+      return Array.from(merged.values())
+        .sort((a, b) => (b.endedAt || b.startedAt || 0) - (a.endedAt || a.startedAt || 0))
+        .slice(0, 500);
+    },
+
     defaultTieBreaker(a, b) {
       const strA = JSON.stringify([a.id, a.text, a.updatedAt, a.done, a.bucket]);
       const strB = JSON.stringify([b.id, b.text, b.updatedAt, b.done, b.bucket]);
@@ -1311,14 +1379,22 @@
     if (/[\r\n]/.test(rawText)) {
       const rawLines = rawText.split(/\r?\n/);
       const result = [];
+      let hasPlainParent = false;
       for (const line of rawLines) {
         if (!line.trim()) continue;
         const indentMatch = line.match(/^([ \t]+)/);
         const isIndented = !!(indentMatch && (indentMatch[1].includes('\t') || indentMatch[1].length >= 2));
+        const isMarkdownBullet = /^\s*[-*+]\s+/.test(line);
         let clean = line.trim();
-        clean = clean.replace(/^[-*•]\s+/, '').replace(/^\d+[\.、]\s*/, '').trim();
+        clean = clean.replace(/^[-*+•]\s+/, '').replace(/^\d+[\.、]\s*/, '').trim();
         if (clean.length > 0) {
-          result.push({ text: clean, isSubtask: isIndented });
+          const isSubtask = isIndented || (isMarkdownBullet && hasPlainParent);
+          result.push({ text: clean, isSubtask });
+          if (!isSubtask && !isMarkdownBullet) {
+            hasPlainParent = true;
+          } else if (!isSubtask) {
+            hasPlainParent = false;
+          }
         }
       }
       return result;
@@ -1790,9 +1866,17 @@
   function getFocusSessions() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_FOCUS_SESSIONS);
-      return saved ? JSON.parse(saved) : [];
+      return saved ? SyncEngine.sanitizeFocusSessions(JSON.parse(saved)) : [];
     } catch (e) {
       return [];
+    }
+  }
+
+  function saveFocusSessions(sessions) {
+    try {
+      localStorage.setItem(STORAGE_KEY_FOCUS_SESSIONS, JSON.stringify(SyncEngine.sanitizeFocusSessions(sessions)));
+    } catch (e) {
+      console.warn('儲存專注紀錄失敗:', e);
     }
   }
 
@@ -1813,7 +1897,7 @@
       };
       logs.unshift(record);
       if (logs.length > 500) logs.length = 500;
-      localStorage.setItem(STORAGE_KEY_FOCUS_SESSIONS, JSON.stringify(logs));
+      saveFocusSessions(logs);
     } catch (e) {
       console.warn('儲存專注紀錄失敗:', e);
     }
@@ -3057,7 +3141,7 @@
   function deleteFocusSession(sessionId) {
     const logs = getFocusSessions();
     const filtered = logs.filter(s => s.id !== sessionId);
-    localStorage.setItem(STORAGE_KEY_FOCUS_SESSIONS, JSON.stringify(filtered));
+    saveFocusSessions(filtered);
     renderAnalyticsDashboard();
     showToast('已刪除該筆專注紀錄');
   }
@@ -5890,10 +5974,11 @@
     const portableSettings = SyncEngine.getPortableSettings(settings);
     const payload = {
       app: 'Task Desk',
-      version: 2,
+      version: 3,
       exportedAt: new Date().toISOString(),
       items: items,
       tombstones: tombstones,
+      focusSessions: getFocusSessions(),
       settings: portableSettings
     };
 
@@ -5926,6 +6011,9 @@
               applyTheme(settings.theme);
             }
           }
+          if (Array.isArray(data.focusSessions)) {
+            saveFocusSessions(data.focusSessions);
+          }
           saveItems();
           renderAll();
           showToast(`成功還原備份（共 ${items.length} 筆資料）`);
@@ -5943,12 +6031,31 @@
   // --- 跨裝置手動同步 (GitHub Gist & Direct Sync Code) ---
   const SYNC_UNDO_SNAPSHOT_KEY = 'taskdesk-last-sync-snapshot';
 
+  function createPortableDataPayload() {
+    return {
+      app: 'Task Desk',
+      version: 3,
+      syncedAt: Date.now(),
+      items: items,
+      tombstones: tombstones,
+      focusSessions: getFocusSessions(),
+      settings: SyncEngine.getPortableSettings(settings)
+    };
+  }
+
+  function mergeRemoteFocusSessions(remoteSessions) {
+    const mergedSessions = SyncEngine.mergeFocusSessions(getFocusSessions(), remoteSessions);
+    saveFocusSessions(mergedSessions);
+    return mergedSessions;
+  }
+
   function createSyncUndoSnapshot() {
     try {
       localStorage.setItem(SYNC_UNDO_SNAPSHOT_KEY, JSON.stringify({
         savedAt: Date.now(),
         items: items,
         tombstones: tombstones,
+        focusSessions: getFocusSessions(),
         settings: SyncEngine.getPortableSettings(settings)
       }));
     } catch (err) {
@@ -5969,6 +6076,7 @@
       }
       items = SyncEngine.sanitizeItems(snapshot.items);
       tombstones = SyncEngine.sanitizeTombstones(snapshot.tombstones);
+      saveFocusSessions(snapshot.focusSessions || []);
       const cleanSettings = SyncEngine.getPortableSettings(snapshot.settings);
       if (cleanSettings) settings = Object.assign({}, settings, cleanSettings);
       saveItems();
@@ -6181,16 +6289,7 @@
   async function pushToGist() {
     if (!(await prepareGistAuth())) return;
     const token = syncConfig.githubToken.trim();
-    const portableSettings = SyncEngine.getPortableSettings(settings);
-
-    const payload = {
-      app: 'Task Desk',
-      version: 2,
-      syncedAt: Date.now(),
-      items: items,
-      tombstones: tombstones,
-      settings: portableSettings
-    };
+    const payload = createPortableDataPayload();
 
     const filesBody = {
       'taskdesk-sync.json': {
@@ -6330,6 +6429,9 @@
       if (remotePayload.tombstones) {
         tombstones = SyncEngine.sanitizeTombstones(remotePayload.tombstones);
       }
+      if (Array.isArray(remotePayload.focusSessions)) {
+        saveFocusSessions(remotePayload.focusSessions);
+      }
       if (remotePayload.settings) {
         const cleanSettings = SyncEngine.getPortableSettings(remotePayload.settings);
         if (cleanSettings) {
@@ -6437,14 +6539,9 @@
       saveItems();
 
       // 將合併後的最新資料寫回 Gist (包含 tombstones)
-      const payload = {
-        app: 'Task Desk',
-        version: 2,
-        syncedAt: Date.now(),
-        items: items,
-        tombstones: tombstones,
-        settings: SyncEngine.getPortableSettings(settings)
-      };
+      mergeRemoteFocusSessions(remotePayload && remotePayload.focusSessions);
+
+      const payload = createPortableDataPayload();
 
       const patchResp = await fetch(`https://api.github.com/gists/${gistId}`, {
         method: 'PATCH',
@@ -6486,15 +6583,7 @@
 
   // 裝置直傳：複製本機同步碼
   function copySyncCode() {
-    const portableSettings = SyncEngine.getPortableSettings(settings);
-    const payload = {
-      app: 'Task Desk',
-      version: 2,
-      syncedAt: Date.now(),
-      items: items,
-      tombstones: tombstones,
-      settings: portableSettings
-    };
+    const payload = createPortableDataPayload();
     const jsonStr = JSON.stringify(payload);
     // Base64 編碼
     const base64Code = btoa(encodeURIComponent(jsonStr));
@@ -6528,6 +6617,7 @@
       });
       items = mergeRes.items;
       tombstones = mergeRes.tombstones;
+      mergeRemoteFocusSessions(data.focusSessions);
       if (data.settings) {
         const cleanSettings = SyncEngine.getPortableSettings(data.settings);
         if (cleanSettings) {

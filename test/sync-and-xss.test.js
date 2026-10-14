@@ -292,3 +292,19 @@ test('Case 12: 匯入不含 PIN 欄位的設定時，不應覆寫本機 PIN 狀�
   assert.equal(merged.pinHash, 'local-pin-hash', '缺少 pinHash 的遠端設定不可清除本機 hash');
   assert.equal(merged.theme, 'light');
 });
+
+test('Case 13: 專注紀錄同步合併依 ID 去重並保留兩端紀錄', () => {
+  const localSessions = [
+    { id: 's1', taskText: '本機專注', startedAt: 1000, endedAt: 2000, elapsedSeconds: 1000, status: 'COMPLETED' },
+    { id: 'same', taskText: '較舊紀錄', startedAt: 1000, endedAt: 1500, elapsedSeconds: 500, status: 'COMPLETED' }
+  ];
+  const remoteSessions = [
+    { id: 's2', taskText: '手機專注', startedAt: 3000, endedAt: 3600, elapsedSeconds: 600, status: 'ABORTED_POSTPONE' },
+    { id: 'same', taskText: '較新紀錄', startedAt: 1000, endedAt: 2500, elapsedSeconds: 1500, status: 'COMPLETED' }
+  ];
+
+  const merged = SyncEngine.mergeFocusSessions(localSessions, remoteSessions);
+  assert.equal(merged.length, 3, '兩端不同專注紀錄都應保留，相同 ID 只留一筆');
+  assert.equal(merged.find(s => s.id === 'same').taskText, '較新紀錄');
+  assert.deepEqual(merged.map(s => s.id), ['s2', 'same', 's1']);
+});
