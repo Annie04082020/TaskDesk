@@ -130,6 +130,63 @@ test('Case 7: Google Tasks - 相同 rawId 可對齊，不同 rawId 即使同標�
   assert.equal(match2, undefined, '不同 rawId 即使標題相同，也不得被對齊或誤合併');
 });
 
+test('Case 8: 專案與任務關聯資料可安全正規化', () => {
+  const project = SyncEngine.sanitizeProject({
+    id: 'project_1',
+    name: '期末專題',
+    startDate: '2026-09-01',
+    deadline: '2026-12-31',
+    milestones: [
+      { id: 'm1', title: '研究問題', deadline: '2026-10-20' },
+      { id: 'm2', title: '不合法日期', deadline: '2026-02-29' }
+    ]
+  });
+  const item = SyncEngine.sanitizeItem({
+    id: 'task_1',
+    text: '蒐集文獻',
+    projectId: 'project_1'
+  });
+  assert.equal(project.milestones.length, 2);
+  assert.equal(project.milestones[0].deadline, '2026-10-20');
+  assert.equal(project.milestones[1].deadline, null);
+  assert.equal(item.projectId, 'project_1');
+});
+
+test('Case 9: 專案完成度優先依里程碑計算，沒有里程碑才依任務', () => {
+  const project = {
+    milestones: [
+      { id: 'm1', title: '一', done: true },
+      { id: 'm2', title: '二', done: false },
+      { id: 'm3', title: '三', done: false }
+    ]
+  };
+  assert.deepEqual(SyncEngine.getProjectProgress(project, [
+    { done: true }, { done: true }, { done: false }
+  ]), { done: 1, total: 3, percent: 33 });
+  assert.deepEqual(SyncEngine.getProjectProgress({ milestones: [] }, [
+    { done: true }, { done: false }
+  ]), { done: 1, total: 2, percent: 50 });
+});
+
+test('Case 10: 專案工時統計依任務關聯與日期範圍過濾', () => {
+  const result = SyncEngine.getProjectTimeStats(
+    'project_1',
+    [
+      { taskId: 'task_1', startedAt: Date.parse('2026-10-01T10:00:00'), elapsedSeconds: 1800 },
+      { taskId: 'task_1', startedAt: Date.parse('2026-11-01T10:00:00'), elapsedSeconds: 3600 },
+      { taskId: 'task_2', startedAt: Date.parse('2026-10-10T10:00:00'), elapsedSeconds: 9999 }
+    ],
+    [
+      { id: 'task_1', projectId: 'project_1' },
+      { id: 'task_2', projectId: 'other_project' }
+    ],
+    '2026-10-01',
+    '2026-10-31'
+  );
+  assert.equal(result.totalSeconds, 1800);
+  assert.equal(result.totalMinutes, 30);
+});
+
 test('Case 8: 舊格式資料相容策略 - 無 deletedAt/tombstone 時的處理與限制', () => {
   // 舊格式 (version 1) 只有 items 陣列，沒有 tombstones 物件
   const localWithTombstone = {

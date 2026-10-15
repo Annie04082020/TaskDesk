@@ -95,12 +95,14 @@
   const STORAGE_KEY_ITEMS = 'taskdesk_items_v1';
   const STORAGE_KEY_TOMBSTONES = 'taskdesk_tombstones_v1';
   const STORAGE_KEY_SETTINGS = 'taskdesk_settings_v1';
+  const STORAGE_KEY_PROJECTS = 'taskdesk_projects_v1';
   const STORAGE_KEY_SYNC = 'taskdesk_sync_v1';
   const STORAGE_KEY_FOCUS_SESSIONS = 'taskdesk_focus_sessions_v1';
   const STORAGE_KEY_USER_STATE = 'taskdesk_user_state_v1';
 
   let rules = DEFAULT_RULES;
   let items = [];
+  let projects = [];
   let tombstones = {};
 
   // --- 純函式同步與資料清洗核心模組 (Sync & Schema Engine) ---
@@ -218,6 +220,7 @@
       // 其它屬性
       const isNow = !!raw.isNow && !done;
       const parentId = (typeof raw.parentId === 'string' && raw.parentId.trim()) ? raw.parentId.trim() : null;
+      const projectId = (typeof raw.projectId === 'string' && raw.projectId.trim()) ? raw.projectId.trim().slice(0, 120) : null;
       const typeId = (typeof raw.typeId === 'string' && raw.typeId.trim()) ? raw.typeId.trim().slice(0, 50) : null;
       const typeSource = (typeof raw.typeSource === 'string') ? raw.typeSource.slice(0, 20) : 'rule';
       const aiGenerated = !!raw.aiGenerated;
@@ -246,6 +249,7 @@
         routineCadence,
         lastResetDate,
         parentId,
+        projectId,
         typeId,
         typeSource,
         aiGenerated,
@@ -265,6 +269,86 @@
         }
       }
       return result;
+    },
+
+    sanitizeMilestone(raw, generateIdFn = null) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+      const title = typeof raw.title === 'string' ? raw.title.trim().slice(0, 200) : '';
+      if (!title) return null;
+      const id = typeof raw.id === 'string' && raw.id.trim()
+        ? raw.id.trim().slice(0, 120)
+        : (typeof generateIdFn === 'function' ? generateIdFn() : null);
+      if (!id) return null;
+      const deadline = typeof raw.deadline === 'string' && this.isValidDateString(raw.deadline.trim())
+        ? raw.deadline.trim()
+        : null;
+      return {
+        id,
+        title,
+        deadline,
+        done: !!raw.done,
+        order: typeof raw.order === 'number' && Number.isFinite(raw.order) ? Math.max(0, Math.floor(raw.order)) : 0
+      };
+    },
+
+    sanitizeProject(raw, generateIdFn = null) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+      const name = typeof raw.name === 'string' ? raw.name.trim().slice(0, 200) : '';
+      if (!name) return null;
+      const id = typeof raw.id === 'string' && raw.id.trim()
+        ? raw.id.trim().slice(0, 120)
+        : (typeof generateIdFn === 'function' ? generateIdFn() : null);
+      if (!id) return null;
+      const date = (value) => typeof value === 'string' && this.isValidDateString(value.trim()) ? value.trim() : null;
+      const milestones = Array.isArray(raw.milestones)
+        ? raw.milestones.map(m => this.sanitizeMilestone(m, generateIdFn)).filter(Boolean)
+        : [];
+      return {
+        id,
+        name,
+        description: typeof raw.description === 'string' ? raw.description.slice(0, 1000) : '',
+        startDate: date(raw.startDate),
+        deadline: date(raw.deadline),
+        archived: !!raw.archived,
+        createdAt: typeof raw.createdAt === 'number' && Number.isFinite(raw.createdAt) ? Math.max(0, Math.floor(raw.createdAt)) : 0,
+        updatedAt: typeof raw.updatedAt === 'number' && Number.isFinite(raw.updatedAt) ? Math.max(0, Math.floor(raw.updatedAt)) : 0,
+        milestones
+      };
+    },
+
+    sanitizeProjects(rawList, generateIdFn = null) {
+      if (!Array.isArray(rawList)) return [];
+      const seen = new Set();
+      return rawList.map(project => this.sanitizeProject(project, generateIdFn)).filter(project => {
+        if (!project || seen.has(project.id)) return false;
+        seen.add(project.id);
+        return true;
+      });
+    },
+
+    getProjectProgress(project, projectItems = []) {
+      const milestones = project && Array.isArray(project.milestones) ? project.milestones : [];
+      if (milestones.length > 0) {
+        const done = milestones.filter(m => m.done).length;
+        return { done, total: milestones.length, percent: Math.round((done / milestones.length) * 100) };
+      }
+      const active = projectItems.filter(item => !item.done);
+      const done = projectItems.length - active.length;
+      return { done, total: projectItems.length, percent: projectItems.length ? Math.round((done / projectItems.length) * 100) : 0 };
+    },
+
+    getProjectTimeStats(projectId, sessions, items, startDate = null, endDate = null) {
+      const itemIds = new Set((Array.isArray(items) ? items : [])
+        .filter(item => item && item.projectId === projectId)
+        .map(item => item.id));
+      const start = startDate ? Date.parse(`${startDate}T00:00:00`) : -Infinity;
+      const end = endDate ? Date.parse(`${endDate}T23:59:59.999`) : Infinity;
+      const filtered = (Array.isArray(sessions) ? sessions : []).filter(session => {
+        const at = session && (session.startedAt || session.endedAt);
+        return session && itemIds.has(session.taskId) && at >= start && at <= end;
+      });
+      const totalSeconds = filtered.reduce((sum, session) => sum + (session.elapsedSeconds || 0), 0);
+      return { totalSeconds, totalMinutes: Math.round((totalSeconds / 60) * 10) / 10, sessions: filtered };
     },
 
     sanitizeTombstones(raw) {
@@ -657,6 +741,7 @@
     applyPlatformVisibility();
     applySafeTop(settings.safeTop);
     loadItems();
+    loadProjects();
     checkAndResetRoutines();
     await loadRules();
     setupEventListeners();
@@ -734,6 +819,19 @@
       if (week.length) groups.push(`本週 ${week.length} 件`);
       if (soon.length) groups.push(`快截止 ${soon.length} 件`);
       if (routines.length) groups.push(`習慣 ${routines.length} 件`);
+      const projectAlerts = projects.filter(project => {
+        if (project.archived || !project.deadline) return false;
+        const deadline = new Date(`${project.deadline}T23:59:59`);
+        return Math.ceil((deadline.getTime() - now.getTime()) / 86400000) <= 7;
+      });
+      const milestoneAlerts = projects.reduce((count, project) => count + (project.archived ? 0 : project.milestones.filter(milestone => {
+        if (milestone.done || !milestone.deadline) return false;
+        const deadline = new Date(`${milestone.deadline}T23:59:59`);
+        return Math.ceil((deadline.getTime() - now.getTime()) / 86400000) <= 7;
+      }).length), 0);
+      if (projectAlerts.length || milestoneAlerts) {
+        groups.push(`專案回顧 ${projectAlerts.length + milestoneAlerts} 件`);
+      }
       return groups.length ? groups.join('、') : '目前沒有需要提醒的任務';
     }
 
@@ -1025,6 +1123,218 @@
       syncAndroidNotifications();
     } catch (e) {
       console.error('儲存任務失敗:', e);
+    }
+
+    function loadProjects() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY_PROJECTS);
+        projects = saved ? SyncEngine.sanitizeProjects(JSON.parse(saved)) : [];
+      } catch (e) {
+        console.warn('載入專案失敗:', e);
+        projects = [];
+      }
+    }
+
+    function saveProjects() {
+      try {
+        localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
+      } catch (e) {
+        console.error('儲存專案失敗:', e);
+      }
+
+      function getProjectItems(projectId) {
+        return items.filter(item => item.projectId === projectId);
+      }
+
+      function formatProjectMinutes(minutes) {
+        const rounded = Math.round(minutes || 0);
+        if (rounded < 60) return `${rounded} 分鐘`;
+        const hours = Math.floor(rounded / 60);
+        const rest = rounded % 60;
+        return rest ? `${hours} 小時 ${rest} 分鐘` : `${hours} 小時`;
+      }
+
+      function getProjectById(projectId) {
+        return projects.find(project => project.id === projectId) || null;
+      }
+
+      function getProjectStatsRange() {
+        const startInput = document.getElementById('projectStatsStart');
+        const endInput = document.getElementById('projectStatsEnd');
+        return {
+          startDate: startInput && startInput.value ? startInput.value : null,
+          endDate: endInput && endInput.value ? endInput.value : null
+        };
+      }
+
+      function renderProjects() {
+        const list = document.getElementById('projectList');
+        if (!list) return;
+        const range = getProjectStatsRange();
+        list.innerHTML = '';
+        const activeProjects = projects.filter(project => !project.archived);
+        if (!activeProjects.length) {
+          list.innerHTML = '<div class="project-empty">還沒有學期專案。需要時新增一個，不會影響主工作桌。</div>';
+          return;
+        }
+        activeProjects.forEach(project => {
+          const projectItems = getProjectItems(project.id);
+          const progress = SyncEngine.getProjectProgress(project, projectItems);
+          const stats = SyncEngine.getProjectTimeStats(project.id, getFocusSessions(), items, range.startDate, range.endDate);
+          const card = document.createElement('article');
+          card.className = 'project-card';
+
+          const header = document.createElement('div');
+          header.className = 'project-card-header';
+          const title = document.createElement('div');
+          title.className = 'project-card-title';
+          title.textContent = project.name;
+          const edit = document.createElement('button');
+          edit.type = 'button';
+          edit.className = 'btn-secondary';
+          edit.textContent = '編輯';
+          edit.addEventListener('click', () => openProjectForm(project));
+          header.append(title, edit);
+          card.appendChild(header);
+
+          if (project.description) {
+            const desc = document.createElement('div');
+            desc.className = 'project-card-description';
+            desc.textContent = project.description;
+            card.appendChild(desc);
+          }
+
+          const meta = document.createElement('div');
+          meta.className = 'project-card-meta';
+          const deadline = project.deadline ? `截止 ${project.deadline}` : '未設定總截止日';
+          meta.textContent = `${deadline} · ${progress.done}/${progress.total} 個里程碑 · 已投入 ${formatProjectMinutes(stats.totalMinutes)}`;
+          card.appendChild(meta);
+
+          const progressTrack = document.createElement('div');
+          progressTrack.className = 'project-progress';
+          const progressFill = document.createElement('div');
+          progressFill.className = 'project-progress-fill';
+          progressFill.style.width = `${progress.percent}%`;
+          progressTrack.appendChild(progressFill);
+          card.appendChild(progressTrack);
+
+          if (project.milestones.length) {
+            const milestoneList = document.createElement('div');
+            project.milestones.sort((a, b) => a.order - b.order).forEach(milestone => {
+              const row = document.createElement('label');
+              row.className = 'project-card-meta';
+              const check = document.createElement('input');
+              check.type = 'checkbox';
+              check.checked = milestone.done;
+              check.addEventListener('change', () => {
+                milestone.done = check.checked;
+                project.updatedAt = Date.now();
+                saveProjects();
+                renderProjects();
+              });
+              const text = document.createElement('span');
+              text.textContent = milestone.deadline ? `${milestone.title} · ${milestone.deadline}` : milestone.title;
+              row.append(check, text);
+              milestoneList.appendChild(row);
+            });
+            card.appendChild(milestoneList);
+          }
+
+          const taskList = document.createElement('div');
+          taskList.className = 'project-card-meta';
+          taskList.textContent = projectItems.length ? `關聯任務：${projectItems.filter(item => !item.parentId).length} 件` : '尚未關聯任務';
+          card.appendChild(taskList);
+          projectItems.slice(0, 5).forEach(item => {
+            const taskRow = document.createElement('div');
+            taskRow.className = 'project-card-meta';
+            taskRow.style.paddingLeft = item.parentId ? '18px' : '4px';
+            const taskText = document.createElement('span');
+            taskText.textContent = `${item.done ? '已完成' : '待辦'} · ${item.text}`;
+            taskRow.appendChild(taskText);
+            if (!item.done) {
+              const nextButton = document.createElement('button');
+              nextButton.type = 'button';
+              nextButton.className = 'btn-secondary';
+              nextButton.textContent = item.bucket === 'today' ? '已在今日' : '排入本週';
+              nextButton.disabled = item.bucket === 'today';
+              nextButton.addEventListener('click', () => moveItemBucket(item.id, 'week'));
+              taskRow.appendChild(nextButton);
+            }
+            card.appendChild(taskRow);
+          });
+
+          const taskPicker = document.createElement('select');
+          taskPicker.className = 'form-select';
+          taskPicker.innerHTML = '<option value="">將現有任務加入此專案…</option>';
+          items.filter(item => !item.done && !item.projectId).slice(0, 100).forEach(item => {
+            const option = document.createElement('option');
+            option.value = item.id;
+            option.textContent = item.text;
+            taskPicker.appendChild(option);
+          });
+          const addTask = document.createElement('button');
+          addTask.type = 'button';
+          addTask.className = 'btn-secondary';
+          addTask.textContent = '加入';
+          addTask.addEventListener('click', () => {
+            if (!taskPicker.value) return;
+            const item = items.find(candidate => candidate.id === taskPicker.value);
+            if (!item) return;
+            item.projectId = project.id;
+            item.updatedAt = Date.now();
+            saveItems();
+            renderProjects();
+          });
+          const assignRow = document.createElement('div');
+          assignRow.className = 'project-card-actions';
+          assignRow.append(taskPicker, addTask);
+          card.appendChild(assignRow);
+
+          const actions = document.createElement('div');
+          actions.className = 'project-card-actions';
+          const archive = document.createElement('button');
+          archive.type = 'button';
+          archive.className = 'btn-secondary';
+          archive.textContent = '封存';
+          archive.addEventListener('click', () => {
+            project.archived = true;
+            project.updatedAt = Date.now();
+            saveProjects();
+            renderProjects();
+          });
+          actions.appendChild(archive);
+          card.appendChild(actions);
+          list.appendChild(card);
+        });
+      }
+
+      function openProjectForm(project = null) {
+        const form = document.getElementById('projectForm');
+        if (!form) return;
+        form.style.display = 'grid';
+        document.getElementById('projectEditingId').value = project ? project.id : '';
+        document.getElementById('projectName').value = project ? project.name : '';
+        document.getElementById('projectDescription').value = project ? project.description : '';
+        document.getElementById('projectStartDate').value = project && project.startDate ? project.startDate : '';
+        document.getElementById('projectDeadline').value = project && project.deadline ? project.deadline : '';
+        document.getElementById('projectMilestones').value = project
+          ? project.milestones.sort((a, b) => a.order - b.order).map(m => `${m.title}${m.deadline ? ` | ${m.deadline}` : ''}`).join('\n')
+          : '';
+        document.getElementById('projectName').focus();
+      }
+
+      function closeProjectForm() {
+        const form = document.getElementById('projectForm');
+        if (form) form.style.display = 'none';
+      }
+
+      function openProjectsModal() {
+        const modal = document.getElementById('modalProjects');
+        if (!modal) return;
+        closeProjectForm();
+        renderProjects();
+        modal.style.display = 'flex';
+      }
     }
   }
 
@@ -1494,6 +1804,8 @@
 
     saveItems();
     renderAll();
+    const projectModal = document.getElementById('modalProjects');
+    if (projectModal && projectModal.style.display !== 'none') renderProjects();
   }
 
   // 明確指定某項目為「現在做這個」（清除其他現在，並自動移入有效工作桌）
@@ -5974,9 +6286,10 @@
     const portableSettings = SyncEngine.getPortableSettings(settings);
     const payload = {
       app: 'Task Desk',
-      version: 3,
+      version: 4,
       exportedAt: new Date().toISOString(),
       items: items,
+      projects: projects,
       tombstones: tombstones,
       focusSessions: getFocusSessions(),
       settings: portableSettings
@@ -6000,6 +6313,7 @@
         const data = JSON.parse(e.target.result);
         if (data && Array.isArray(data.items)) {
           items = SyncEngine.sanitizeItems(data.items);
+          projects = SyncEngine.sanitizeProjects(data.projects || []);
           if (data.tombstones) {
             tombstones = SyncEngine.sanitizeTombstones(data.tombstones);
           }
@@ -6015,6 +6329,7 @@
             saveFocusSessions(data.focusSessions);
           }
           saveItems();
+          saveProjects();
           renderAll();
           showToast(`成功還原備份（共 ${items.length} 筆資料）`);
           document.getElementById('modalSettings').style.display = 'none';
@@ -6034,9 +6349,10 @@
   function createPortableDataPayload() {
     return {
       app: 'Task Desk',
-      version: 3,
+      version: 4,
       syncedAt: Date.now(),
       items: items,
+      projects: projects,
       tombstones: tombstones,
       focusSessions: getFocusSessions(),
       settings: SyncEngine.getPortableSettings(settings)
@@ -6054,6 +6370,7 @@
       localStorage.setItem(SYNC_UNDO_SNAPSHOT_KEY, JSON.stringify({
         savedAt: Date.now(),
         items: items,
+        projects: projects,
         tombstones: tombstones,
         focusSessions: getFocusSessions(),
         settings: SyncEngine.getPortableSettings(settings)
@@ -6075,11 +6392,13 @@
         throw new Error('同步快照格式不正確');
       }
       items = SyncEngine.sanitizeItems(snapshot.items);
+      projects = SyncEngine.sanitizeProjects(snapshot.projects || []);
       tombstones = SyncEngine.sanitizeTombstones(snapshot.tombstones);
       saveFocusSessions(snapshot.focusSessions || []);
       const cleanSettings = SyncEngine.getPortableSettings(snapshot.settings);
       if (cleanSettings) settings = Object.assign({}, settings, cleanSettings);
       saveItems();
+      saveProjects();
       saveSettings();
       applyTheme(settings.theme);
       applySafeTop(settings.safeTop);
@@ -6426,6 +6745,7 @@
 
       createSyncUndoSnapshot();
       items = SyncEngine.sanitizeItems(remotePayload.items);
+      projects = SyncEngine.sanitizeProjects(remotePayload.projects || []);
       if (remotePayload.tombstones) {
         tombstones = SyncEngine.sanitizeTombstones(remotePayload.tombstones);
       }
@@ -6442,6 +6762,7 @@
         }
       }
       saveItems();
+      saveProjects();
       syncConfig.lastSyncTime = Date.now();
       saveSyncConfig();
       renderAll();
@@ -6520,6 +6841,10 @@
 
       items = mergeRes.items;
       tombstones = mergeRes.tombstones;
+      if (remotePayload && remotePayload.projects) {
+        projects = SyncEngine.sanitizeProjects(remotePayload.projects);
+        saveProjects();
+      }
 
       if (remotePayload && remotePayload.settings) {
         const cleanSettings = SyncEngine.getPortableSettings(remotePayload.settings);
@@ -6640,6 +6965,84 @@
 
   // --- 事件監聽配置 ---
   function setupEventListeners() {
+    safeOn('btnOpenProjects', 'click', openProjectsModal);
+    safeOn('btnCloseProjects', 'click', () => {
+      const modal = document.getElementById('modalProjects');
+      if (modal) modal.style.display = 'none';
+    });
+    safeOn('btnNewProject', 'click', () => openProjectForm());
+    safeOn('btnCancelProjectForm', 'click', closeProjectForm);
+    const projectForm = document.getElementById('projectForm');
+    if (projectForm) {
+      projectForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const name = document.getElementById('projectName').value.trim();
+        if (!name) return;
+        const now = Date.now();
+        const editingId = document.getElementById('projectEditingId').value;
+        const existing = editingId ? getProjectById(editingId) : null;
+        const milestoneLines = document.getElementById('projectMilestones').value
+          .split(/\r?\n/)
+          .map(line => line.trim())
+          .filter(Boolean);
+        const milestones = milestoneLines.map((line, index) => {
+          const [titlePart, deadlinePart] = line.split('|').map(part => part.trim());
+          return {
+            id: existing && existing.milestones[index] ? existing.milestones[index].id : `m_${now.toString(36)}_${index}`,
+            title: titlePart,
+            deadline: deadlinePart && SyncEngine.isValidDateString(deadlinePart) ? deadlinePart : null,
+            done: existing && existing.milestones[index] ? existing.milestones[index].done : false,
+            order: index
+          };
+        });
+        const project = existing || {
+          id: `p_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+          createdAt: now,
+          archived: false,
+          milestones: []
+        };
+        project.name = name;
+        project.description = document.getElementById('projectDescription').value.trim();
+        project.startDate = document.getElementById('projectStartDate').value || null;
+        project.deadline = document.getElementById('projectDeadline').value || null;
+        project.milestones = milestones;
+        project.updatedAt = now;
+        if (!existing) projects.unshift(project);
+        projects = SyncEngine.sanitizeProjects(projects);
+        saveProjects();
+        closeProjectForm();
+        renderProjects();
+        showToast(existing ? '專案已更新' : '專案已建立');
+      });
+    }
+    document.querySelectorAll('.project-range-btn').forEach(button => {
+      button.addEventListener('click', () => {
+        const range = button.dataset.range;
+        const startInput = document.getElementById('projectStatsStart');
+        const endInput = document.getElementById('projectStatsEnd');
+        const now = new Date();
+        if (range === 'all') {
+          startInput.value = '';
+          endInput.value = '';
+        } else {
+          const start = new Date(now);
+          if (range === 'week') {
+            const day = start.getDay();
+            start.setDate(start.getDate() - (day === 0 ? 6 : day - 1));
+          } else {
+            start.setDate(1);
+          }
+          const toDateValue = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+          startInput.value = toDateValue(start);
+          endInput.value = toDateValue(now);
+        }
+        renderProjects();
+      });
+    });
+    ['projectStatsStart', 'projectStatsEnd'].forEach(id => {
+      const input = document.getElementById(id);
+      if (input) input.addEventListener('change', renderProjects);
+    });
     // 收集箱尺寸選擇器 (預設為 auto 自動推估，抓不準則自動歸為 5-10m 試水溫)
     let selectedCaptureSize = 'auto';
     let selectedCaptureDeadline = null;

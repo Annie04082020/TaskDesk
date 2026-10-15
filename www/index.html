@@ -76,6 +76,9 @@
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
           </svg>
         </button>
+        <button id="btnOpenProjects" class="btn-icon project-entry-button" title="專案" aria-label="專案">
+          <span class="project-entry-label">專案</span>
+        </button>
       </div>
     </header>
 
@@ -708,6 +711,52 @@
       <div class="modal-footer">
         <button class="btn-secondary" id="btnCancelImport">取消</button>
         <button class="btn-primary" id="btnDoImport">確認匯入任務</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Semester Projects -->
+  <div class="modal-overlay" id="modalProjects" style="display: none;">
+    <div class="modal-sheet project-modal-sheet">
+      <div class="modal-header">
+        <div>
+          <h3 class="modal-title">學期專案</h3>
+          <div class="form-sublabel">只在需要時查看；主工作桌只放你目前要做的下一步。</div>
+        </div>
+        <button class="modal-close" id="btnCloseProjects">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="project-stats-filter">
+          <span class="form-label">投入時間統計期間</span>
+          <button type="button" class="btn-secondary project-range-btn" data-range="week">本週</button>
+          <button type="button" class="btn-secondary project-range-btn" data-range="month">本月</button>
+          <button type="button" class="btn-secondary project-range-btn" data-range="all">全部</button>
+          <input type="date" id="projectStatsStart" class="form-input" aria-label="統計開始日期">
+          <span>至</span>
+          <input type="date" id="projectStatsEnd" class="form-input" aria-label="統計結束日期">
+        </div>
+        <div id="projectList" class="project-list"></div>
+        <form id="projectForm" class="project-form" style="display: none;">
+          <div class="project-form-title">新增專案</div>
+          <input type="hidden" id="projectEditingId">
+          <label class="form-label" for="projectName">專案名稱</label>
+          <input id="projectName" class="form-input" maxlength="200" required placeholder="例：期末研究專題">
+          <label class="form-label" for="projectDescription">說明</label>
+          <textarea id="projectDescription" class="form-textarea" rows="2" maxlength="1000" placeholder="記錄這個專案要完成什麼"></textarea>
+          <div class="project-date-grid">
+            <div><label class="form-label" for="projectStartDate">開始日</label><input id="projectStartDate" class="form-input" type="date"></div>
+            <div><label class="form-label" for="projectDeadline">總截止日</label><input id="projectDeadline" class="form-input" type="date"></div>
+          </div>
+          <label class="form-label" for="projectMilestones">里程碑</label>
+          <textarea id="projectMilestones" class="form-textarea" rows="4" placeholder="一行一個里程碑，可加日期：&#10;完成研究問題 | 2026-11-01&#10;完成初稿"></textarea>
+          <div class="project-form-actions">
+            <button type="button" class="btn-secondary" id="btnCancelProjectForm">取消</button>
+            <button type="submit" class="btn-primary">儲存專案</button>
+          </div>
+        </form>
+        <div class="project-actions">
+          <button type="button" class="btn-secondary" id="btnNewProject">＋新增專案</button>
+        </div>
       </div>
     </div>
   </div>

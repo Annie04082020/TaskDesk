@@ -5426,3 +5426,132 @@ select option:checked {
   background-color: #1e293b !important;
   color: #00f0ff !important;
 }
+.project-entry-button {
+  width: auto;
+  min-width: 48px;
+  padding: 0 8px;
+}
+
+.project-entry-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.project-modal-sheet {
+  max-width: 760px;
+}
+
+.project-list {
+  display: grid;
+  gap: 10px;
+}
+
+.project-stats-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  color: var(--meta-text);
+  font-size: 0.78rem;
+}
+
+.project-stats-filter .form-label {
+  margin-right: 2px;
+}
+
+.project-stats-filter .form-input {
+  width: auto;
+  min-width: 132px;
+  padding: 6px 8px;
+}
+
+.project-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface-raised);
+}
+
+.project-card-header,
+.project-card-meta,
+.project-card-actions,
+.project-form-actions,
+.project-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-card-header,
+.project-card-meta,
+.project-card-actions,
+.project-actions {
+  justify-content: space-between;
+}
+
+.project-card-title {
+  font-weight: 650;
+}
+
+.project-card-description,
+.project-card-meta {
+  color: var(--meta-text);
+  font-size: 0.78rem;
+}
+
+.project-progress {
+  height: 6px;
+  margin: 10px 0 8px;
+  border-radius: 999px;
+  background: var(--border-subtle);
+  overflow: hidden;
+}
+
+.project-progress-fill {
+  height: 100%;
+  background: var(--accent-primary);
+  transition: width 0.2s ease;
+}
+
+.project-card-actions {
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.project-date-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.project-form {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.project-form-title {
+  font-weight: 650;
+  margin-bottom: 4px;
+}
+
+.project-form-actions {
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.project-empty {
+  color: var(--meta-text);
+  padding: 18px 4px;
+  text-align: center;
+  font-size: 0.84rem;
+}
+
+@media (max-width: 560px) {
+  .project-date-grid {
+    grid-template-columns: 1fr;
+  }
+}
