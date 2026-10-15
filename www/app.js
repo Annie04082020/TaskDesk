@@ -1124,8 +1124,9 @@
     } catch (e) {
       console.error('儲存任務失敗:', e);
     }
+  }
 
-    function loadProjects() {
+  function loadProjects() {
       try {
         const saved = localStorage.getItem(STORAGE_KEY_PROJECTS);
         projects = saved ? SyncEngine.sanitizeProjects(JSON.parse(saved)) : [];
@@ -1133,41 +1134,42 @@
         console.warn('載入專案失敗:', e);
         projects = [];
       }
-    }
+  }
 
-    function saveProjects() {
+  function saveProjects() {
       try {
         localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
       } catch (e) {
         console.error('儲存專案失敗:', e);
       }
+  }
 
-      function getProjectItems(projectId) {
+  function getProjectItems(projectId) {
         return items.filter(item => item.projectId === projectId);
-      }
+  }
 
-      function formatProjectMinutes(minutes) {
+  function formatProjectMinutes(minutes) {
         const rounded = Math.round(minutes || 0);
         if (rounded < 60) return `${rounded} 分鐘`;
         const hours = Math.floor(rounded / 60);
         const rest = rounded % 60;
         return rest ? `${hours} 小時 ${rest} 分鐘` : `${hours} 小時`;
-      }
+  }
 
-      function getProjectById(projectId) {
+  function getProjectById(projectId) {
         return projects.find(project => project.id === projectId) || null;
-      }
+  }
 
-      function getProjectStatsRange() {
+  function getProjectStatsRange() {
         const startInput = document.getElementById('projectStatsStart');
         const endInput = document.getElementById('projectStatsEnd');
         return {
           startDate: startInput && startInput.value ? startInput.value : null,
           endDate: endInput && endInput.value ? endInput.value : null
         };
-      }
+  }
 
-      function renderProjects() {
+  function renderProjects() {
         const list = document.getElementById('projectList');
         if (!list) return;
         const range = getProjectStatsRange();
@@ -1306,9 +1308,9 @@
           card.appendChild(actions);
           list.appendChild(card);
         });
-      }
+  }
 
-      function openProjectForm(project = null) {
+  function openProjectForm(project = null) {
         const form = document.getElementById('projectForm');
         if (!form) return;
         form.style.display = 'grid';
@@ -1321,21 +1323,19 @@
           ? project.milestones.sort((a, b) => a.order - b.order).map(m => `${m.title}${m.deadline ? ` | ${m.deadline}` : ''}`).join('\n')
           : '';
         document.getElementById('projectName').focus();
-      }
+  }
 
-      function closeProjectForm() {
+  function closeProjectForm() {
         const form = document.getElementById('projectForm');
         if (form) form.style.display = 'none';
-      }
+  }
 
-      function openProjectsModal() {
+  function openProjectsModal() {
         const modal = document.getElementById('modalProjects');
         if (!modal) return;
         closeProjectForm();
         renderProjects();
         modal.style.display = 'flex';
-      }
-    }
   }
 
   // 子任務的工作桌位置跟隨主任務；只有耗時與執行屬性可獨立設定。
