@@ -1317,8 +1317,52 @@
     summary.textContent = `${progress.done}/${progress.total} 個里程碑 · 已投入 ${formatProjectMinutes(stats.totalMinutes)}`;
     details.appendChild(summary);
 
+    const overview = document.createElement('div');
+    overview.className = 'project-overview';
+    const addEditableBlock = (label, value, section, renderValue) => {
+      const block = document.createElement('div');
+      block.className = 'project-info-block';
+      block.title = `編輯${label}`;
+      block.tabIndex = 0;
+      block.setAttribute('role', 'button');
+      const labelEl = document.createElement('span');
+      labelEl.className = 'project-info-label';
+      labelEl.textContent = label;
+      const valueEl = document.createElement('div');
+      valueEl.className = 'project-info-value';
+      if (renderValue) renderValue(valueEl, value);
+      else valueEl.textContent = value || '尚未設定';
+      block.append(labelEl, valueEl);
+      block.addEventListener('click', () => setProjectEditSection(section));
+      block.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          setProjectEditSection(section);
+        }
+      });
+      overview.appendChild(block);
+    };
+    addEditableBlock('名稱', project.name, 'name');
+    addEditableBlock('說明', project.description, 'description', (container, markdown) => {
+      container.classList.add('project-markdown');
+      if (markdown) renderProjectMarkdown(container, markdown);
+      else container.textContent = '尚未設定';
+      container.querySelectorAll('a').forEach(link => link.addEventListener('click', event => event.stopPropagation()));
+    });
+    addEditableBlock('日期', `${project.startDate || '未設定'} 至 ${project.deadline || '未設定'}`, 'dates');
+    details.appendChild(overview);
+
     const milestoneList = document.createElement('div');
     milestoneList.className = 'project-detail-list';
+    milestoneList.dataset.projectEditSection = 'milestones';
+    milestoneList.title = '編輯里程碑';
+    milestoneList.addEventListener('dblclick', () => setProjectEditSection('milestones'));
+    const milestoneHeading = document.createElement('button');
+    milestoneHeading.type = 'button';
+    milestoneHeading.className = 'project-section-heading';
+    milestoneHeading.textContent = '里程碑';
+    milestoneHeading.addEventListener('click', () => setProjectEditSection('milestones'));
+    milestoneList.appendChild(milestoneHeading);
     project.milestones.sort((a, b) => a.order - b.order).forEach(milestone => {
       const row = document.createElement('div');
       row.className = 'project-detail-row';
@@ -1345,7 +1389,7 @@
       row.append(check, text, inbox);
       milestoneList.appendChild(row);
     });
-    if (project.milestones.length) details.appendChild(milestoneList);
+    details.appendChild(milestoneList);
 
     const taskSection = document.createElement('div');
     taskSection.className = 'project-task-section';
@@ -1423,6 +1467,22 @@
     details.appendChild(actions);
   }
 
+  function setProjectEditSection(section = null) {
+    const form = document.getElementById('projectForm');
+    const details = document.getElementById('projectDetailContent');
+    if (!form || !details) return;
+    form.dataset.editSection = section || '';
+    form.style.display = section ? 'grid' : 'none';
+    details.style.display = section ? 'none' : '';
+    form.querySelectorAll('[data-project-edit-section]').forEach(element => {
+      element.style.display = element.dataset.projectEditSection === section ? 'block' : 'none';
+    });
+    if (section) {
+      const input = form.querySelector(`[data-project-edit-section="${section}"] input, [data-project-edit-section="${section}"] textarea`);
+      if (input) input.focus();
+    }
+  }
+
   function openProjectForm(project = null) {
     const modal = document.getElementById('modalProjectEditor');
     const form = document.getElementById('projectForm');
@@ -1436,10 +1496,9 @@
     document.getElementById('projectMilestones').value = project
       ? project.milestones.sort((a, b) => a.order - b.order).map(m => `${m.title}${m.deadline ? ` | ${m.deadline}` : ''}`).join('\n')
       : '';
-    renderProjectMarkdown(document.getElementById('projectDescriptionPreview'), project ? project.description : '');
     renderProjectDetails(project);
     modal.style.display = 'flex';
-    document.getElementById('projectName').focus();
+    setProjectEditSection(project ? null : 'name');
   }
 
   function closeProjectForm() {
@@ -7026,7 +7085,7 @@
     });
     safeOn('btnCloseProjectEditor', 'click', closeProjectForm);
     safeOn('btnNewProject', 'click', () => openProjectForm());
-    safeOn('btnCancelProjectForm', 'click', closeProjectForm);
+    safeOn('btnCancelProjectForm', 'click', () => setProjectEditSection(null));
     const projectForm = document.getElementById('projectForm');
     if (projectForm) {
       projectForm.addEventListener('submit', (event) => {
@@ -7066,15 +7125,11 @@
         if (!existing) projects.unshift(project);
         projects = SyncEngine.sanitizeProjects(projects);
         saveProjects();
-        closeProjectForm();
         renderProjects();
+        document.getElementById('projectEditorTitle').textContent = project.name;
+        renderProjectDetails(project);
+        setProjectEditSection(null);
         showToast(existing ? '專案已更新' : '專案已建立');
-      });
-    }
-    const projectDescription = document.getElementById('projectDescription');
-    if (projectDescription) {
-      projectDescription.addEventListener('input', () => {
-        renderProjectMarkdown(document.getElementById('projectDescriptionPreview'), projectDescription.value);
       });
     }
     document.querySelectorAll('.project-range-btn').forEach(button => {

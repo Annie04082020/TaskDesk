@@ -5487,6 +5487,8 @@ select option:checked {
 .project-list-entry:hover,
 .project-list-entry:focus-visible {
   border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--surface-raised) 82%, var(--accent-primary));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-primary) 28%, transparent);
   outline: none;
 }
 
@@ -5505,6 +5507,11 @@ select option:checked {
 }
 
 .project-form {
+  display: grid;
+  gap: 6px;
+}
+
+.project-edit-section {
   display: grid;
   gap: 6px;
 }
@@ -5556,11 +5563,66 @@ select option:checked {
   margin-bottom: 10px;
 }
 
+.project-overview {
+  display: grid;
+  gap: 8px;
+}
+
+.project-info-block {
+  width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.project-info-block:hover,
+.project-info-block:focus-visible {
+  border-color: var(--accent-primary);
+  outline: none;
+}
+
+.project-info-label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--meta-text);
+  font-size: 0.74rem;
+}
+
+.project-info-value {
+  color: var(--text-primary);
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+}
+
 .project-detail-list,
 .project-task-section {
   display: grid;
   gap: 8px;
   margin-top: 12px;
+}
+
+.project-section-heading {
+  width: fit-content;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-section-heading:hover,
+.project-section-heading:focus-visible {
+  color: var(--accent-primary);
+  outline: none;
 }
 
 .project-detail-row {
