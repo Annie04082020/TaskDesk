@@ -5651,6 +5651,10 @@ select option:checked {
   flex: 1;
 }
 
+.project-delete-button {
+  color: var(--accent-red, #ef4444);
+}
+
 .project-empty {
   color: var(--meta-text);
   padding: 18px 4px;

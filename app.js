@@ -1463,7 +1463,30 @@
       renderProjects();
       showToast('專案已封存');
     });
-    actions.appendChild(archive);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn-secondary project-delete-button';
+    remove.textContent = '刪除專案';
+    remove.addEventListener('click', () => {
+      const relatedCount = items.filter(item => item.projectId === project.id).length;
+      const message = relatedCount
+        ? `確定刪除「${project.name}」？\n\n${relatedCount} 件關聯任務會保留並解除專案關聯，收集箱內容不會被刪除。`
+        : `確定刪除「${project.name}」？此動作無法復原。`;
+      if (!confirm(message)) return;
+      items.forEach(item => {
+        if (item.projectId === project.id) {
+          item.projectId = null;
+          item.updatedAt = Date.now();
+        }
+      });
+      projects = projects.filter(candidate => candidate.id !== project.id);
+      saveItems();
+      saveProjects();
+      closeProjectForm();
+      renderProjects();
+      showToast('專案已刪除，關聯任務已保留');
+    });
+    actions.append(archive, remove);
     details.appendChild(actions);
   }
 
