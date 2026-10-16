@@ -5438,7 +5438,11 @@ select option:checked {
 }
 
 .project-modal-sheet {
-  max-width: 760px;
+  max-width: 620px;
+}
+
+.project-editor-sheet {
+  max-width: 820px;
 }
 
 .project-list {
@@ -5466,57 +5470,32 @@ select option:checked {
   padding: 6px 8px;
 }
 
-.project-card {
+.project-list-entry {
+  width: 100%;
+  min-height: 44px;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 12px;
+  border-radius: 6px;
+  padding: 10px 12px;
   background: var(--surface-raised);
+  color: var(--text-primary);
+  text-align: left;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
 }
 
-.project-card-header,
-.project-card-meta,
-.project-card-actions,
+.project-list-entry:hover,
+.project-list-entry:focus-visible {
+  border-color: var(--accent-primary);
+  outline: none;
+}
+
 .project-form-actions,
-.project-actions {
+.project-actions,
+.project-detail-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.project-card-header,
-.project-card-meta,
-.project-card-actions,
-.project-actions {
-  justify-content: space-between;
-}
-
-.project-card-title {
-  font-weight: 650;
-}
-
-.project-card-description,
-.project-card-meta {
-  color: var(--meta-text);
-  font-size: 0.78rem;
-}
-
-.project-progress {
-  height: 6px;
-  margin: 10px 0 8px;
-  border-radius: 999px;
-  background: var(--border-subtle);
-  overflow: hidden;
-}
-
-.project-progress-fill {
-  height: 100%;
-  background: var(--accent-primary);
-  transition: width 0.2s ease;
-}
-
-.project-card-actions {
-  justify-content: flex-end;
-  margin-top: 10px;
 }
 
 .project-date-grid {
@@ -5528,19 +5507,86 @@ select option:checked {
 .project-form {
   display: grid;
   gap: 6px;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.project-form-title {
-  font-weight: 650;
-  margin-bottom: 4px;
 }
 
 .project-form-actions {
   justify-content: flex-end;
   margin-top: 6px;
+}
+
+.project-description-preview,
+.project-detail-content {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.project-markdown {
+  color: var(--meta-text);
+  font-size: 0.84rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.project-markdown h4,
+.project-markdown h5,
+.project-markdown h6,
+.project-markdown p,
+.project-markdown ul {
+  margin: 0 0 8px;
+}
+
+.project-markdown ul {
+  padding-left: 20px;
+}
+
+.project-markdown code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--surface-raised);
+}
+
+.project-markdown a {
+  color: var(--accent-primary);
+}
+
+.project-detail-summary {
+  color: var(--meta-text);
+  font-size: 0.8rem;
+  margin-bottom: 10px;
+}
+
+.project-detail-list,
+.project-task-section {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.project-detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+  color: var(--meta-text);
+  font-size: 0.82rem;
+  text-align: left;
+}
+
+.project-detail-row-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.project-detail-row .btn-secondary {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.project-detail-actions .form-select {
+  min-width: 0;
+  flex: 1;
 }
 
 .project-empty {
@@ -5553,5 +5599,14 @@ select option:checked {
 @media (max-width: 560px) {
   .project-date-grid {
     grid-template-columns: 1fr;
+  }
+
+  .project-detail-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .project-detail-row .btn-secondary {
+    margin-left: 24px;
   }
 }

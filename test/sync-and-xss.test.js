@@ -152,6 +152,20 @@ test('Case 8: 專案與任務關聯資料可安全正規化', () => {
   assert.equal(item.projectId, 'project_1');
 });
 
+test('Case 8b: 專案同步合併保留不同專案，並以較新的版本處理同 ID', () => {
+  const result = SyncEngine.mergeProjects([
+    { id: 'project_local', name: '本機新增', updatedAt: 2000 },
+    { id: 'project_shared', name: '本機舊版', updatedAt: 1000 }
+  ], [
+    { id: 'project_remote', name: '遠端新增', updatedAt: 1500 },
+    { id: 'project_shared', name: '遠端新版', updatedAt: 3000 }
+  ]);
+  assert.equal(result.length, 3, '不同 ID 的專案不可因同步而消失');
+  assert.equal(result.find(project => project.id === 'project_shared').name, '遠端新版');
+  assert.ok(result.some(project => project.id === 'project_local'));
+  assert.ok(result.some(project => project.id === 'project_remote'));
+});
+
 test('Case 9: 專案完成度優先依里程碑計算，沒有里程碑才依任務', () => {
   const project = {
     milestones: [

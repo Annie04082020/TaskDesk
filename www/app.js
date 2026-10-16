@@ -287,6 +287,9 @@
         title,
         deadline,
         done: !!raw.done,
+        inboxItemId: typeof raw.inboxItemId === 'string' && raw.inboxItemId.trim()
+          ? raw.inboxItemId.trim().slice(0, 120)
+          : null,
         order: typeof raw.order === 'number' && Number.isFinite(raw.order) ? Math.max(0, Math.floor(raw.order)) : 0
       };
     },
@@ -306,7 +309,7 @@
       return {
         id,
         name,
-        description: typeof raw.description === 'string' ? raw.description.slice(0, 1000) : '',
+        description: typeof raw.description === 'string' ? raw.description.slice(0, 4000) : '',
         startDate: date(raw.startDate),
         deadline: date(raw.deadline),
         archived: !!raw.archived,
@@ -324,6 +327,28 @@
         seen.add(project.id);
         return true;
       });
+    },
+
+    mergeProjects(localList, remoteList) {
+      const merged = new Map();
+      const add = (rawProject) => {
+        const project = this.sanitizeProject(rawProject);
+        if (!project) return;
+        const existing = merged.get(project.id);
+        if (!existing) {
+          merged.set(project.id, project);
+          return;
+        }
+        const existingTime = Math.max(existing.updatedAt || 0, existing.createdAt || 0);
+        const projectTime = Math.max(project.updatedAt || 0, project.createdAt || 0);
+        if (projectTime > existingTime || (projectTime === existingTime && JSON.stringify(project) > JSON.stringify(existing))) {
+          merged.set(project.id, project);
+        }
+      };
+      this.sanitizeProjects(localList).forEach(add);
+      this.sanitizeProjects(remoteList).forEach(add);
+      return Array.from(merged.values())
+        .sort((a, b) => Math.max(b.updatedAt || 0, b.createdAt || 0) - Math.max(a.updatedAt || 0, a.createdAt || 0));
     },
 
     getProjectProgress(project, projectItems = []) {
@@ -1170,164 +1195,256 @@
   }
 
   function renderProjects() {
-        const list = document.getElementById('projectList');
-        if (!list) return;
-        const range = getProjectStatsRange();
-        list.innerHTML = '';
-        const activeProjects = projects.filter(project => !project.archived);
-        if (!activeProjects.length) {
-          list.innerHTML = '<div class="project-empty">還沒有學期專案。需要時新增一個，不會影響主工作桌。</div>';
-          return;
+    const list = document.getElementById('projectList');
+    if (!list) return;
+    list.innerHTML = '';
+    const activeProjects = projects.filter(project => !project.archived);
+    if (!activeProjects.length) {
+      const empty = document.createElement('div');
+      empty.className = 'project-empty';
+      empty.textContent = '還沒有學期專案。';
+      list.appendChild(empty);
+      return;
+    }
+    activeProjects.forEach(project => {
+      const entry = document.createElement('button');
+      entry.type = 'button';
+      entry.className = 'project-list-entry';
+      entry.textContent = project.name;
+      entry.addEventListener('click', () => openProjectForm(project));
+      list.appendChild(entry);
+    });
+  }
+
+  function appendProjectMarkdownInline(container, text) {
+    const tokenPattern = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^\s)]+\))/g;
+    let lastIndex = 0;
+    String(text).split(tokenPattern).forEach(part => {
+      if (!part) return;
+      if (part.startsWith('**') && part.endsWith('**')) {
+        const strong = document.createElement('strong');
+        strong.textContent = part.slice(2, -2);
+        container.appendChild(strong);
+      } else if (part.startsWith('`') && part.endsWith('`')) {
+        const code = document.createElement('code');
+        code.textContent = part.slice(1, -1);
+        container.appendChild(code);
+      } else {
+        const link = part.match(/^\[([^\]]+)\]\(([^\s)]+)\)$/);
+        if (link && /^https?:\/\//i.test(link[2])) {
+          const anchor = document.createElement('a');
+          anchor.href = link[2];
+          anchor.target = '_blank';
+          anchor.rel = 'noopener';
+          anchor.textContent = link[1];
+          container.appendChild(anchor);
+        } else {
+          container.appendChild(document.createTextNode(part));
         }
-        activeProjects.forEach(project => {
-          const projectItems = getProjectItems(project.id);
-          const progress = SyncEngine.getProjectProgress(project, projectItems);
-          const stats = SyncEngine.getProjectTimeStats(project.id, getFocusSessions(), items, range.startDate, range.endDate);
-          const card = document.createElement('article');
-          card.className = 'project-card';
+      }
+      lastIndex += part.length;
+    });
+  }
 
-          const header = document.createElement('div');
-          header.className = 'project-card-header';
-          const title = document.createElement('div');
-          title.className = 'project-card-title';
-          title.textContent = project.name;
-          const edit = document.createElement('button');
-          edit.type = 'button';
-          edit.className = 'btn-secondary';
-          edit.textContent = '編輯';
-          edit.addEventListener('click', () => openProjectForm(project));
-          header.append(title, edit);
-          card.appendChild(header);
+  function renderProjectMarkdown(container, markdown) {
+    if (!container) return;
+    container.innerHTML = '';
+    const lines = String(markdown || '').split(/\r?\n/);
+    let list = null;
+    lines.forEach(line => {
+      const heading = line.match(/^(#{1,3})\s+(.+)$/);
+      const bullet = line.match(/^\s*[-*+]\s+(.+)$/);
+      if (heading) {
+        list = null;
+        const element = document.createElement(`h${heading[1].length + 3}`);
+        appendProjectMarkdownInline(element, heading[2]);
+        container.appendChild(element);
+      } else if (bullet) {
+        if (!list) {
+          list = document.createElement('ul');
+          container.appendChild(list);
+        }
+        const item = document.createElement('li');
+        appendProjectMarkdownInline(item, bullet[1]);
+        list.appendChild(item);
+      } else if (line.trim()) {
+        list = null;
+        const paragraph = document.createElement('p');
+        appendProjectMarkdownInline(paragraph, line);
+        container.appendChild(paragraph);
+      }
+    });
+  }
 
-          if (project.description) {
-            const desc = document.createElement('div');
-            desc.className = 'project-card-description';
-            desc.textContent = project.description;
-            card.appendChild(desc);
-          }
+  function sendMilestoneToInbox(project, milestone) {
+    const existing = milestone.inboxItemId && items.find(item => item.id === milestone.inboxItemId);
+    if (existing) {
+      existing.bucket = 'inbox';
+      existing.deadline = milestone.deadline || project.deadline || existing.deadline;
+      existing.updatedAt = Date.now();
+      saveItems();
+      showToast('已移到收集箱');
+      return;
+    }
+    const now = Date.now();
+    const typeId = guessTypeByKeywords(milestone.title);
+    const item = {
+      id: generateId(), text: milestone.title, notes: '', bucket: 'inbox', size: guessSize(milestone.title, typeId),
+      done: false, doneAt: null, createdAt: now, updatedAt: now, deadline: milestone.deadline || project.deadline || null,
+      isNow: false, isRoutine: false, routineTrigger: null, routineCadence: null, lastResetDate: null,
+      parentId: null, projectId: project.id, typeId, typeSource: typeId ? 'rule' : 'ai', aiGenerated: false,
+      manualQuadrant: null, quadrant: getComputedQuadrant({ text: milestone.title, deadline: milestone.deadline || project.deadline || null })
+    };
+    items.push(item);
+    milestone.inboxItemId = item.id;
+    project.updatedAt = now;
+    saveItems();
+    saveProjects();
+    showToast('里程碑已加入收集箱');
+  }
 
-          const meta = document.createElement('div');
-          meta.className = 'project-card-meta';
-          const deadline = project.deadline ? `截止 ${project.deadline}` : '未設定總截止日';
-          meta.textContent = `${deadline} · ${progress.done}/${progress.total} 個里程碑 · 已投入 ${formatProjectMinutes(stats.totalMinutes)}`;
-          card.appendChild(meta);
+  function renderProjectDetails(project) {
+    const details = document.getElementById('projectDetailContent');
+    if (!details) return;
+    details.innerHTML = '';
+    if (!project) return;
+    const range = getProjectStatsRange();
+    const projectItems = getProjectItems(project.id);
+    const progress = SyncEngine.getProjectProgress(project, projectItems);
+    const stats = SyncEngine.getProjectTimeStats(project.id, getFocusSessions(), items, range.startDate, range.endDate);
+    const summary = document.createElement('div');
+    summary.className = 'project-detail-summary';
+    summary.textContent = `${progress.done}/${progress.total} 個里程碑 · 已投入 ${formatProjectMinutes(stats.totalMinutes)}`;
+    details.appendChild(summary);
 
-          const progressTrack = document.createElement('div');
-          progressTrack.className = 'project-progress';
-          const progressFill = document.createElement('div');
-          progressFill.className = 'project-progress-fill';
-          progressFill.style.width = `${progress.percent}%`;
-          progressTrack.appendChild(progressFill);
-          card.appendChild(progressTrack);
+    const milestoneList = document.createElement('div');
+    milestoneList.className = 'project-detail-list';
+    project.milestones.sort((a, b) => a.order - b.order).forEach(milestone => {
+      const row = document.createElement('div');
+      row.className = 'project-detail-row';
+      const check = document.createElement('input');
+      check.type = 'checkbox';
+      check.checked = milestone.done;
+      check.addEventListener('change', () => {
+        milestone.done = check.checked;
+        project.updatedAt = Date.now();
+        saveProjects();
+        renderProjectDetails(project);
+      });
+      const text = document.createElement('span');
+      text.className = 'project-detail-row-text';
+      text.textContent = milestone.deadline ? `${milestone.title} · ${milestone.deadline}` : milestone.title;
+      const inbox = document.createElement('button');
+      inbox.type = 'button';
+      inbox.className = 'btn-secondary';
+      inbox.textContent = milestone.inboxItemId ? '移至收集箱' : '加入收集箱';
+      inbox.addEventListener('click', () => {
+        sendMilestoneToInbox(project, milestone);
+        renderProjectDetails(project);
+      });
+      row.append(check, text, inbox);
+      milestoneList.appendChild(row);
+    });
+    if (project.milestones.length) details.appendChild(milestoneList);
 
-          if (project.milestones.length) {
-            const milestoneList = document.createElement('div');
-            project.milestones.sort((a, b) => a.order - b.order).forEach(milestone => {
-              const row = document.createElement('label');
-              row.className = 'project-card-meta';
-              const check = document.createElement('input');
-              check.type = 'checkbox';
-              check.checked = milestone.done;
-              check.addEventListener('change', () => {
-                milestone.done = check.checked;
-                project.updatedAt = Date.now();
-                saveProjects();
-                renderProjects();
-              });
-              const text = document.createElement('span');
-              text.textContent = milestone.deadline ? `${milestone.title} · ${milestone.deadline}` : milestone.title;
-              row.append(check, text);
-              milestoneList.appendChild(row);
-            });
-            card.appendChild(milestoneList);
-          }
+    const taskSection = document.createElement('div');
+    taskSection.className = 'project-task-section';
+    const taskTitle = document.createElement('div');
+    taskTitle.className = 'form-label';
+    taskTitle.textContent = '專案任務';
+    taskSection.appendChild(taskTitle);
+    projectItems.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'project-detail-row';
+      const text = document.createElement('span');
+      text.className = 'project-detail-row-text';
+      text.textContent = item.text;
+      const inbox = document.createElement('button');
+      inbox.type = 'button';
+      inbox.className = 'btn-secondary';
+      inbox.textContent = '移至收集箱';
+      inbox.addEventListener('click', () => {
+        item.bucket = 'inbox';
+        item.deadline = item.deadline || project.deadline || null;
+        item.updatedAt = Date.now();
+        saveItems();
+        renderProjectDetails(project);
+        showToast('任務已移至收集箱');
+      });
+      row.append(text, inbox);
+      taskSection.appendChild(row);
+    });
+    const picker = document.createElement('select');
+    picker.className = 'form-select';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '加入既有任務…';
+    picker.appendChild(placeholder);
+    items.filter(item => !item.done && !item.projectId).slice(0, 100).forEach(item => {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = item.text;
+      picker.appendChild(option);
+    });
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'btn-secondary';
+    add.textContent = '加入專案';
+    add.addEventListener('click', () => {
+      const item = items.find(candidate => candidate.id === picker.value);
+      if (!item) return;
+      item.projectId = project.id;
+      item.deadline = item.deadline || project.deadline || null;
+      item.updatedAt = Date.now();
+      saveItems();
+      renderProjectDetails(project);
+    });
+    const assign = document.createElement('div');
+    assign.className = 'project-detail-actions';
+    assign.append(picker, add);
+    taskSection.appendChild(assign);
+    details.appendChild(taskSection);
 
-          const taskList = document.createElement('div');
-          taskList.className = 'project-card-meta';
-          taskList.textContent = projectItems.length ? `關聯任務：${projectItems.filter(item => !item.parentId).length} 件` : '尚未關聯任務';
-          card.appendChild(taskList);
-          projectItems.slice(0, 5).forEach(item => {
-            const taskRow = document.createElement('div');
-            taskRow.className = 'project-card-meta';
-            taskRow.style.paddingLeft = item.parentId ? '18px' : '4px';
-            const taskText = document.createElement('span');
-            taskText.textContent = `${item.done ? '已完成' : '待辦'} · ${item.text}`;
-            taskRow.appendChild(taskText);
-            if (!item.done) {
-              const nextButton = document.createElement('button');
-              nextButton.type = 'button';
-              nextButton.className = 'btn-secondary';
-              nextButton.textContent = item.bucket === 'today' ? '已在今日' : '排入本週';
-              nextButton.disabled = item.bucket === 'today';
-              nextButton.addEventListener('click', () => moveItemBucket(item.id, 'week'));
-              taskRow.appendChild(nextButton);
-            }
-            card.appendChild(taskRow);
-          });
-
-          const taskPicker = document.createElement('select');
-          taskPicker.className = 'form-select';
-          taskPicker.innerHTML = '<option value="">將現有任務加入此專案…</option>';
-          items.filter(item => !item.done && !item.projectId).slice(0, 100).forEach(item => {
-            const option = document.createElement('option');
-            option.value = item.id;
-            option.textContent = item.text;
-            taskPicker.appendChild(option);
-          });
-          const addTask = document.createElement('button');
-          addTask.type = 'button';
-          addTask.className = 'btn-secondary';
-          addTask.textContent = '加入';
-          addTask.addEventListener('click', () => {
-            if (!taskPicker.value) return;
-            const item = items.find(candidate => candidate.id === taskPicker.value);
-            if (!item) return;
-            item.projectId = project.id;
-            item.updatedAt = Date.now();
-            saveItems();
-            renderProjects();
-          });
-          const assignRow = document.createElement('div');
-          assignRow.className = 'project-card-actions';
-          assignRow.append(taskPicker, addTask);
-          card.appendChild(assignRow);
-
-          const actions = document.createElement('div');
-          actions.className = 'project-card-actions';
-          const archive = document.createElement('button');
-          archive.type = 'button';
-          archive.className = 'btn-secondary';
-          archive.textContent = '封存';
-          archive.addEventListener('click', () => {
-            project.archived = true;
-            project.updatedAt = Date.now();
-            saveProjects();
-            renderProjects();
-          });
-          actions.appendChild(archive);
-          card.appendChild(actions);
-          list.appendChild(card);
-        });
+    const actions = document.createElement('div');
+    actions.className = 'project-detail-actions';
+    const archive = document.createElement('button');
+    archive.type = 'button';
+    archive.className = 'btn-secondary';
+    archive.textContent = '封存專案';
+    archive.addEventListener('click', () => {
+      project.archived = true;
+      project.updatedAt = Date.now();
+      saveProjects();
+      closeProjectForm();
+      renderProjects();
+      showToast('專案已封存');
+    });
+    actions.appendChild(archive);
+    details.appendChild(actions);
   }
 
   function openProjectForm(project = null) {
-        const form = document.getElementById('projectForm');
-        if (!form) return;
-        form.style.display = 'grid';
-        document.getElementById('projectEditingId').value = project ? project.id : '';
-        document.getElementById('projectName').value = project ? project.name : '';
-        document.getElementById('projectDescription').value = project ? project.description : '';
-        document.getElementById('projectStartDate').value = project && project.startDate ? project.startDate : '';
-        document.getElementById('projectDeadline').value = project && project.deadline ? project.deadline : '';
-        document.getElementById('projectMilestones').value = project
-          ? project.milestones.sort((a, b) => a.order - b.order).map(m => `${m.title}${m.deadline ? ` | ${m.deadline}` : ''}`).join('\n')
-          : '';
-        document.getElementById('projectName').focus();
+    const modal = document.getElementById('modalProjectEditor');
+    const form = document.getElementById('projectForm');
+    if (!modal || !form) return;
+    document.getElementById('projectEditorTitle').textContent = project ? project.name : '新增專案';
+    document.getElementById('projectEditingId').value = project ? project.id : '';
+    document.getElementById('projectName').value = project ? project.name : '';
+    document.getElementById('projectDescription').value = project ? project.description : '';
+    document.getElementById('projectStartDate').value = project && project.startDate ? project.startDate : '';
+    document.getElementById('projectDeadline').value = project && project.deadline ? project.deadline : '';
+    document.getElementById('projectMilestones').value = project
+      ? project.milestones.sort((a, b) => a.order - b.order).map(m => `${m.title}${m.deadline ? ` | ${m.deadline}` : ''}`).join('\n')
+      : '';
+    renderProjectMarkdown(document.getElementById('projectDescriptionPreview'), project ? project.description : '');
+    renderProjectDetails(project);
+    modal.style.display = 'flex';
+    document.getElementById('projectName').focus();
   }
 
   function closeProjectForm() {
-        const form = document.getElementById('projectForm');
-        if (form) form.style.display = 'none';
+    const modal = document.getElementById('modalProjectEditor');
+    if (modal) modal.style.display = 'none';
   }
 
   function openProjectsModal() {
@@ -6682,7 +6799,7 @@
 
       createSyncUndoSnapshot();
       items = SyncEngine.sanitizeItems(remotePayload.items);
-      projects = SyncEngine.sanitizeProjects(remotePayload.projects || []);
+      projects = SyncEngine.mergeProjects(projects, remotePayload.projects);
       if (remotePayload.tombstones) {
         tombstones = SyncEngine.sanitizeTombstones(remotePayload.tombstones);
       }
@@ -6778,10 +6895,8 @@
 
       items = mergeRes.items;
       tombstones = mergeRes.tombstones;
-      if (remotePayload && remotePayload.projects) {
-        projects = SyncEngine.sanitizeProjects(remotePayload.projects);
-        saveProjects();
-      }
+      projects = SyncEngine.mergeProjects(projects, remotePayload && remotePayload.projects);
+      saveProjects();
 
       if (remotePayload && remotePayload.settings) {
         const cleanSettings = SyncEngine.getPortableSettings(remotePayload.settings);
@@ -6879,6 +6994,8 @@
       });
       items = mergeRes.items;
       tombstones = mergeRes.tombstones;
+      projects = SyncEngine.mergeProjects(projects, data.projects);
+      saveProjects();
       mergeRemoteFocusSessions(data.focusSessions);
       if (data.settings) {
         const cleanSettings = SyncEngine.getPortableSettings(data.settings);
@@ -6907,6 +7024,7 @@
       const modal = document.getElementById('modalProjects');
       if (modal) modal.style.display = 'none';
     });
+    safeOn('btnCloseProjectEditor', 'click', closeProjectForm);
     safeOn('btnNewProject', 'click', () => openProjectForm());
     safeOn('btnCancelProjectForm', 'click', closeProjectForm);
     const projectForm = document.getElementById('projectForm');
@@ -6929,6 +7047,7 @@
             title: titlePart,
             deadline: deadlinePart && SyncEngine.isValidDateString(deadlinePart) ? deadlinePart : null,
             done: existing && existing.milestones[index] ? existing.milestones[index].done : false,
+            inboxItemId: existing && existing.milestones[index] ? existing.milestones[index].inboxItemId : null,
             order: index
           };
         });
@@ -6950,6 +7069,12 @@
         closeProjectForm();
         renderProjects();
         showToast(existing ? '專案已更新' : '專案已建立');
+      });
+    }
+    const projectDescription = document.getElementById('projectDescription');
+    if (projectDescription) {
+      projectDescription.addEventListener('input', () => {
+        renderProjectMarkdown(document.getElementById('projectDescriptionPreview'), projectDescription.value);
       });
     }
     document.querySelectorAll('.project-range-btn').forEach(button => {

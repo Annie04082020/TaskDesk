@@ -32,8 +32,14 @@ graph TD
 
     subgraph Execution_Core [單工沉浸與守護核心]
         NowTask[現在聚焦任務]
-        KairosTimer[單工沉浸引擎: 累積計時 / 呼吸態暫停]
+        FocusLog[專注紀錄與工時分析]
         BrainDump[大腦雜念暫存器 Ctrl+K]
+    end
+
+    subgraph Project_Space [按需開啟的專案空間]
+        ProjectIndex[專案標題清單]
+        ProjectEditor[Markdown 說明 / 里程碑 / 關聯任務]
+        InboxBridge[里程碑與任務送入收集箱]
     end
 
     subgraph Sync_Storage [資料儲存與跨端同步]
@@ -48,10 +54,13 @@ graph TD
     DeskDock --> ScoringEngine
     ScoringEngine -->|即時推播最適行動| AmbientBar
     AmbientBar -->|一鍵採納| NowTask
-    NowTask --> KairosTimer
-    KairosTimer -->|任務完成 / 專注結算| StateCheckin
-    KairosTimer --> BrainDump
+    NowTask --> FocusLog
+    FocusLog -->|任務完成 / 專注結算| StateCheckin
+    FocusLog --> BrainDump
     BrainDump -->|快速倒入| DeskDock
+    ProjectIndex --> ProjectEditor
+    ProjectEditor --> InboxBridge
+    InboxBridge --> DeskDock
     LocalStore <--> GistSync
     LocalStore <--> DirectCode
 ```
@@ -61,7 +70,7 @@ graph TD
 ## 核心設計理念與優勢
 
 1. **實體工作桌隱喻 (Physical Desk Metaphor)**：工作桌面絕不堆積成百上千條清單。只留「今天」與「本週」能消化的限量卡片，其餘項目一律歸入底座抽屜。
-2. **單工沉浸優先 (Single-Tasking Engine)**：點擊「現在做這個」即啟動全頁沉浸模式，自動遮蔽並封鎖工作桌其餘卡片的編輯與切換，阻斷在待辦清單中來回整理的假性生產力拖延。
+2. **現在任務優先 (Now Task)**：點擊「現在做這個」標示目前的焦點任務，但不以全頁覆蓋層封鎖工作桌；專注紀錄仍可在分析頁回顧。
 3. **工作桌常駐環境推薦條 (Ambient Dynamic Suggestion Bar)**：首頁工作桌上方常駐極簡推薦條，系統結合生理時鐘、死線迫近度與身心能量，自動推算最合適的下一步，不必手動開啟彈窗即可一鍵聚焦或切換。
    * 有母任務的未完成子任務會以「子任務 · 可獨立推薦」標籤出現在推薦候選中；採納後只聚焦子任務，仍保留與母任務的關聯。
    * 子任務可在卡片「...」中獨立設定花費時間、截止死線與每日習慣；安排時段跟隨主任務，四象限只計算主任務，避免子步驟重複放大矩陣統計。
@@ -129,10 +138,16 @@ graph TD
 * **結構化子任務批次匯入**：純文字貼上支援縮排（Tab 或空格）與 Markdown 清單格式自動解析建立子任務；支援 Google Tasks Takeout JSON 檔案結構化匯入並還原母子層級。
 * **母子任務分工**：子任務可透過卡片「...」獨立設定花費時間、截止死線與每日習慣，也能獨立被推薦與專注；安排時段與四象限沿用主任務，矩陣只統計主任務。
 
-### 9. 多端同步與安全防護
+### 9. 學期專案與多端同步
+* **安靜的專案入口**：頂部「專案」主頁只列出專案名稱；點入後才開啟獨立編輯視窗，不把里程碑、任務與統計攤滿主工作桌。
+* **Markdown 專案說明**：專案說明支援標題、清單、粗體、行內程式碼與安全連結，並保留原有換行。
+* **可執行的里程碑**：里程碑和關聯任務可直接送到收集箱；里程碑日期優先、專案總截止日次之，會一併帶到任務 deadline。
+* **專案合併**：GitHub Gist 與同步碼均以穩定專案 ID 合併，保留不同專案；同一專案發生衝突時以 `updatedAt` 較新的內容為準。
+
+### 10. 多端同步與安全防護
 * **系統設定內建同步管理**：直接在「系統設定」面板進入跨裝置同步，解決導航摩擦。
 * **GitHub Gist 私人同步**：透過 Personal Access Token 實現無伺服器雲端雙向合併。
-* **專注紀錄同步**：任務、刪除紀錄、可攜設定與專注工時紀錄會一起同步，跨裝置仍能回顧歷史專注日誌。
+* **專案與專注紀錄同步**：任務、專案、刪除紀錄、可攜設定與專注工時紀錄會一起同步，跨裝置仍能回顧相同資料。
 * **安全同步與復原**：主要入口是「安全同步」；Pull、Push 與手動合併收在進階操作。每次 Pull、合併或貼上同步碼前會先保存本機快照，可從進階操作復原上次同步。
 * **敏感資料邊界**：匯出、Gist 與同步碼只攜帶可攜設定，不包含本機 PIN hash、PIN 鎖定狀態或 GitHub Token。Token 只保存在目前裝置，請避免在共用裝置保存。
 * **簡易模式與推薦理由**：可在設定中開啟簡易模式降低畫面資訊量；推薦卡片的「原因」可查看精力、期限、耗時與安排情境。
