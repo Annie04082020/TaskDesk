@@ -2671,14 +2671,62 @@
     }
   }
 
-  // 「現在」只標示目前任務，不應自動用舊 Kairos 覆蓋層鎖住整個工作桌。
+  // 渲染本機專注面板；不依賴外部 Kairos 服務。
   function renderFocusLockBanner() {
     const overlay = document.getElementById('kairosOverlay');
     const dock = document.getElementById('deskDrawersDock');
-    if (overlay) overlay.style.display = 'none';
-    document.body.classList.remove('body-focus-active', 'body-kairos-active');
-    if (dock) dock.classList.remove('locked-by-focus');
-    if (activeFocusTaskId) stopFocusTimer();
+    const nowItem = items.find(item => item.isNow && !item.done);
+
+    if (!nowItem || !settings.focusLockEnabled) {
+      if (overlay) overlay.style.display = 'none';
+      document.body.classList.remove('body-focus-active', 'body-kairos-active');
+      if (dock) dock.classList.remove('locked-by-focus');
+      if (activeFocusTaskId) stopFocusTimer();
+      return;
+    }
+
+    if (overlay) {
+      overlay.classList.remove('kairos-exiting');
+      overlay.style.display = 'flex';
+    }
+    document.body.classList.add('body-focus-active', 'body-kairos-active');
+    if (dock) dock.classList.add('locked-by-focus');
+
+    const title = document.getElementById('focusTaskTitle');
+    const meta = document.getElementById('focusTaskMeta');
+    if (title) title.textContent = nowItem.text;
+    if (meta) {
+      const type = getTypeById(nowItem.typeId);
+      const quadrant = getQuadrantInfo(nowItem);
+      const sizes = { micro: '試水溫 5-10m', small: '小 15-30m', medium: '中 1-2h', large: '大 2h+' };
+      meta.textContent = `${sizes[nowItem.size] || '試水溫'} · ${quadrant ? quadrant.badge : '核心深耕'} · ${type ? type.name : '未分類'}`;
+    }
+
+    const subtasksWrap = document.getElementById('kairosSubtasksWrap');
+    if (subtasksWrap) {
+      const subtasks = getSubtasks(nowItem.id);
+      subtasksWrap.innerHTML = '';
+      subtasksWrap.style.display = subtasks.length ? 'flex' : 'none';
+      subtasks.forEach(subtask => {
+        const row = document.createElement('label');
+        row.className = `kairos-subtask-item ${subtask.done ? 'done' : ''}`;
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'kairos-subtask-check';
+        checkbox.checked = !!subtask.done;
+        checkbox.addEventListener('change', () => toggleItemDone(subtask.id, checkbox.checked));
+        const text = document.createElement('span');
+        text.className = 'kairos-subtask-title';
+        text.textContent = subtask.text;
+        row.append(checkbox, text);
+        subtasksWrap.appendChild(row);
+      });
+    }
+
+    if (activeFocusTaskId !== nowItem.id) {
+      startFocusTimer(nowItem);
+    }
+    updateFocusGuardStatusBadge();
   }
 
   // --- Kairos 沉浸模式動作處理器 (Done / Pause / Resume / Abort / Brain Dump) ---
