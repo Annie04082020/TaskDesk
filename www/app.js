@@ -2204,6 +2204,52 @@
     }, 200);
   }
 
+  function formatDateTimeLocal(timestamp) {
+    const date = new Date(timestamp);
+    const pad = value => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  function openCompletionTimeEditor(itemId) {
+    const item = items.find(candidate => candidate.id === itemId);
+    const modal = document.getElementById('modalCompletionTime');
+    const input = document.getElementById('completionTimeInput');
+    if (!item || !item.done || !modal || !input) return;
+    document.getElementById('completionTimeItemId').value = item.id;
+    document.getElementById('completionTimeTaskName').textContent = item.text;
+    input.value = formatDateTimeLocal(item.doneAt || Date.now());
+    input.max = formatDateTimeLocal(Date.now());
+    modal.style.display = 'flex';
+    setTimeout(() => input.focus(), 50);
+  }
+
+  function closeCompletionTimeEditor() {
+    const modal = document.getElementById('modalCompletionTime');
+    if (modal) modal.style.display = 'none';
+  }
+
+  function saveCompletionTime() {
+    const itemId = document.getElementById('completionTimeItemId').value;
+    const value = document.getElementById('completionTimeInput').value;
+    const item = items.find(candidate => candidate.id === itemId);
+    const timestamp = Date.parse(value);
+    if (!item || !item.done || !Number.isFinite(timestamp)) {
+      showToast('請選擇有效的完成日期與時間');
+      return;
+    }
+    if (timestamp > Date.now() + 60000) {
+      showToast('完成時間不能晚於現在');
+      return;
+    }
+    item.doneAt = timestamp;
+    item.updatedAt = Date.now();
+    saveItems();
+    closeCompletionTimeEditor();
+    renderAll();
+    if (analyticsState.activeTab === 'history') renderCompletedTaskHistory();
+    showToast('完成時間已更新');
+  }
+
   // 刪除項目 (以 tombstone 標記，防止跨裝置同步時復活)
   function deleteItem(itemId) {
     const item = items.find(it => it.id === itemId);
@@ -3136,8 +3182,12 @@
         const item = record.item;
         const row = document.createElement('div');
         row.className = 'history-task-row';
-        const time = document.createElement('time');
+        const time = document.createElement('button');
+        time.type = 'button';
+        time.className = 'history-time-edit';
         time.textContent = formatHistoryTime(record.timestamp);
+        time.title = '調整完成時間';
+        time.addEventListener('click', () => openCompletionTimeEditor(item.id));
         const body = document.createElement('div');
         body.className = 'history-task-body';
         const name = document.createElement('span');
@@ -6159,6 +6209,13 @@
     });
     triageBtns.appendChild(btnRestoreWeek);
 
+    const btnEditCompletionTime = document.createElement('button');
+    btnEditCompletionTime.type = 'button';
+    btnEditCompletionTime.className = 'btn-triage';
+    btnEditCompletionTime.textContent = '調整完成時間';
+    btnEditCompletionTime.addEventListener('click', () => openCompletionTimeEditor(item.id));
+    triageBtns.appendChild(btnEditCompletionTime);
+
     const btnDel = document.createElement('button');
     btnDel.className = 'btn-delete-card';
     btnDel.textContent = '刪除此紀錄';
@@ -8823,6 +8880,12 @@
       if (modalSync) modalSync.style.display = 'flex';
       checkRemoteGistStatus(false);
     });
+    safeOn('btnOpenSyncMobile', 'click', () => {
+      updateSyncModalStatus();
+      const modalSync = document.getElementById('modalSync');
+      if (modalSync) modalSync.style.display = 'flex';
+      checkRemoteGistStatus(false);
+    });
 
     safeOn('btnCheckRemoteGist', 'click', () => checkRemoteGistStatus(true));
     safeOn('btnCloseSync', 'click', () => {
@@ -8833,6 +8896,15 @@
       const modalSync = document.getElementById('modalSync');
       if (modalSync) modalSync.style.display = 'none';
     });
+    safeOn('btnCloseCompletionTime', 'click', closeCompletionTimeEditor);
+    safeOn('btnCancelCompletionTime', 'click', closeCompletionTimeEditor);
+    const completionTimeForm = document.getElementById('completionTimeForm');
+    if (completionTimeForm) {
+      completionTimeForm.addEventListener('submit', event => {
+        event.preventDefault();
+        saveCompletionTime();
+      });
+    }
 
     // Gist 連線設定展開/收合
     const toggleConfigHeader = document.getElementById('syncToggleConfigHeader');

@@ -51,6 +51,11 @@
             <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
           </svg>
         </button>
+        <button id="btnOpenSyncMobile" class="btn-icon header-tool-mobile" title="跨裝置同步" aria-label="跨裝置同步">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+          </svg>
+        </button>
 
         <!-- 立即鎖定 (若有啟用 PIN 碼且為電腦版) -->
         <button id="btnLockApp" class="btn-icon header-tool-desktop" title="立即鎖定工作桌" aria-label="鎖定" style="display: none;">
@@ -1159,6 +1164,27 @@
       <div class="modal-footer">
         <button class="btn-secondary" id="btnCloseSyncFooter">關閉</button>
       </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modalCompletionTime" style="display: none;">
+    <div class="modal-sheet completion-time-sheet">
+      <div class="modal-header">
+        <h3 class="modal-title">調整完成時間</h3>
+        <button type="button" class="modal-close" id="btnCloseCompletionTime" aria-label="關閉">&times;</button>
+      </div>
+      <form id="completionTimeForm">
+        <div class="modal-body">
+          <p class="form-sublabel" id="completionTimeTaskName"></p>
+          <input type="hidden" id="completionTimeItemId">
+          <label class="form-label" for="completionTimeInput">完成日期與時間</label>
+          <input type="datetime-local" id="completionTimeInput" class="form-input" required>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" id="btnCancelCompletionTime">取消</button>
+          <button type="submit" class="btn-primary">儲存完成時間</button>
+        </div>
+      </form>
     </div>
   </div>
 

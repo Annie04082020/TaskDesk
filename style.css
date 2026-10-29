@@ -422,9 +422,17 @@ body::before {
   display: flex;
 }
 
+.header-tool-mobile {
+  display: none;
+}
+
 @media (max-width: 719px) {
   .header-tool-desktop {
     display: none !important;
+  }
+
+  .header-tool-mobile {
+    display: flex;
   }
   
   .app-header {
@@ -454,6 +462,26 @@ body::before {
     width: 34px;
     height: 34px;
   }
+}
+
+.completion-time-sheet {
+  width: min(420px, calc(100vw - 24px));
+}
+
+.history-time-edit {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.history-time-edit:hover,
+.history-time-edit:focus-visible {
+  color: var(--accent-primary);
+  outline: none;
 }
 
 @media (max-width: 360px) {
