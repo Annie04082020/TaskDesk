@@ -379,3 +379,134 @@ test('Case 13: 專注紀錄同步合併依 ID 去重並保留兩端紀錄', () =
   assert.equal(merged.find(s => s.id === 'same').taskText, '較新紀錄');
   assert.deepEqual(merged.map(s => s.id), ['s2', 'same', 's1']);
 });
+
+test('Case 14: 每週習慣資料清洗 (Sanitize Item)', () => {
+  const rawWeekly = {
+    id: 'w1',
+    text: '重訓 2 次',
+    isRoutine: true,
+    routineCadence: 'weekly',
+    weeklyTarget: 3,
+    weeklyCompletedDates: ['2026-10-28', '2026-10-30', 'invalid-date'],
+    lastResetWeek: '2026-W44'
+  };
+
+  const clean = SyncEngine.sanitizeItem(rawWeekly);
+  assert.equal(clean.isRoutine, true);
+  assert.equal(clean.routineCadence, 'weekly');
+  assert.equal(clean.weeklyTarget, 3);
+  assert.deepEqual(clean.weeklyCompletedDates, ['2026-10-28', '2026-10-30'], '非法日期必須被過濾');
+  assert.equal(clean.lastResetWeek, '2026-W44');
+});
+
+test('Case 15: 每週習慣純函式跨週自動重設 (resetRoutinesPure)', () => {
+  const routinesList = [
+    {
+      id: 'r_daily',
+      text: '每日拉筋',
+      isRoutine: true,
+      routineCadence: 'daily',
+      done: true,
+      lastResetDate: '2026-10-29'
+    },
+    {
+      id: 'r_weekly',
+      text: '每週慢跑 2 次',
+      isRoutine: true,
+      routineCadence: 'weekly',
+      weeklyTarget: 2,
+      weeklyCompletedDates: ['2026-10-21', '2026-10-23'],
+      routineCompletions: [{ date: '2026-10-21', completedAt: 1000 }, { date: '2026-10-23', completedAt: 2000 }],
+      done: true,
+      lastResetWeek: '2026-W43'
+    }
+  ];
+
+  // 1. 同一天同一週呼叫：不重設
+  const res1 = SyncEngine.resetRoutinesPure(routinesList, '2026-10-29', '2026-W43', 1000);
+  assert.equal(res1.changed, false);
+  assert.equal(res1.items[0].done, true);
+  assert.equal(res1.items[1].done, true);
+
+  // 2. 跨日但同週：daily 重設，weekly 不重設
+  const res2 = SyncEngine.resetRoutinesPure(routinesList, '2026-10-30', '2026-W43', 2000);
+  assert.equal(res2.changed, true);
+  assert.equal(res2.items[0].done, false, '每日習慣跨日自動重設');
+  assert.equal(res2.items[0].lastResetDate, '2026-10-30');
+  assert.equal(res2.items[1].done, true, '同週內每週習慣不重設');
+
+  // 3. 跨週到新的一週 (2026-W44)：weekly 重設
+  const res3 = SyncEngine.resetRoutinesPure(routinesList, '2026-11-02', '2026-W44', 3000);
+  assert.equal(res3.changed, true);
+  const weeklyItem = res3.items.find(it => it.id === 'r_weekly');
+  assert.equal(weeklyItem.done, false, '跨週時每週習慣完成狀態自動歸零');
+  assert.equal(weeklyItem.weeklyCompletedDates.length, 0, '跨週時進度日期清空');
+  assert.equal(weeklyItem.lastResetWeek, '2026-W44');
+  assert.deepEqual(weeklyItem.routineCompletions.map(entry => entry.date), ['2026-10-21', '2026-10-23'], '跨週不得刪除歷史足跡');
+});
+
+test('Case 16: 每週習慣跨裝置同步合併 (smartMergeItems 聯集進度)', () => {
+  const localWeekly = [
+    {
+      id: 'w1',
+      text: '每週運動 2 次',
+      isRoutine: true,
+      routineCadence: 'weekly',
+      weeklyTarget: 2,
+      weeklyCompletedDates: ['2026-10-28'],
+      updatedAt: 1000
+    }
+  ];
+  const remoteWeekly = [
+    {
+      id: 'w1',
+      text: '每週運動 2 次',
+      isRoutine: true,
+      routineCadence: 'weekly',
+      weeklyTarget: 2,
+      weeklyCompletedDates: ['2026-10-30'],
+      updatedAt: 1200
+    }
+  ];
+
+  const merged = SyncEngine.smartMergeItems(localWeekly, remoteWeekly);
+  assert.equal(merged.length, 1);
+  assert.deepEqual(merged[0].weeklyCompletedDates, ['2026-10-28', '2026-10-30'], '兩端不同日期的每週進度應安全聯集去重保留');
+});
+
+test('Case 17: 習慣足跡可保留歷史並跨裝置聯集', () => {
+  const oldFormat = SyncEngine.sanitizeItem({
+    id: 'routine-history',
+    text: '慢跑',
+    isRoutine: true,
+    routineCadence: 'weekly',
+    weeklyCompletedDates: ['2026-10-28'],
+    lastResetWeek: '2026-W44'
+  });
+  assert.deepEqual(oldFormat.routineCompletions.map(entry => entry.date), ['2026-10-28'], '舊版本週日期必須升級為足跡');
+
+  const merged = SyncEngine.smartMergeItems([
+    { id: 'routine-history', text: '慢跑', isRoutine: true, updatedAt: 1000, routineCompletions: [{ date: '2026-10-28', completedAt: 1000 }] }
+  ], [
+    { id: 'routine-history', text: '慢跑', isRoutine: true, updatedAt: 1200, routineCompletions: [{ date: '2026-10-30', completedAt: 1200 }] }
+  ]);
+  assert.deepEqual(merged[0].routineCompletions.map(entry => entry.date), ['2026-10-28', '2026-10-30']);
+});
+
+test('Case 18: 接關快照只接受安全且完整的本機狀態', () => {
+  const state = SyncEngine.sanitizeLastFocusState({
+    taskId: '  task_resume_1  ',
+    note: '先回到第三頁統計圖表',
+    endedAt: 123456,
+    dismissedUntil: 234567,
+    ignored: '<script>alert(1)</script>'
+  });
+  assert.deepEqual(state, {
+    taskId: 'task_resume_1',
+    note: '先回到第三頁統計圖表',
+    endedAt: 123456,
+    dismissedUntil: 234567
+  });
+  assert.equal(SyncEngine.sanitizeLastFocusState({ taskId: 'only-id' }), null);
+  assert.equal(SyncEngine.sanitizeLastFocusState({ endedAt: 123456 }), null);
+});

@@ -28,62 +28,68 @@
         <div class="week-completed-badge" id="weekCompletedText">本週已完成 0 件</div>
       </div>
       <div class="header-actions">
-        <!-- 幫我選 (Primary Highlight Action - 全域常駐) -->
-        <button id="btnOpenConsult" class="btn-pill-subtle" title="幫我選 (依條件直接自動決定「現在」)">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px;">
-            <circle cx="12" cy="12" r="10"></circle>
-            <polyline points="12 6 12 12 16 14"></polyline>
-          </svg>
-          <span>幫我選</span>
-        </button>
+        <!-- 第一排快捷主要行動：幫我選 + 專案 -->
+        <div class="header-action-group header-action-primary">
+          <!-- 幫我選 (Primary Highlight Action - 全域常駐) -->
+          <button id="btnOpenConsult" class="btn-pill-subtle" title="幫我選 (依條件直接自動決定「現在」)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px;">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <span>幫我選</span>
+          </button>
+          <button id="btnOpenProjects" class="btn-icon project-entry-button" title="專案" aria-label="專案">
+            <span class="project-entry-label">專案</span>
+          </button>
+        </div>
 
-        <!-- 電腦版捷徑 (寬螢幕直接顯示，手機自動收納進更多工具) -->
-        <button id="btnOpenMatrix" class="btn-icon header-tool-desktop" title="四象限矩陣總覽 (重要/緊急)" aria-label="四象限矩陣">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
-            <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
-            <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
-            <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
-          </svg>
-        </button>
-        <button id="btnOpenSync" class="btn-icon header-tool-desktop" title="手動同步 (跨裝置)" aria-label="手動同步">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-          </svg>
-        </button>
-        <button id="btnOpenSyncMobile" class="btn-icon header-tool-mobile" title="跨裝置同步" aria-label="跨裝置同步">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-          </svg>
-        </button>
+        <!-- 第二排系統輔助工具：同步 + 更多工具 + 設定 (桌面版另有四象限與鎖定) -->
+        <div class="header-action-group header-action-secondary">
+          <!-- 電腦版捷徑 (寬螢幕直接顯示，手機自動收納進更多工具) -->
+          <button id="btnOpenMatrix" class="btn-icon header-tool-desktop" title="四象限矩陣總覽 (重要/緊急)" aria-label="四象限矩陣">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+              <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+              <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+              <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+            </svg>
+          </button>
+          <button id="btnOpenSync" class="btn-icon header-tool-desktop" title="手動同步 (跨裝置)" aria-label="手動同步">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+          </button>
+          <button id="btnOpenSyncMobile" class="btn-icon header-tool-mobile" title="跨裝置同步" aria-label="跨裝置同步">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+          </button>
 
-        <!-- 立即鎖定 (若有啟用 PIN 碼且為電腦版) -->
-        <button id="btnLockApp" class="btn-icon header-tool-desktop" title="立即鎖定工作桌" aria-label="鎖定" style="display: none;">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-          </svg>
-        </button>
+          <!-- 立即鎖定 (若有啟用 PIN 碼且為電腦版) -->
+          <button id="btnLockApp" class="btn-icon header-tool-desktop" title="立即鎖定工作桌" aria-label="鎖定" style="display: none;">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </button>
 
-        <!-- 更多工具選單按鈕 (手機/平板必備，電腦版可查看完整工具) -->
-        <button id="btnNavToolsToggle" class="btn-icon" title="桌上工具選單" aria-label="更多工具" aria-expanded="false">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="1.5"></circle>
-            <circle cx="19" cy="12" r="1.5"></circle>
-            <circle cx="5" cy="12" r="1.5"></circle>
-          </svg>
-        </button>
+          <!-- 更多工具選單按鈕 (手機/平板必備，電腦版可查看完整工具) -->
+          <button id="btnNavToolsToggle" class="btn-icon" title="桌上工具選單" aria-label="更多工具" aria-expanded="false">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="1.5"></circle>
+              <circle cx="19" cy="12" r="1.5"></circle>
+              <circle cx="5" cy="12" r="1.5"></circle>
+            </svg>
+          </button>
 
-        <!-- 設定按鈕 (全域常駐) -->
-        <button id="btnOpenSettings" class="btn-icon" title="設定" aria-label="設定">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-          </svg>
-        </button>
-        <button id="btnOpenProjects" class="btn-icon project-entry-button" title="專案" aria-label="專案">
-          <span class="project-entry-label">專案</span>
-        </button>
+          <!-- 設定按鈕 (全域常駐) -->
+          <button id="btnOpenSettings" class="btn-icon" title="設定" aria-label="設定">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -300,6 +306,32 @@
 
     <!-- Main Content List -->
     <main class="main-sections">
+      <!-- 懸浮生活與習慣泡泡 (Habit Bubble - 無 Emoji 極簡風格，不佔正事推薦條) -->
+      <section class="habit-bubble-container" id="habitBubbleContainer" style="display: none;">
+        <div class="habit-bubble-pill">
+          <span class="habit-bubble-tag">常規</span>
+          <span class="habit-bubble-title" id="habitBubbleTitle">慢跑 30 分鐘</span>
+          <span class="habit-bubble-meta" id="habitBubbleMeta">狀態契合 · 本週 1/2 次</span>
+          <div class="habit-bubble-actions">
+            <button type="button" class="btn-bubble-action" id="btnHabitBubbleStart" title="立即開工專注">開工</button>
+            <button type="button" class="btn-bubble-dismiss" id="btnHabitBubbleDismiss" title="今日收起不再提醒" aria-label="收起">&times;</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 前次未完成專注的低干擾接關入口；只有使用者主動點擊才會恢復 Kairos。 -->
+      <section class="resume-task-bar" id="resumeTaskBar" style="display: none;" aria-label="繼續上次任務">
+        <div class="resume-task-content">
+          <span class="resume-task-tag">接關</span>
+          <span class="resume-task-title" id="resumeTaskTitle"></span>
+          <span class="resume-task-note" id="resumeTaskNote" style="display: none;"></span>
+        </div>
+        <div class="resume-task-actions">
+          <button type="button" class="btn-resume-task" id="btnResumeLastTask">恢復專注</button>
+          <button type="button" class="btn-dismiss-resume-task" id="btnDismissResumeTask">略過</button>
+        </div>
+      </section>
+
       <!-- Ambient Dynamic Suggestion Bar (工作桌常駐環境推薦條) -->
       <section class="ambient-suggestion-bar" id="ambientSuggestionBar" style="display: none;">
         <div class="ambient-inner">
@@ -1197,10 +1229,10 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
             </svg>
-            <span>每日習慣庫</span>
+            <span>常規與每週習慣庫</span>
           </h3>
           <div class="modal-subtitle" style="font-size: 0.76rem; color: var(--meta-text); margin-top: 3px;">
-            每日自動 Reset。平時隱藏不造成視覺疲勞，當空檔與能量契合時才自動浮出推薦。
+            支援每日與每週目標。平時收納不佔桌面，身心能量契合時以獨立生活泡泡浮出推薦。
           </div>
         </div>
         <button class="modal-close" id="btnCloseRoutines">&times;</button>
@@ -1208,11 +1240,19 @@
       <div class="modal-body" style="padding-top: 14px;">
         <!-- 新增習慣表單 -->
         <div class="routine-add-box">
-          <input type="text" id="inputNewRoutineText" class="routine-input" placeholder="輸入每日習慣（如：慢跑 30 分鐘、核心拉筋、讀英文...）">
-          <div class="routine-add-row">
-            <select id="selectRoutineTrigger" class="routine-select" title="觸發推薦時機">
+          <input type="text" id="inputNewRoutineText" class="routine-input" placeholder="輸入習慣名稱（如：慢跑 30 分鐘、核心拉筋、閱讀...）">
+          <div class="routine-add-row" style="display: flex; gap: 6px; flex-wrap: wrap;">
+            <select id="selectRoutineCadence" class="routine-select" title="頻率週期" style="min-width: 120px;">
+              <option value="daily">每日 1 次</option>
+              <option value="weekly_1">每週 1 次</option>
+              <option value="weekly_2" selected>每週 2 次</option>
+              <option value="weekly_3">每週 3 次</option>
+              <option value="weekly_4">每週 4 次</option>
+              <option value="weekly_5">每週 5 次</option>
+            </select>
+            <select id="selectRoutineTrigger" class="routine-select" title="觸發推薦時機" style="flex: 1; min-width: 140px;">
               <option value="recharge">疲憊/卡關時浮出（休整與轉換）</option>
-              <option value="high">精力充沛時浮出（高強度推進）</option>
+              <option value="high">精力充沛時浮出（運動/推進）</option>
               <option value="evening">傍晚/晚間時浮出（日常維護）</option>
               <option value="any">任意契合時段浮出</option>
             </select>
@@ -1226,7 +1266,7 @@
         </div>
       </div>
       <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 0.74rem; color: var(--meta-text);">每天凌晨 00:00 自動重設完成狀態</span>
+        <span style="font-size: 0.74rem; color: var(--meta-text);">每日凌晨 00:00 與每週一凌晨自動重設進度</span>
         <button type="button" class="btn-secondary" id="btnDismissRoutines">完成</button>
       </div>
     </div>
@@ -1375,6 +1415,39 @@
               <span class="analytics-kpi-label">完成與調整</span>
               <span class="analytics-kpi-value" id="kpiCompletionRatio">0 / 0</span>
               <span class="analytics-kpi-sub" id="kpiCompletionRatioSub">完成 / 彈性調整</span>
+            </div>
+          </div>
+
+          <!-- GitHub 風格足跡熱力圖 (分開追蹤日常習慣 vs 專注任務) -->
+          <div class="analytics-section-card">
+            <div class="analytics-section-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
+              <div>
+                <div class="analytics-section-title">活動與常規足跡熱力圖</div>
+                <div class="analytics-section-desc">過去 16 週累積足跡，客觀呈現生活節奏與專注投入痕跡</div>
+              </div>
+              <!-- 維度切換器 (分開追蹤) -->
+              <div class="heatmap-track-switcher" role="group" aria-label="熱力圖追蹤維度">
+                <button type="button" class="heatmap-track-btn active" data-track="routines" id="btnTrackRoutines">常規習慣</button>
+                <button type="button" class="heatmap-track-btn" data-track="focus" id="btnTrackFocus">深度專注</button>
+                <button type="button" class="heatmap-track-btn" data-track="all" id="btnTrackAll">綜合總覽</button>
+              </div>
+            </div>
+            <div class="heatmap-scroll-wrapper">
+              <div class="activity-heatmap-grid" id="activityHeatmapGrid">
+                <!-- Dynamically populated 16-week grid -->
+              </div>
+            </div>
+            <div class="heatmap-footer-info" id="heatmapFooterInfo">
+              <span class="heatmap-detail-label" id="heatmapSelectedDetail">點擊或懸停方塊查看詳細紀錄</span>
+              <div class="heatmap-legend">
+                <span style="font-size: 0.68rem; color: var(--meta-text); margin-right: 4px;">無紀錄</span>
+                <span class="heatmap-cell-sample level-0"></span>
+                <span class="heatmap-cell-sample level-1"></span>
+                <span class="heatmap-cell-sample level-2"></span>
+                <span class="heatmap-cell-sample level-3"></span>
+                <span class="heatmap-cell-sample level-4"></span>
+                <span style="font-size: 0.68rem; color: var(--meta-text); margin-left: 4px;">高投入</span>
+              </div>
             </div>
           </div>
 

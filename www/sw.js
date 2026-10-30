@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taskdesk-v17';
+const CACHE_NAME = 'taskdesk-v19';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

@@ -99,11 +99,14 @@
   const STORAGE_KEY_SYNC = 'taskdesk_sync_v1';
   const STORAGE_KEY_FOCUS_SESSIONS = 'taskdesk_focus_sessions_v1';
   const STORAGE_KEY_USER_STATE = 'taskdesk_user_state_v1';
+  const STORAGE_KEY_LAST_FOCUS_STATE = 'taskdesk_last_focus_state_v1';
+  const LAST_FOCUS_STATE_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 
   let rules = DEFAULT_RULES;
   let items = [];
   let projects = [];
   let tombstones = {};
+  let lastFocusState = null;
 
   // --- 純函式同步與資料清洗核心模組 (Sync & Schema Engine) ---
   const SyncEngine = {
@@ -111,6 +114,70 @@
     ALLOWED_QUADRANTS: new Set(['q1', 'q2', 'q3', 'q4']),
     ALLOWED_SIZES: new Set(['micro', 'small', 'medium', 'large']),
     ALLOWED_ROUTINE_TRIGGERS: new Set(['recharge', 'high', 'evening', 'any']),
+    ALLOWED_ROUTINE_CADENCES: new Set(['daily', 'weekly']),
+
+    isValidIsoWeekString(str) {
+      if (typeof str !== 'string') return false;
+      return /^20\d{2}-W(0[1-9]|[1-4]\d|5[0-3])$/.test(str.trim());
+    },
+
+    getIsoWeekKey(date) {
+      const d = (date instanceof Date) ? new Date(date.valueOf()) : new Date();
+      if (isNaN(d.getTime())) return null;
+      const target = new Date(d.valueOf());
+      const dayNr = (d.getDay() + 6) % 7;
+      target.setDate(target.getDate() - dayNr + 3);
+      const firstThursday = target.valueOf();
+      target.setMonth(0, 1);
+      if (target.getDay() !== 4) {
+        target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+      }
+      const weekNum = 1 + Math.ceil((firstThursday - target) / 604800000);
+      return `${target.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+    },
+
+    resetRoutinesPure(itemsList, todayStr, currentWeekKey, timestamp = null) {
+      if (!Array.isArray(itemsList)) return { changed: false, items: [] };
+      const now = typeof timestamp === 'number' && Number.isFinite(timestamp) ? timestamp : Date.now();
+      let changed = false;
+      const updatedItems = itemsList.map(it => {
+        if (!it || !it.isRoutine) return it;
+        let itemChanged = false;
+        const copy = Object.assign({}, it);
+
+        if (copy.routineCadence === 'weekly') {
+          // 每週習慣重設
+          if (copy.lastResetWeek !== currentWeekKey) {
+            copy.weeklyCompletedDates = this.sanitizeRoutineCompletions(copy.routineCompletions)
+              .map(entry => entry.date)
+              .filter(date => this.getIsoWeekKey(new Date(`${date}T12:00:00`)) === currentWeekKey);
+            copy.done = copy.weeklyCompletedDates.length >= (copy.weeklyTarget || 2);
+            copy.doneAt = copy.done ? (copy.doneAt || now) : null;
+            copy.lastResetWeek = currentWeekKey;
+            copy.updatedAt = now;
+            itemChanged = true;
+          }
+        } else {
+          // 每日習慣重設
+          if (copy.lastResetDate !== todayStr) {
+            if (copy.done) {
+              copy.done = false;
+              copy.doneAt = null;
+            }
+            copy.lastResetDate = todayStr;
+            copy.updatedAt = now;
+            itemChanged = true;
+          }
+        }
+
+        if (itemChanged) {
+          changed = true;
+          return copy;
+        }
+        return it;
+      });
+      return { changed, items: updatedItems };
+    },
 
     isValidDateString(str) {
       if (typeof str !== 'string') return false;
@@ -125,6 +192,43 @@
         && dt.getUTCFullYear() === y
         && dt.getUTCMonth() + 1 === m
         && dt.getUTCDate() === d;
+    },
+
+    // 每個習慣每天只保留一筆完成足跡。這份歷史不會隨每日／每週進度重設而刪除。
+    sanitizeRoutineCompletions(rawList) {
+      if (!Array.isArray(rawList)) return [];
+      const byDate = new Map();
+      rawList.forEach(raw => {
+        const date = typeof raw === 'string' ? raw : raw && raw.date;
+        if (!this.isValidDateString(date)) return;
+        const completedAt = raw && typeof raw === 'object' && Number.isFinite(raw.completedAt)
+          ? raw.completedAt
+          : 0;
+        const previous = byDate.get(date);
+        if (!previous || completedAt > previous.completedAt) {
+          byDate.set(date, { date, completedAt });
+        }
+      });
+      return Array.from(byDate.values())
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(-730);
+    },
+
+    mergeRoutineCompletions(...lists) {
+      return this.sanitizeRoutineCompletions(lists.flatMap(list => Array.isArray(list) ? list : []));
+    },
+
+    sanitizeLastFocusState(raw) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+      const taskId = typeof raw.taskId === 'string' ? raw.taskId.trim().slice(0, 120) : '';
+      const endedAt = Number.isFinite(raw.endedAt) && raw.endedAt > 0 ? raw.endedAt : 0;
+      if (!taskId || !endedAt) return null;
+      return {
+        taskId,
+        note: typeof raw.note === 'string' ? raw.note.trim().slice(0, 600) : '',
+        endedAt,
+        dismissedUntil: Number.isFinite(raw.dismissedUntil) && raw.dismissedUntil > 0 ? raw.dismissedUntil : null
+      };
     },
 
     sanitizeItem(raw, generateIdFn = null) {
@@ -211,10 +315,35 @@
       if (typeof raw.routineTrigger === 'string' && this.ALLOWED_ROUTINE_TRIGGERS.has(raw.routineTrigger.trim().toLowerCase())) {
         routineTrigger = raw.routineTrigger.trim().toLowerCase();
       }
-      const routineCadence = (typeof raw.routineCadence === 'string') ? raw.routineCadence.slice(0, 30) : 'daily';
+      let routineCadence = 'daily';
+      if (typeof raw.routineCadence === 'string' && this.ALLOWED_ROUTINE_CADENCES.has(raw.routineCadence.trim().toLowerCase())) {
+        routineCadence = raw.routineCadence.trim().toLowerCase();
+      }
       let lastResetDate = null;
       if (typeof raw.lastResetDate === 'string' && this.isValidDateString(raw.lastResetDate.trim())) {
         lastResetDate = raw.lastResetDate.trim();
+      }
+      let weeklyTarget = 2;
+      if (typeof raw.weeklyTarget === 'number' && Number.isFinite(raw.weeklyTarget) && raw.weeklyTarget >= 1 && raw.weeklyTarget <= 7) {
+        weeklyTarget = Math.floor(raw.weeklyTarget);
+      }
+      let weeklyCompletedDates = [];
+      if (Array.isArray(raw.weeklyCompletedDates)) {
+        weeklyCompletedDates = raw.weeklyCompletedDates
+          .filter(d => typeof d === 'string' && this.isValidDateString(d.trim()))
+          .map(d => d.trim())
+          .slice(0, 14);
+      }
+      // 舊版沒有獨立足跡時，將仍可取得的本週／當日資料升級為歷史事件。
+      let routineCompletions = this.sanitizeRoutineCompletions(raw.routineCompletions);
+      const legacyRoutineDates = weeklyCompletedDates.slice();
+      if (isRoutine && routineCadence !== 'weekly' && done && lastResetDate) {
+        legacyRoutineDates.push(lastResetDate);
+      }
+      routineCompletions = this.mergeRoutineCompletions(routineCompletions, legacyRoutineDates);
+      let lastResetWeek = null;
+      if (typeof raw.lastResetWeek === 'string' && this.isValidIsoWeekString(raw.lastResetWeek.trim())) {
+        lastResetWeek = raw.lastResetWeek.trim();
       }
 
       // 其它屬性
@@ -248,6 +377,10 @@
         routineTrigger,
         routineCadence,
         lastResetDate,
+        weeklyTarget,
+        weeklyCompletedDates,
+        lastResetWeek,
+        routineCompletions,
         parentId,
         projectId,
         typeId,
@@ -644,6 +777,23 @@
           // 保留兩端實際操作時間，絕對不用 Date.now() 覆寫！
           const resolvedUpdatedAt = Math.max(localIt.updatedAt || 0, rIt.updatedAt || 0, localIt.createdAt || 0, rIt.createdAt || 0);
 
+          let mergedWeeklyCompletedDates = undefined;
+          if (Array.isArray(olderObj.weeklyCompletedDates) || Array.isArray(newerObj.weeklyCompletedDates)) {
+            const setDates = new Set([
+              ...(Array.isArray(olderObj.weeklyCompletedDates) ? olderObj.weeklyCompletedDates : []),
+              ...(Array.isArray(newerObj.weeklyCompletedDates) ? newerObj.weeklyCompletedDates : [])
+            ]);
+            mergedWeeklyCompletedDates = Array.from(setDates)
+              .filter(d => typeof d === 'string' && SyncEngine.isValidDateString(d))
+              .sort();
+          }
+          const mergedRoutineCompletions = this.mergeRoutineCompletions(
+            olderObj.routineCompletions,
+            newerObj.routineCompletions,
+            olderObj.weeklyCompletedDates,
+            newerObj.weeklyCompletedDates
+          );
+
           const mergedItem = Object.assign({}, olderObj, newerObj, {
             id: localIt.id,
             rawId: newerObj.rawId || olderObj.rawId || null,
@@ -660,6 +810,10 @@
             typeId: newerObj.typeId || olderObj.typeId || null,
             parentId: (newerObj.parentId !== undefined) ? newerObj.parentId : olderObj.parentId,
             isNow: (resolvedDone ? false : (newerObj.isNow !== undefined ? newerObj.isNow : olderObj.isNow)),
+            weeklyTarget: newerObj.weeklyTarget || olderObj.weeklyTarget || 2,
+            weeklyCompletedDates: mergedWeeklyCompletedDates !== undefined ? mergedWeeklyCompletedDates : (newerObj.weeklyCompletedDates || olderObj.weeklyCompletedDates || []),
+            lastResetWeek: newerObj.lastResetWeek || olderObj.lastResetWeek || null,
+            routineCompletions: mergedRoutineCompletions,
             order: newerObj.order !== undefined ? newerObj.order : olderObj.order
           });
 
@@ -767,6 +921,7 @@
     applySafeTop(settings.safeTop);
     loadItems();
     loadProjects();
+    loadLastFocusState();
     checkAndResetRoutines();
     await loadRules();
     setupEventListeners();
@@ -942,29 +1097,135 @@
     }
   }
 
+  function loadLastFocusState() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_LAST_FOCUS_STATE);
+      lastFocusState = saved ? SyncEngine.sanitizeLastFocusState(JSON.parse(saved)) : null;
+    } catch (e) {
+      lastFocusState = null;
+    }
+  }
+
+  function saveLastFocusState() {
+    try {
+      if (lastFocusState) {
+        localStorage.setItem(STORAGE_KEY_LAST_FOCUS_STATE, JSON.stringify(lastFocusState));
+      } else {
+        localStorage.removeItem(STORAGE_KEY_LAST_FOCUS_STATE);
+      }
+    } catch (e) {
+      console.warn('儲存接關狀態失敗:', e);
+    }
+  }
+
+  function clearLastFocusState(taskId = null) {
+    if (!lastFocusState || (taskId && lastFocusState.taskId !== taskId)) return;
+    lastFocusState = null;
+    saveLastFocusState();
+  }
+
+  function updateLastFocusState(item, note = '') {
+    if (!item || item.done || item.bucket === 'release') return;
+    lastFocusState = {
+      taskId: item.id,
+      note: typeof note === 'string' ? note.trim().slice(0, 600) : '',
+      endedAt: Date.now(),
+      dismissedUntil: null
+    };
+    saveLastFocusState();
+  }
+
+  function getNextLocalDayStart() {
+    const next = new Date();
+    next.setHours(24, 0, 0, 0);
+    return next.getTime();
+  }
+
+  function getResumableFocusTask() {
+    if (!lastFocusState) return null;
+    if (Date.now() - lastFocusState.endedAt > LAST_FOCUS_STATE_MAX_AGE_MS) {
+      clearLastFocusState();
+      return null;
+    }
+    const item = items.find(candidate => candidate.id === lastFocusState.taskId);
+    if (!item || item.done || item.bucket === 'release') {
+      clearLastFocusState();
+      return null;
+    }
+    if (lastFocusState.dismissedUntil && Date.now() < lastFocusState.dismissedUntil) return null;
+    if (items.some(candidate => candidate.isNow && !candidate.done)) return null;
+    return item;
+  }
+
+  function renderResumeTaskBar() {
+    const bar = document.getElementById('resumeTaskBar');
+    if (!bar) return;
+    const item = getResumableFocusTask();
+    if (!item) {
+      bar.style.display = 'none';
+      return;
+    }
+    const title = document.getElementById('resumeTaskTitle');
+    const note = document.getElementById('resumeTaskNote');
+    if (title) title.textContent = item.text;
+    if (note) {
+      note.textContent = lastFocusState.note || '';
+      note.style.display = lastFocusState.note ? 'inline' : 'none';
+    }
+    bar.style.display = 'flex';
+  }
+
   function getTodayDateStr() {
     const d = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
+  function getRoutineCompletionDatesForWeek(item, weekKey = getWeekKey(new Date())) {
+    const entries = SyncEngine.sanitizeRoutineCompletions(item.routineCompletions);
+    return entries
+      .map(entry => entry.date)
+      .filter(date => getWeekKey(new Date(`${date}T12:00:00`)) === weekKey);
+  }
+
+  function hasRoutineCompletionOnDate(item, dateStr) {
+    return SyncEngine.sanitizeRoutineCompletions(item.routineCompletions)
+      .some(entry => entry.date === dateStr);
+  }
+
+  function updateRoutineCompletion(item, isCompleted, dateStr = getTodayDateStr()) {
+    const now = Date.now();
+    let completions = SyncEngine.sanitizeRoutineCompletions(item.routineCompletions);
+    if (isCompleted) {
+      if (!completions.some(entry => entry.date === dateStr)) {
+        completions.push({ date: dateStr, completedAt: now });
+      }
+    } else {
+      completions = completions.filter(entry => entry.date !== dateStr);
+    }
+    item.routineCompletions = SyncEngine.sanitizeRoutineCompletions(completions);
+
+    if (item.routineCadence === 'weekly') {
+      const currentWeekKey = getWeekKey(new Date(`${dateStr}T12:00:00`));
+      item.weeklyCompletedDates = getRoutineCompletionDatesForWeek(item, currentWeekKey);
+      item.lastResetWeek = currentWeekKey;
+      item.done = item.weeklyCompletedDates.length >= (item.weeklyTarget || 2);
+      item.doneAt = item.done ? now : null;
+      return item.weeklyCompletedDates.length;
+    }
+
+    item.lastResetDate = dateStr;
+    item.done = !!isCompleted;
+    item.doneAt = isCompleted ? now : null;
+    return isCompleted ? 1 : 0;
+  }
+
   function checkAndResetRoutines() {
     const todayStr = getTodayDateStr();
-    let changed = false;
-    items.forEach(it => {
-      if (it.isRoutine) {
-        if (it.lastResetDate !== todayStr) {
-          if (it.done) {
-            it.done = false;
-            it.doneAt = null;
-          }
-          it.lastResetDate = todayStr;
-          it.updatedAt = Date.now();
-          changed = true;
-        }
-      }
-    });
-    if (changed) {
+    const currentWeekKey = getWeekKey(new Date());
+    const res = SyncEngine.resetRoutinesPure(items, todayStr, currentWeekKey, Date.now());
+    if (res.changed) {
+      items = res.items;
       saveItems();
     }
   }
@@ -2090,6 +2351,7 @@
     if (!item) return;
 
     if (item.isNow) {
+      if (activeFocusTaskId === item.id) updateLastFocusState(item, kairosSession.pauseResumeNote);
       item.isNow = false;
     } else {
       // 先取消其他所有項目的 isNow
@@ -2151,12 +2413,19 @@
     }
 
     setTimeout(() => {
-      item.done = isChecked;
-      item.doneAt = isChecked ? Date.now() : null;
+      let routineProgress = null;
+      if (item.isRoutine) {
+        // 不論從卡片、泡泡或 Kairos 完成，都寫入同一份可同步的習慣足跡。
+        routineProgress = updateRoutineCompletion(item, isChecked);
+      } else {
+        item.done = isChecked;
+        item.doneAt = isChecked ? Date.now() : null;
+      }
       item.updatedAt = Date.now();
       if (isChecked && item.isNow) {
         item.isNow = false;
       }
+      if (isChecked) clearLastFocusState(item.id);
 
       // 若為母任務：一併更新所有子任務
       if (!item.parentId) {
@@ -2190,8 +2459,13 @@
       renderAll();
       if (isChecked) {
         if (item.isRoutine) {
-          item.lastResetDate = getTodayDateStr();
-          showToast(`已完成今日習慣「${item.text}」！明天將自動重設`);
+          if (item.routineCadence === 'weekly') {
+            const target = item.weeklyTarget || 2;
+            const suffix = routineProgress > target ? ' · 超額推進' : '';
+            showToast(`「${item.text}」本週 ${routineProgress}/${target}${suffix}`);
+          } else {
+            showToast(`已完成今日習慣「${item.text}」！足跡已記錄`);
+          }
         } else {
           showToast(`已完成「${item.text}」，已永久歸檔至歷史檔案庫`);
         }
@@ -2823,6 +3097,14 @@
     }
   }
 
+  function captureKairosResumeNote() {
+    const resumeNoteInput = document.getElementById('kairosResumeNote');
+    if (resumeNoteInput) {
+      kairosSession.pauseResumeNote = resumeNoteInput.value.trim().slice(0, 600);
+    }
+    return kairosSession.pauseResumeNote || '';
+  }
+
   function handleKairosResume() {
     const resumeNoteInput = document.getElementById('kairosResumeNote');
     const noteVal = resumeNoteInput ? resumeNoteInput.value.trim() : '';
@@ -2875,9 +3157,11 @@
     const nowItem = items.find(it => it.isNow && !it.done);
     if (!nowItem) return;
     const elapsed = kairosSession.elapsedSeconds;
+    const resumeNote = captureKairosResumeNote();
 
     if (actionType === 'TOO_LARGE') {
       logFocusSession(nowItem, elapsed, 'ABORTED_TOO_LARGE', '任務過大需拆解');
+      updateLastFocusState(nowItem, resumeNote);
       nowItem.isNow = false;
       nowItem.updatedAt = Date.now();
       saveItems();
@@ -2885,6 +3169,7 @@
       showToast('已退回看板，已保留進度，建議為此任務新增子步驟。');
     } else if (actionType === 'POSTPONE') {
       logFocusSession(nowItem, elapsed, 'ABORTED_POSTPONE', '延後先擱著');
+      updateLastFocusState(nowItem, resumeNote);
       nowItem.isNow = false;
       nowItem.updatedAt = Date.now();
       saveItems();
@@ -2892,6 +3177,7 @@
       showToast('已暫停專注，任務保留在工作桌。');
     } else if (actionType === 'QUIT') {
       logFocusSession(nowItem, elapsed, 'ABORTED_QUIT', '不想做了退出');
+      updateLastFocusState(nowItem, resumeNote);
       nowItem.isNow = false;
       nowItem.updatedAt = Date.now();
       saveItems();
@@ -3050,13 +3336,153 @@
     return `${m}m`;
   }
 
+  let currentHeatmapTrack = 'routines'; // 'routines' | 'focus' | 'all'
+
   function renderAnalyticsDashboard() {
     const sessions = getFilteredFocusSessions();
     renderAnalyticsOverview(sessions);
+    renderActivityHeatmap(currentHeatmapTrack);
     renderAnalyticsIntent(sessions);
     renderAnalyticsFriction(sessions);
     renderAnalyticsLogs(sessions);
     if (analyticsState.activeTab === 'history') renderCompletedTaskHistory();
+  }
+
+  function renderActivityHeatmap(track = 'routines') {
+    currentHeatmapTrack = track;
+    const grid = document.getElementById('activityHeatmapGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    document.querySelectorAll('.heatmap-track-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.track === track);
+    });
+
+    const today = new Date();
+    const dayOfWeek = (today.getDay() + 6) % 7;
+    const startOfCurrentWeek = new Date(today);
+    startOfCurrentWeek.setDate(today.getDate() - dayOfWeek);
+    startOfCurrentWeek.setHours(0, 0, 0, 0);
+
+    const weeks = [];
+    for (let w = 15; w >= 0; w--) {
+      const weekStartDate = new Date(startOfCurrentWeek);
+      weekStartDate.setDate(startOfCurrentWeek.getDate() - w * 7);
+      const days = [];
+      for (let d = 0; d < 7; d++) {
+        const cur = new Date(weekStartDate);
+        cur.setDate(weekStartDate.getDate() + d);
+        const y = cur.getFullYear();
+        const m = String(cur.getMonth() + 1).padStart(2, '0');
+        const dayNum = String(cur.getDate()).padStart(2, '0');
+        const dateStr = `${y}-${m}-${dayNum}`;
+        days.push({
+          date: cur,
+          dateStr: dateStr,
+          dayIndex: d,
+          isFuture: cur > today
+        });
+      }
+      weeks.push({
+        weekKey: getWeekKey(weekStartDate),
+        startDate: weekStartDate,
+        days: days
+      });
+    }
+
+    // 1. 常規與習慣完成統計
+    const habitCountsByDate = {};
+    const habitNamesByDate = {};
+    items.filter(it => it.isRoutine).forEach(r => {
+      // 新版以不會被 reset 清除的完成事件繪製；舊資料仍退回既有欄位相容。
+      let completionDates = SyncEngine.sanitizeRoutineCompletions(r.routineCompletions).map(entry => entry.date);
+      if (completionDates.length === 0) {
+        completionDates = Array.isArray(r.weeklyCompletedDates) ? r.weeklyCompletedDates.slice() : [];
+        if (r.routineCadence !== 'weekly' && r.done && r.lastResetDate) completionDates.push(r.lastResetDate);
+      }
+      Array.from(new Set(completionDates)).forEach(d => {
+        habitCountsByDate[d] = (habitCountsByDate[d] || 0) + 1;
+        if (!habitNamesByDate[d]) habitNamesByDate[d] = [];
+        if (!habitNamesByDate[d].includes(r.text)) habitNamesByDate[d].push(r.text);
+      });
+    });
+
+    // 2. 深度專注工時統計
+    const allSessions = getFocusSessions();
+    const focusMinutesByDate = {};
+    allSessions.forEach(sess => {
+      if (sess.startedAt) {
+        const d = new Date(sess.startedAt);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const dayNum = String(d.getDate()).padStart(2, '0');
+        const dStr = `${y}-${m}-${dayNum}`;
+        const mins = Math.round((sess.elapsedSeconds || 0) / 60);
+        focusMinutesByDate[dStr] = (focusMinutesByDate[dStr] || 0) + mins;
+      }
+    });
+
+    weeks.forEach(week => {
+      const col = document.createElement('div');
+      col.className = 'heatmap-week-col';
+
+      const header = document.createElement('div');
+      header.className = 'heatmap-col-header';
+      const firstDay = week.days[0].date;
+      if (firstDay.getDate() <= 7) {
+        header.textContent = `${firstDay.getMonth() + 1}月`;
+      }
+      col.appendChild(header);
+
+      week.days.forEach(day => {
+        const cell = document.createElement('div');
+        cell.className = 'heatmap-cell';
+        cell.dataset.date = day.dateStr;
+
+        if (day.isFuture) {
+          cell.style.opacity = '0.12';
+          cell.style.cursor = 'default';
+        } else {
+          const habits = habitCountsByDate[day.dateStr] || 0;
+          const focusMins = focusMinutesByDate[day.dateStr] || 0;
+
+          let level = 0;
+          if (track === 'routines') {
+            if (habits >= 3) level = 4;
+            else if (habits === 2) level = 3;
+            else if (habits === 1) level = 2;
+          } else if (track === 'focus') {
+            if (focusMins >= 90) level = 4;
+            else if (focusMins >= 45) level = 3;
+            else if (focusMins >= 20) level = 2;
+            else if (focusMins > 0) level = 1;
+          } else {
+            const score = habits * 25 + focusMins;
+            if (score >= 90) level = 4;
+            else if (score >= 45) level = 3;
+            else if (score >= 20) level = 2;
+            else if (score > 0) level = 1;
+          }
+
+          cell.classList.add(`level-${level}`);
+
+          const dayNames = ['週一', '週二', '週三', '週四', '週五', '週六', '週日'];
+          const dayName = dayNames[day.dayIndex];
+          const habitList = (habitNamesByDate[day.dateStr] || []).join('、');
+          const detailStr = `${day.dateStr} (${dayName}) · 常規習慣 ${habits} 項${habitList ? ` [${habitList}]` : ''} · 深度專注 ${focusMins}m`;
+
+          cell.title = detailStr;
+          const showDetail = () => {
+            const detailEl = document.getElementById('heatmapSelectedDetail');
+            if (detailEl) detailEl.textContent = detailStr;
+          };
+          cell.addEventListener('mouseenter', showDetail);
+          cell.addEventListener('click', showDetail);
+        }
+        col.appendChild(cell);
+      });
+      grid.appendChild(col);
+    });
   }
 
   function getCompletedTaskHistory() {
@@ -3833,10 +4259,14 @@
 
   // --- 畫面渲染 ---
   function renderAll() {
+    // App 若一路開著跨過午夜／週一，也要在下一次畫面更新時結算，而不只在啟動時處理。
+    checkAndResetRoutines();
     renderFocusLockBanner();
     renderWeekCounter();
     renderWorkbenchCounters();
     renderAmbientSuggestion();
+    checkAndRenderHabitBubble();
+    renderResumeTaskBar();
     renderToday();
     renderWeek();
     updateDockBadges();
@@ -3844,7 +4274,6 @@
     if (overlay && overlay.style.display !== 'none') {
       renderDrawerContent();
     }
-
   }
 
   function renderWeekCounter() {
@@ -5485,13 +5914,13 @@
     const currentHour = now.getHours();
     const todayStr = getTodayDateStr();
 
-    // 候選池：主要任務或其未完成子任務。子任務可獨立推薦，但仍沿用母任務關聯。
+    // 候選池：主要任務或其未完成子任務。常規與生活習慣由獨立的生活泡泡呈現，不搶占專注推薦欄。
     const pool = [];
-    items.filter(it => !it.done && !it.parentId).forEach(item => {
-      const subtasks = getSubtasks(item.id).filter(sub => !sub.done);
-      if (subtasks.length > 0 && !item.isRoutine) {
+    items.filter(it => !it.done && !it.parentId && !it.isRoutine).forEach(item => {
+      const subtasks = getSubtasks(item.id).filter(sub => !sub.done && !sub.isRoutine);
+      if (subtasks.length > 0) {
         pool.push(...subtasks);
-      } else if (item.isRoutine || item.bucket === 'today' || item.bucket === 'week') {
+      } else if (item.bucket === 'today' || item.bucket === 'week') {
         pool.push(item);
       }
     });
@@ -5741,6 +6170,85 @@
     detail.style.display = isHidden ? 'block' : 'none';
   }
 
+  // --- 懸浮生活與常規習慣泡泡 (Habit Floating Bubble - 無 Emoji 極簡風格) ---
+  let activeHabitBubbleItem = null;
+
+  function checkAndRenderHabitBubble() {
+    const container = document.getElementById('habitBubbleContainer');
+    if (!container) return;
+
+    const todayStr = getTodayDateStr();
+    if (currentUserState.dismissedHabitBubbleDate === todayStr) {
+      container.style.display = 'none';
+      return;
+    }
+
+    const nowItem = items.find(it => it.isNow && !it.done);
+    if (nowItem) {
+      container.style.display = 'none';
+      return;
+    }
+
+    const routines = items.filter(it => it.isRoutine && !it.parentId);
+    if (routines.length === 0) {
+      container.style.display = 'none';
+      return;
+    }
+
+    const now = new Date();
+    const currentHour = now.getHours();
+    const { energy, flow } = currentUserState;
+
+    const matches = [];
+    routines.forEach(r => {
+      const trigger = r.routineTrigger || 'recharge';
+      let matchScore = 0;
+      let matchReason = '';
+
+      if (trigger === 'recharge' && (energy === 'low' || flow === 'stuck')) {
+        matchScore = 90;
+        matchReason = '身心疲憊契合 · 休息轉換';
+      } else if (trigger === 'high' && energy === 'high') {
+        matchScore = 85;
+        matchReason = '精力充沛契合 · 運動推進';
+      } else if (trigger === 'evening' && currentHour >= 17) {
+        matchScore = 80;
+        matchReason = '傍晚時段契合 · 常規放鬆';
+      } else if (trigger === 'any') {
+        matchScore = 50;
+        matchReason = '契合時段';
+      }
+
+      if (matchScore > 0) {
+        if (!r.done) matchScore += 15;
+        matches.push({ item: r, score: matchScore, reason: matchReason });
+      }
+    });
+
+    if (matches.length === 0) {
+      container.style.display = 'none';
+      return;
+    }
+
+    matches.sort((a, b) => b.score - a.score);
+    const best = matches[0];
+    activeHabitBubbleItem = best.item;
+
+    const titleEl = document.getElementById('habitBubbleTitle');
+    const metaEl = document.getElementById('habitBubbleMeta');
+    if (titleEl) titleEl.textContent = best.item.text;
+    if (metaEl) {
+      if (best.item.routineCadence === 'weekly') {
+        const count = getRoutineCompletionDatesForWeek(best.item).length;
+        const target = best.item.weeklyTarget || 2;
+        metaEl.textContent = `${best.reason} · 本週 ${count}/${target} 次`;
+      } else {
+        metaEl.textContent = `${best.reason} · 今日${best.item.done ? '已完成' : '待命'}`;
+      }
+    }
+    container.style.display = 'flex';
+  }
+
   // --- 任務屬性詳細設定視窗 (Task Properties Modal: 死線、習慣、預估時間) ---
   let editingPropertyItemId = null;
 
@@ -5899,6 +6407,48 @@
       const meta = document.createElement('div');
       meta.className = 'routine-item-meta';
 
+      // 頻率週期選擇
+      const selectCadence = document.createElement('select');
+      selectCadence.className = 'routine-select-inline';
+      selectCadence.title = '切換此習慣頻率週期';
+      const cadenceOptions = [
+        { val: 'daily', label: '每日 1 次' },
+        { val: 'weekly_1', label: '每週 1 次' },
+        { val: 'weekly_2', label: '每週 2 次' },
+        { val: 'weekly_3', label: '每週 3 次' },
+        { val: 'weekly_4', label: '每週 4 次' },
+        { val: 'weekly_5', label: '每週 5 次' },
+        { val: 'weekly_6', label: '每週 6 次' },
+        { val: 'weekly_7', label: '每週 7 次' }
+      ];
+      const currentCadenceVal = (r.routineCadence === 'weekly') ? `weekly_${r.weeklyTarget || 2}` : 'daily';
+      cadenceOptions.forEach(opt => {
+        const opEl = document.createElement('option');
+        opEl.value = opt.val;
+        opEl.textContent = opt.label;
+        if (opt.val === currentCadenceVal) opEl.selected = true;
+        selectCadence.appendChild(opEl);
+      });
+      selectCadence.addEventListener('change', (e) => {
+        const val = e.target.value;
+        if (val === 'daily') {
+          r.routineCadence = 'daily';
+        } else if (val.startsWith('weekly_')) {
+          r.routineCadence = 'weekly';
+          r.weeklyTarget = parseInt(val.split('_')[1], 10) || 2;
+          if (!Array.isArray(r.weeklyCompletedDates)) r.weeklyCompletedDates = [];
+          if (!r.lastResetWeek) r.lastResetWeek = getWeekKey(new Date());
+          r.weeklyCompletedDates = getRoutineCompletionDatesForWeek(r);
+          r.done = r.weeklyCompletedDates.length >= r.weeklyTarget;
+        }
+        r.updatedAt = Date.now();
+        saveItems();
+        renderRoutinesModal();
+        renderAll();
+        showToast(`已調整「${r.text}」頻率`);
+      });
+
+      // 推薦時機選擇
       const selectTrigger = document.createElement('select');
       selectTrigger.className = 'routine-select-inline';
       selectTrigger.title = '切換此習慣的推薦浮出時機';
@@ -5924,8 +6474,15 @@
       });
 
       const statusSpan = document.createElement('span');
-      statusSpan.textContent = `· 今日${r.done ? '已完成' : '待命推薦'}`;
+      if (r.routineCadence === 'weekly') {
+        const count = getRoutineCompletionDatesForWeek(r).length;
+        const target = r.weeklyTarget || 2;
+        statusSpan.textContent = `· 本週 ${count}/${target} 次${r.done ? ' (已達成)' : ''}`;
+      } else {
+        statusSpan.textContent = `· 今日${r.done ? '已完成' : '待命推薦'}`;
+      }
 
+      meta.appendChild(selectCadence);
       meta.appendChild(selectTrigger);
       meta.appendChild(statusSpan);
 
@@ -5937,16 +6494,34 @@
 
       const btnToggle = document.createElement('button');
       btnToggle.className = 'btn-triage';
-      btnToggle.textContent = r.done ? '重設' : '完成';
-      btnToggle.addEventListener('click', () => {
-        r.done = !r.done;
-        r.doneAt = r.done ? Date.now() : null;
-        r.updatedAt = Date.now();
-        saveItems();
-        renderRoutinesModal();
-        renderAll();
-        showToast(r.done ? `今日「${r.text}」已完成！` : `「${r.text}」已重設為待命`);
-      });
+      if (r.routineCadence === 'weekly') {
+        btnToggle.textContent = '+1 完成';
+        btnToggle.addEventListener('click', () => {
+          const todayStr = getTodayDateStr();
+          if (hasRoutineCompletionOnDate(r, todayStr)) {
+            showToast(`「${r.text}」今天已記錄，明天可以再累積一次`);
+            return;
+          }
+          const count = updateRoutineCompletion(r, true, todayStr);
+          r.updatedAt = Date.now();
+          saveItems();
+          renderRoutinesModal();
+          renderAll();
+          const target = r.weeklyTarget || 2;
+          showToast(`「${r.text}」本週 ${count}/${target}${count > target ? ' · 超額推進' : ''}`);
+        });
+      } else {
+        btnToggle.textContent = r.done ? '重設' : '完成';
+        btnToggle.addEventListener('click', () => {
+          const completed = !r.done;
+          updateRoutineCompletion(r, completed);
+          r.updatedAt = Date.now();
+          saveItems();
+          renderRoutinesModal();
+          renderAll();
+          showToast(completed ? `今日「${r.text}」已完成！足跡已記錄` : `已取消今天「${r.text}」的完成紀錄`);
+        });
+      }
 
       const btnDoNow = document.createElement('button');
       btnDoNow.className = 'btn-triage';
@@ -5981,7 +6556,7 @@
     });
   }
 
-  function addRoutine(text, trigger = 'recharge') {
+  function addRoutine(text, trigger = 'recharge', cadence = 'daily', weeklyTarget = 2) {
     if (!text || !text.trim()) return;
     const item = {
       id: generateId(),
@@ -6002,14 +6577,19 @@
       deadline: null,
       isRoutine: true,
       routineTrigger: trigger,
-      routineCadence: 'daily',
-      lastResetDate: getTodayDateStr()
+      routineCadence: cadence,
+      weeklyTarget: cadence === 'weekly' ? Math.max(1, Math.min(7, weeklyTarget)) : 2,
+      weeklyCompletedDates: [],
+      routineCompletions: [],
+      lastResetDate: getTodayDateStr(),
+      lastResetWeek: getWeekKey(new Date())
     };
     items.push(item);
     saveItems();
     renderRoutinesModal();
     renderAll();
-    showToast(`已新增每日習慣「${item.text}」！`);
+    const cadenceDesc = cadence === 'weekly' ? `每週 ${item.weeklyTarget} 次` : '每日習慣';
+    showToast(`已新增習慣「${item.text}」（${cadenceDesc}）！`);
   }
 
   // --- 完成紀錄 Modal 渲染 ---
@@ -7689,6 +8269,42 @@
     const btnAmbientWhy = document.getElementById('btnAmbientWhy');
     if (btnAmbientWhy) btnAmbientWhy.addEventListener('click', toggleAmbientReasonDetail);
 
+    // 懸浮生活與常規泡泡 (Habit Bubble)
+    const btnHabitBubbleStart = document.getElementById('btnHabitBubbleStart');
+    if (btnHabitBubbleStart) {
+      btnHabitBubbleStart.addEventListener('click', () => {
+        if (activeHabitBubbleItem) {
+          activeHabitBubbleItem.bucket = 'today';
+          setAsNow(activeHabitBubbleItem.id);
+          const container = document.getElementById('habitBubbleContainer');
+          if (container) container.style.display = 'none';
+          renderAll();
+        }
+      });
+    }
+
+    const btnHabitBubbleDismiss = document.getElementById('btnHabitBubbleDismiss');
+    if (btnHabitBubbleDismiss) {
+      btnHabitBubbleDismiss.addEventListener('click', () => {
+        currentUserState.dismissedHabitBubbleDate = getTodayDateStr();
+        saveUserState();
+        const container = document.getElementById('habitBubbleContainer');
+        if (container) container.style.display = 'none';
+        showToast('今日已收起習慣建議');
+      });
+    }
+
+    // 熱力圖分軌切換 (Heatmap Track Switcher)
+    const heatmapTrackBtns = document.querySelectorAll('.heatmap-track-btn');
+    heatmapTrackBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const track = btn.dataset.track;
+        if (track) {
+          renderActivityHeatmap(track);
+        }
+      });
+    });
+
     const ambientStatePill = document.getElementById('ambientStatePill');
     if (ambientStatePill) {
       ambientStatePill.addEventListener('click', () => {
@@ -7723,13 +8339,21 @@
     const btnAddRoutine = document.getElementById('btnAddRoutine');
     const inputNewRoutineText = document.getElementById('inputNewRoutineText');
     const selectRoutineTrigger = document.getElementById('selectRoutineTrigger');
+    const selectRoutineCadence = document.getElementById('selectRoutineCadence');
 
     if (btnAddRoutine && inputNewRoutineText) {
       const handleAddRoutine = () => {
         const text = inputNewRoutineText.value;
         const trigger = selectRoutineTrigger ? selectRoutineTrigger.value : 'recharge';
+        const cadenceVal = selectRoutineCadence ? selectRoutineCadence.value : 'daily';
+        let cadence = 'daily';
+        let weeklyTarget = 2;
+        if (cadenceVal.startsWith('weekly_')) {
+          cadence = 'weekly';
+          weeklyTarget = parseInt(cadenceVal.split('_')[1], 10) || 2;
+        }
         if (text && text.trim()) {
-          addRoutine(text, trigger);
+          addRoutine(text, trigger, cadence, weeklyTarget);
           inputNewRoutineText.value = '';
         }
       };
@@ -8598,6 +9222,30 @@
     safeOn('btnAbortQuit', 'click', () => executeAbort('QUIT'));
     safeOn('btnAbortCancel', 'click', closeKairosAbortModal);
     safeOn('kairosbrainDumpClose', 'click', closeBrainDump);
+    safeOn('btnResumeLastTask', 'click', () => {
+      const item = getResumableFocusTask();
+      if (!item) return;
+      clearLastFocusState(item.id);
+      setAsNow(item.id);
+    });
+    safeOn('btnDismissResumeTask', 'click', () => {
+      if (!lastFocusState) return;
+      lastFocusState.dismissedUntil = getNextLocalDayStart();
+      saveLastFocusState();
+      renderResumeTaskBar();
+    });
+
+    // 離開頁面時只保存明確已啟動的專注；不會把單純瀏覽工作桌視為未工作。
+    window.addEventListener('pagehide', () => {
+      const nowItem = items.find(item => item.isNow && !item.done);
+      if (!nowItem || !activeFocusTaskId) return;
+      syncKairosElapsedSeconds();
+      updateLastFocusState(nowItem, captureKairosResumeNote());
+      nowItem.isNow = false;
+      nowItem.updatedAt = Date.now();
+      saveItems();
+      stopFocusTimer();
+    });
 
     const brainDumpInput = document.getElementById('kairosbrainDumpInput');
     if (brainDumpInput) {
