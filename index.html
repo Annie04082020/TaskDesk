@@ -1293,6 +1293,13 @@
           <div class="form-sublabel" id="propTaskRelationHint" style="display: none; margin-top: 5px;">子任務可獨立設定耗時、截止死線與習慣；安排時段及四象限沿用主任務。</div>
         </div>
 
+        <!-- 調整任務層級，不需另開流程。 -->
+        <div class="form-group" id="propTaskParentGroup" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+          <label class="form-label" for="propTaskParent">所屬大任務</label>
+          <div class="form-sublabel" id="propTaskParentHint">可附屬到另一個大任務；更換後會跟隨其工作桌時段。</div>
+          <select id="propTaskParent" class="routine-select" style="width: 100%; margin-top: 4px;"></select>
+        </div>
+
         <!-- 工作桌時機 (Bucket) -->
         <div class="form-group" id="propTaskBucketGroup" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
         <label class="form-label" for="propTaskBucket">安排到哪個時段</label>

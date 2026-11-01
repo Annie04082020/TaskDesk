@@ -2037,6 +2037,23 @@
     return item && item.parentId ? items.find(it => it.id === item.parentId) || null : null;
   }
 
+  function reconcileParentCompletion(parent) {
+    if (!parent) return;
+    const children = getSubtasks(parent.id);
+    if (children.length === 0) return;
+    const allDone = children.every(child => child.done);
+    if (allDone && !parent.done) {
+      parent.done = true;
+      parent.doneAt = Date.now();
+      parent.isNow = false;
+      parent.updatedAt = Date.now();
+    } else if (!allDone && parent.done) {
+      parent.done = false;
+      parent.doneAt = null;
+      parent.updatedAt = Date.now();
+    }
+  }
+
   function getRecommendationTag(item) {
     return item && item.parentId ? '子任務 · 可獨立推薦' : null;
   }
@@ -6262,6 +6279,9 @@
     const subTitle = document.getElementById('propTaskSubtitle');
     const inputDeadline = document.getElementById('propTaskDeadline');
     const selBucket = document.getElementById('propTaskBucket');
+    const parentGroup = document.getElementById('propTaskParentGroup');
+    const selParent = document.getElementById('propTaskParent');
+    const parentHint = document.getElementById('propTaskParentHint');
     const relationHint = document.getElementById('propTaskRelationHint');
     const chkRoutine = document.getElementById('propTaskIsRoutine');
     const triggerGroup = document.getElementById('propRoutineTriggerGroup');
@@ -6272,6 +6292,43 @@
     if (subTitle) subTitle.textContent = item.text || '';
     if (inputDeadline) inputDeadline.value = item.deadline || '';
     const parent = item.parentId ? getParentItem(item) : null;
+    const hasOwnSubtasks = getSubtasks(item.id).length > 0;
+    if (parentGroup) parentGroup.style.display = 'block';
+    if (parentHint) {
+      parentHint.textContent = hasOwnSubtasks
+        ? '這個大任務已有子任務；為避免多層巢狀，請先整理子任務後再調整層級。'
+        : '可附屬到另一個大任務；更換後會跟隨其工作桌時段。';
+    }
+    if (selParent) {
+      selParent.textContent = '';
+      const independentOption = document.createElement('option');
+      independentOption.value = '';
+      independentOption.textContent = item.parentId ? '改為獨立大任務' : '保持為獨立大任務';
+      independentOption.selected = !item.parentId;
+      selParent.appendChild(independentOption);
+      items
+        .filter(candidate => !candidate.parentId && !candidate.done && candidate.id !== item.id)
+        .sort((a, b) => a.text.localeCompare(b.text, 'zh-Hant'))
+        .forEach(candidate => {
+          const option = document.createElement('option');
+          option.value = candidate.id;
+          option.textContent = candidate.text;
+          if (candidate.id === item.parentId) option.selected = true;
+          selParent.appendChild(option);
+        });
+      // 原主任務即使剛完成，也要保留為可辨識的目前選項。
+      if (parent && !Array.from(selParent.options).some(option => option.value === parent.id)) {
+        const currentOption = document.createElement('option');
+        currentOption.value = parent.id;
+        currentOption.textContent = parent.text;
+        currentOption.selected = true;
+        selParent.appendChild(currentOption);
+      }
+      selParent.disabled = hasOwnSubtasks;
+      selParent.onchange = () => {
+        if (selBucket) selBucket.disabled = !!selParent.value;
+      };
+    }
     if (selBucket) {
       selBucket.value = parent ? (parent.bucket || 'inbox') : (item.bucket || 'inbox');
       selBucket.disabled = !!parent;
@@ -6307,6 +6364,7 @@
     const inputTitle = document.getElementById('propTaskText');
     const inputDeadline = document.getElementById('propTaskDeadline');
     const selBucket = document.getElementById('propTaskBucket');
+    const selParent = document.getElementById('propTaskParent');
     const chkRoutine = document.getElementById('propTaskIsRoutine');
     const selTrigger = document.getElementById('propTaskRoutineTrigger');
     const selSize = document.getElementById('propTaskSize');
@@ -6318,12 +6376,24 @@
 
     const newDeadline = inputDeadline ? inputDeadline.value.trim() : '';
     item.deadline = newDeadline || null;
-    if (!item.parentId && selBucket && SyncEngine.ALLOWED_BUCKETS.has(selBucket.value)) {
+    const oldParent = getParentItem(item);
+    if (selParent) {
+      const requestedParentId = selParent.value || null;
+      const requestedParent = requestedParentId
+        ? items.find(candidate => candidate.id === requestedParentId && !candidate.parentId && (!candidate.done || candidate.id === item.parentId))
+        : null;
+      if (requestedParent && getSubtasks(item.id).length > 0) {
+        showToast('這個大任務已有子任務，暫時不能再附屬到其他任務');
+        return;
+      }
+      item.parentId = requestedParent ? requestedParent.id : null;
+    }
+    const newParent = getParentItem(item);
+    if (!newParent && selBucket && SyncEngine.ALLOWED_BUCKETS.has(selBucket.value)) {
       item.bucket = selBucket.value;
     }
-    if (item.parentId) {
-      const parent = getParentItem(item);
-      if (parent) item.bucket = parent.bucket;
+    if (newParent) {
+      item.bucket = newParent.bucket;
     }
 
     const isRoutine = chkRoutine ? chkRoutine.checked : false;
@@ -6341,6 +6411,9 @@
     }
 
     item.updatedAt = Date.now();
+    reconcileParentCompletion(oldParent);
+    if (!oldParent || oldParent.id !== (newParent && newParent.id)) reconcileParentCompletion(newParent);
+    normalizeSubtaskBuckets();
     saveItems();
     renderAll();
     closeItemPropertiesModal();
