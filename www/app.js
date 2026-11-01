@@ -6307,12 +6307,12 @@
       independentOption.selected = !item.parentId;
       selParent.appendChild(independentOption);
       items
-        .filter(candidate => !candidate.parentId && !candidate.done && candidate.id !== item.id)
+        .filter(candidate => !candidate.parentId && candidate.id !== item.id)
         .sort((a, b) => a.text.localeCompare(b.text, 'zh-Hant'))
         .forEach(candidate => {
           const option = document.createElement('option');
           option.value = candidate.id;
-          option.textContent = candidate.text;
+          option.textContent = candidate.done ? `${candidate.text}（已完成）` : candidate.text;
           if (candidate.id === item.parentId) option.selected = true;
           selParent.appendChild(option);
         });
@@ -6380,7 +6380,7 @@
     if (selParent) {
       const requestedParentId = selParent.value || null;
       const requestedParent = requestedParentId
-        ? items.find(candidate => candidate.id === requestedParentId && !candidate.parentId && (!candidate.done || candidate.id === item.parentId))
+        ? items.find(candidate => candidate.id === requestedParentId && !candidate.parentId)
         : null;
       if (requestedParent && getSubtasks(item.id).length > 0) {
         showToast('這個大任務已有子任務，暫時不能再附屬到其他任務');
