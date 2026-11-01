@@ -6306,23 +6306,31 @@
       independentOption.textContent = item.parentId ? '改為獨立大任務' : '保持為獨立大任務';
       independentOption.selected = !item.parentId;
       selParent.appendChild(independentOption);
-      items
-        .filter(candidate => !candidate.parentId && candidate.id !== item.id)
-        .sort((a, b) => a.text.localeCompare(b.text, 'zh-Hant'))
-        .forEach(candidate => {
+      // 所有工作桌都可作為主任務來源；唯一條件是尚未完成且本身不是子任務。
+      const parentCandidates = items
+        .filter(candidate => !candidate.done && !candidate.parentId && candidate.id !== item.id)
+        .sort((a, b) => String(a.text || '').localeCompare(String(b.text || '')));
+      parentCandidates.forEach(candidate => {
           const option = document.createElement('option');
           option.value = candidate.id;
-          option.textContent = candidate.done ? `${candidate.text}（已完成）` : candidate.text;
+          option.textContent = candidate.text;
           if (candidate.id === item.parentId) option.selected = true;
           selParent.appendChild(option);
         });
-      // 原主任務即使剛完成，也要保留為可辨識的目前選項。
-      if (parent && !Array.from(selParent.options).some(option => option.value === parent.id)) {
+      // 舊關聯若已完成，保留名稱供辨識，但不可再作為新關聯。
+      if (parent && !parent.done && !Array.from(selParent.options).some(option => option.value === parent.id)) {
         const currentOption = document.createElement('option');
         currentOption.value = parent.id;
         currentOption.textContent = parent.text;
         currentOption.selected = true;
         selParent.appendChild(currentOption);
+      }
+      if (parentCandidates.length === 0 && !parent) {
+        const emptyOption = document.createElement('option');
+        emptyOption.value = '';
+        emptyOption.textContent = '目前沒有其他未完成的大任務';
+        emptyOption.disabled = true;
+        selParent.appendChild(emptyOption);
       }
       selParent.disabled = hasOwnSubtasks;
       selParent.onchange = () => {
@@ -6380,7 +6388,7 @@
     if (selParent) {
       const requestedParentId = selParent.value || null;
       const requestedParent = requestedParentId
-        ? items.find(candidate => candidate.id === requestedParentId && !candidate.parentId)
+        ? items.find(candidate => candidate.id === requestedParentId && !candidate.done && !candidate.parentId)
         : null;
       if (requestedParent && getSubtasks(item.id).length > 0) {
         showToast('這個大任務已有子任務，暫時不能再附屬到其他任務');
