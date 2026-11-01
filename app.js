@@ -6292,11 +6292,10 @@
     if (subTitle) subTitle.textContent = item.text || '';
     if (inputDeadline) inputDeadline.value = item.deadline || '';
     const parent = item.parentId ? getParentItem(item) : null;
-    const hasOwnSubtasks = getSubtasks(item.id).length > 0;
     if (parentGroup) parentGroup.style.display = 'block';
     if (parentHint) {
-      parentHint.textContent = hasOwnSubtasks
-        ? '這個大任務已有子任務；為避免多層巢狀，請先整理子任務後再調整層級。'
+      parentHint.textContent = getSubtasks(item.id).length > 0
+        ? '改為小任務時，原本的子任務會一併移到新的大任務下。'
         : '可附屬到另一個大任務；更換後會跟隨其工作桌時段。';
     }
     if (selParent) {
@@ -6317,14 +6316,6 @@
           if (candidate.id === item.parentId) option.selected = true;
           selParent.appendChild(option);
         });
-      // 舊關聯若已完成，保留名稱供辨識，但不可再作為新關聯。
-      if (parent && !parent.done && !Array.from(selParent.options).some(option => option.value === parent.id)) {
-        const currentOption = document.createElement('option');
-        currentOption.value = parent.id;
-        currentOption.textContent = parent.text;
-        currentOption.selected = true;
-        selParent.appendChild(currentOption);
-      }
       if (parentCandidates.length === 0 && !parent) {
         const emptyOption = document.createElement('option');
         emptyOption.value = '';
@@ -6332,7 +6323,9 @@
         emptyOption.disabled = true;
         selParent.appendChild(emptyOption);
       }
-      selParent.disabled = hasOwnSubtasks;
+      // Android WebView 對動態 option 的 selected 屬性不穩定，最後明確指定目前值。
+      selParent.value = parent && !parent.done ? parent.id : '';
+      if (selParent.selectedIndex < 0) selParent.selectedIndex = 0;
       selParent.onchange = () => {
         if (selBucket) selBucket.disabled = !!selParent.value;
       };
@@ -6391,8 +6384,12 @@
         ? items.find(candidate => candidate.id === requestedParentId && !candidate.done && !candidate.parentId)
         : null;
       if (requestedParent && getSubtasks(item.id).length > 0) {
-        showToast('這個大任務已有子任務，暫時不能再附屬到其他任務');
-        return;
+        // TaskDesk 僅呈現一層子任務：改掛時把既有子任務平鋪到新的主任務下。
+        getSubtasks(item.id).forEach(child => {
+          child.parentId = requestedParent.id;
+          child.bucket = requestedParent.bucket;
+          child.updatedAt = Date.now();
+        });
       }
       item.parentId = requestedParent ? requestedParent.id : null;
     }
