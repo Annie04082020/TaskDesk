@@ -565,10 +565,13 @@
       }
       clean.focusLockEnabled = raw.focusLockEnabled !== false;
       clean.notificationsEnabled = raw.notificationsEnabled !== false;
-      clean.notificationTimes = Array.isArray(raw.notificationTimes)
-        ? raw.notificationTimes.filter(time => typeof time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)).slice(0, 12)
-        : ['10:00'];
+      const sanitizeNotificationTimes = (values, fallback = []) => Array.isArray(values)
+        ? Array.from(new Set(values.filter(time => typeof time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)))).slice(0, 12)
+        : fallback;
+      clean.notificationTimes = sanitizeNotificationTimes(raw.notificationTimes, ['10:00']);
       if (clean.notificationTimes.length === 0) clean.notificationTimes = ['10:00'];
+      clean.routineNotificationTimes = sanitizeNotificationTimes(raw.routineNotificationTimes);
+      clean.todayTaskNotificationTimes = sanitizeNotificationTimes(raw.todayTaskNotificationTimes);
       if (typeof raw.updatedAt === 'number' && Number.isFinite(raw.updatedAt)) {
         clean.updatedAt = Math.floor(raw.updatedAt);
       }
@@ -869,7 +872,9 @@
     pinHash: '',
     focusLockEnabled: true,
     notificationsEnabled: true,
-    notificationTimes: ['10:00']
+    notificationTimes: ['10:00'],
+    routineNotificationTimes: [],
+    todayTaskNotificationTimes: []
   };
 
   let activeWorkbench = 'today'; // 'today' | 'week'
@@ -959,6 +964,12 @@
           ? parsed.notificationTimes.filter(time => typeof time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)).slice(0, 12)
           : ['10:00'];
         if (settings.notificationTimes.length === 0) settings.notificationTimes = ['10:00'];
+        settings.routineNotificationTimes = Array.isArray(parsed.routineNotificationTimes)
+          ? [...new Set(parsed.routineNotificationTimes.filter(time => typeof time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)))].slice(0, 12)
+          : [];
+        settings.todayTaskNotificationTimes = Array.isArray(parsed.todayTaskNotificationTimes)
+          ? [...new Set(parsed.todayTaskNotificationTimes.filter(time => typeof time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)))].slice(0, 12)
+          : [];
       }
     } catch (e) {
       console.warn('載入設定失敗:', e);
@@ -1015,27 +1026,52 @@
       return groups.length ? groups.join('、') : '目前沒有需要提醒的任務';
     }
 
+    function getPendingRoutineNotification() {
+      const routines = items.filter(item => !item.done && item.isRoutine);
+      if (routines.length === 0) return null;
+      const names = routines.slice(0, 3).map(item => item.text);
+      const extra = routines.length > names.length ? `，另 ${routines.length - names.length} 項` : '';
+      return `${names.join('、')}${extra}`;
+    }
+
+    function getTodayTasksNotification() {
+      const tasks = items.filter(item => !item.done && !item.parentId && item.bucket === 'today' && !item.isRoutine);
+      if (tasks.length === 0) return null;
+      const names = tasks.slice(0, 4).map(item => item.text);
+      const extra = tasks.length > names.length ? `，另 ${tasks.length - names.length} 件` : '';
+      return `今天尚餘：${names.join('、')}${extra}`;
+    }
+
   async function syncAndroidNotifications() {
       const plugin = getLocalNotificationsPlugin();
       if (!plugin) return;
       try {
-        const notificationIds = Array.from({ length: 12 }, (_, index) => ({ id: 910000 + index }));
+        const notificationIds = [910000, 920000, 930000].flatMap(base =>
+          Array.from({ length: 12 }, (_, index) => ({ id: base + index }))
+        );
         await plugin.cancel({ notifications: notificationIds });
         if (!settings.notificationsEnabled) return;
         const permission = await plugin.checkPermissions();
         if (permission.display !== 'granted') return;
-        await plugin.schedule({
-          notifications: settings.notificationTimes.map((time, index) => {
+        const notificationGroups = [
+          { baseId: 910000, times: settings.notificationTimes, title: 'Task Desk 工作桌摘要', body: getNotificationSummary(), source: 'daily-summary' },
+          { baseId: 920000, times: settings.routineNotificationTimes, title: 'Task Desk 每日習慣', body: getPendingRoutineNotification(), source: 'routines' },
+          { baseId: 930000, times: settings.todayTaskNotificationTimes, title: 'Task Desk 今天剩餘任務', body: getTodayTasksNotification(), source: 'today-tasks' }
+        ];
+        const notifications = notificationGroups.flatMap(group => {
+          if (!group.body) return [];
+          return group.times.map((time, index) => {
             const [hour, minute] = time.split(':').map(Number);
             return {
-              id: 910000 + index,
-              title: 'Task Desk 任務提醒',
-              body: getNotificationSummary(),
+              id: group.baseId + index,
+              title: group.title,
+              body: group.body,
               schedule: { on: { hour, minute }, repeats: true, allowWhileIdle: true },
-              extra: { source: 'taskdesk-daily-summary', time }
+              extra: { source: `taskdesk-${group.source}`, time }
             };
-          })
+          });
         });
+        if (notifications.length) await plugin.schedule({ notifications });
       } catch (error) {
         console.error('排程 Android 通知失敗:', error);
       }
@@ -1053,29 +1089,52 @@
       }
     }
 
-  function renderNotificationTimes() {
-      const container = document.getElementById('settingNotificationTimes');
+  function renderNotificationTimeGroup(settingKey, containerId) {
+      const container = document.getElementById(containerId);
       if (!container) return;
       container.innerHTML = '';
-      settings.notificationTimes.forEach((time, index) => {
+      const times = settings[settingKey] || [];
+      times.forEach((time, index) => {
         const row = document.createElement('div');
         row.style.cssText = 'display:flex; gap:8px; align-items:center; margin-top:6px;';
-        row.innerHTML = `<input type="time" class="form-input notification-time-input" value="${time}" data-index="${index}" style="flex:1;">
-          <button type="button" class="btn-secondary notification-remove-time" data-index="${index}" style="padding:6px 10px; font-size:0.76rem;" ${settings.notificationTimes.length === 1 ? 'disabled' : ''}>移除</button>`;
+        const input = document.createElement('input');
+        input.type = 'time';
+        input.className = 'form-input notification-time-input';
+        input.value = time;
+        input.dataset.index = String(index);
+        input.dataset.notificationKey = settingKey;
+        input.style.flex = '1';
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'btn-secondary notification-remove-time';
+        remove.dataset.index = String(index);
+        remove.dataset.notificationKey = settingKey;
+        remove.style.cssText = 'padding:6px 10px; font-size:0.76rem;';
+        remove.textContent = '移除';
+        row.append(input, remove);
         container.appendChild(row);
       });
       container.querySelectorAll('.notification-time-input').forEach(input => {
         input.addEventListener('change', () => {
           const index = Number(input.dataset.index);
-          if (/^([01]\d|2[0-3]):[0-5]\d$/.test(input.value)) settings.notificationTimes[index] = input.value;
+          const key = input.dataset.notificationKey;
+          if (key && /^([01]\d|2[0-3]):[0-5]\d$/.test(input.value)) settings[key][index] = input.value;
         });
       });
       container.querySelectorAll('.notification-remove-time').forEach(button => {
         button.addEventListener('click', () => {
-          settings.notificationTimes.splice(Number(button.dataset.index), 1);
-          renderNotificationTimes();
+          const key = button.dataset.notificationKey;
+          if (!key || !Array.isArray(settings[key])) return;
+          settings[key].splice(Number(button.dataset.index), 1);
+          renderNotificationTimeGroup(key, containerId);
         });
       });
+  }
+
+  function renderNotificationTimes() {
+    renderNotificationTimeGroup('notificationTimes', 'settingNotificationTimes');
+    renderNotificationTimeGroup('routineNotificationTimes', 'settingRoutineNotificationTimes');
+    renderNotificationTimeGroup('todayTaskNotificationTimes', 'settingTodayTaskNotificationTimes');
   }
 
   function loadUserState() {
@@ -9266,14 +9325,18 @@
 
     // 常駐設定按鈕 (桌面/手機均可直接點擊)
     safeOn('btnOpenSettings', 'click', openSettingsModal);
-    safeOn('btnAddNotificationTime', 'click', () => {
-      if (settings.notificationTimes.length >= 12) {
-        showToast('最多可設定 12 個每日提醒時間');
+    const addNotificationTime = (settingKey) => {
+      if (!Array.isArray(settings[settingKey])) settings[settingKey] = [];
+      if (settings[settingKey].length >= 12) {
+        showToast('每種提醒最多可設定 12 個時間');
         return;
       }
-      settings.notificationTimes.push('10:00');
+      settings[settingKey].push('10:00');
       renderNotificationTimes();
-    });
+    };
+    safeOn('btnAddNotificationTime', 'click', () => addNotificationTime('notificationTimes'));
+    safeOn('btnAddRoutineNotificationTime', 'click', () => addNotificationTime('routineNotificationTimes'));
+    safeOn('btnAddTodayTaskNotificationTime', 'click', () => addNotificationTime('todayTaskNotificationTimes'));
 
     const settingSafeTop = document.getElementById('settingSafeTop');
     if (settingSafeTop) {
@@ -9506,11 +9569,13 @@
 
       const settingNotificationsEl = document.getElementById('settingNotificationsEnabled');
       if (settingNotificationsEl) settings.notificationsEnabled = settingNotificationsEl.checked;
-      const notificationInputs = document.querySelectorAll('.notification-time-input');
-      const notificationTimes = Array.from(notificationInputs)
-        .map(input => input.value)
-        .filter(time => /^([01]\d|2[0-3]):[0-5]\d$/.test(time));
-      settings.notificationTimes = [...new Set(notificationTimes)].slice(0, 12);
+      const notificationKeys = ['notificationTimes', 'routineNotificationTimes', 'todayTaskNotificationTimes'];
+      notificationKeys.forEach(key => {
+        const notificationTimes = Array.from(document.querySelectorAll(`.notification-time-input[data-notification-key="${key}"]`))
+          .map(input => input.value)
+          .filter(time => /^([01]\d|2[0-3]):[0-5]\d$/.test(time));
+        settings[key] = [...new Set(notificationTimes)].slice(0, 12);
+      });
       if (settings.notificationTimes.length === 0) settings.notificationTimes = ['10:00'];
       if (settings.notificationsEnabled) {
         const permissionGranted = await requestAndroidNotificationPermission();

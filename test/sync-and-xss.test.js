@@ -335,6 +335,8 @@ test('Case 11: 可攜備份設定不得包含 PIN hash 或鎖定狀態', () => {
     kairosUrl: 'http://127.0.0.1:5050',
     notificationsEnabled: true,
     notificationTimes: ['10:00'],
+    routineNotificationTimes: ['12:30', 'bad-value'],
+    todayTaskNotificationTimes: ['18:00'],
     updatedAt: 123456
   };
 
@@ -343,6 +345,8 @@ test('Case 11: 可攜備份設定不得包含 PIN hash 或鎖定狀態', () => {
   assert.equal(portable.pinHash, undefined, '可攜設定不可匯出 pinHash');
   assert.equal(portable.theme, 'dark');
   assert.equal(portable.notificationTimes[0], '10:00');
+  assert.deepEqual(portable.routineNotificationTimes, ['12:30']);
+  assert.deepEqual(portable.todayTaskNotificationTimes, ['18:00']);
 });
 
 test('Case 12: 匯入不含 PIN 欄位的設定時，不應覆寫本機 PIN 狀態', () => {

@@ -934,15 +934,31 @@
           <div class="form-toggle-row">
             <div>
               <div class="form-label">Android 任務通知</div>
-              <div class="form-sublabel">預設每天 10:00 提醒今日、本週、快截止與尚未完成的每日習慣；收集箱不提醒。</div>
+              <div class="form-sublabel">三種提醒可各自設定時間：工作桌摘要、每日習慣與今天剩餘任務。</div>
             </div>
             <label class="switch">
               <input type="checkbox" id="settingNotificationsEnabled" checked>
               <span class="slider"></span>
             </label>
           </div>
-          <div id="settingNotificationTimes" style="margin-top: 4px;"></div>
-          <button type="button" id="btnAddNotificationTime" class="btn-secondary" style="margin-top: 8px; padding: 7px 12px; font-size: 0.78rem;">＋新增提醒時間</button>
+          <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+            <div class="form-label">工作桌摘要</div>
+            <div class="form-sublabel">提醒今日／本週數量、臨近截止與專案回顧。</div>
+            <div id="settingNotificationTimes" style="margin-top: 4px;"></div>
+            <button type="button" id="btnAddNotificationTime" class="btn-secondary" style="margin-top: 8px; padding: 7px 12px; font-size: 0.78rem;">＋新增摘要時間</button>
+          </div>
+          <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+            <div class="form-label">每日習慣提醒</div>
+            <div class="form-sublabel">列出尚未完成的每日／每週習慣。預設不提醒，新增時間後才啟用。</div>
+            <div id="settingRoutineNotificationTimes" style="margin-top: 4px;"></div>
+            <button type="button" id="btnAddRoutineNotificationTime" class="btn-secondary" style="margin-top: 8px; padding: 7px 12px; font-size: 0.78rem;">＋新增習慣提醒時間</button>
+          </div>
+          <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+            <div class="form-label">今天剩餘任務提醒</div>
+            <div class="form-sublabel">通知會直接列出「今日」工作桌尚未完成的任務。預設不提醒，新增時間後才啟用。</div>
+            <div id="settingTodayTaskNotificationTimes" style="margin-top: 4px;"></div>
+            <button type="button" id="btnAddTodayTaskNotificationTime" class="btn-secondary" style="margin-top: 8px; padding: 7px 12px; font-size: 0.78rem;">＋新增今日任務提醒時間</button>
+          </div>
         </div>
 
         <div class="form-group web-only" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
