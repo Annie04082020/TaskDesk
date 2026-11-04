@@ -514,3 +514,16 @@ test('Case 18: 接關快照只接受安全且完整的本機狀態', () => {
   assert.equal(SyncEngine.sanitizeLastFocusState({ taskId: 'only-id' }), null);
   assert.equal(SyncEngine.sanitizeLastFocusState({ endedAt: 123456 }), null);
 });
+
+test('Case 19: 歷史完成數不重複計入子任務自動結案的主任務', () => {
+  const records = SyncEngine.getCompletedTaskHistoryRecords([
+    { id: 'parent', text: '期中報告', done: true, doneAt: 3000 },
+    { id: 'child-a', parentId: 'parent', text: '整理資料', done: true, doneAt: 1000 },
+    { id: 'child-b', parentId: 'parent', text: '撰寫結論', done: true, doneAt: 2000 },
+    { id: 'standalone', text: '寄出信件', done: true, doneAt: 4000 }
+  ]);
+
+  assert.equal(records.length, 3, '兩個子任務與一個獨立任務應各算一次，主任務不可重複計數');
+  assert.deepEqual(records.map(record => record.item.id), ['standalone', 'child-b', 'child-a']);
+  assert.equal(records.find(record => record.item.id === 'child-a').parent.text, '期中報告', '子任務應保留所屬主任務脈絡');
+});

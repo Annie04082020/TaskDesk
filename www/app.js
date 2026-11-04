@@ -218,6 +218,29 @@
       return this.sanitizeRoutineCompletions(lists.flatMap(list => Array.isArray(list) ? list : []));
     },
 
+    // 歷史任務以「實際完成的工作節點」計數。當所有子任務完成而連帶
+    // 自動完成主任務時，主任務只作為脈絡，不另外成為一筆完成紀錄。
+    // 保留沒有完成子任務的獨立主任務，避免舊資料或手動紀錄被隱藏。
+    getCompletedTaskHistoryRecords(itemsList) {
+      if (!Array.isArray(itemsList)) return [];
+      const itemById = new Map(itemsList
+        .filter(item => item && typeof item.id === 'string')
+        .map(item => [item.id, item]));
+      const completed = itemsList.filter(item => item && item.done && Number.isFinite(item.doneAt) && item.doneAt > 0);
+      const parentsWithCompletedChildren = new Set(completed
+        .filter(item => item.parentId && itemById.has(item.parentId))
+        .map(item => item.parentId));
+
+      return completed
+        .filter(item => !parentsWithCompletedChildren.has(item.id))
+        .map(item => ({
+          item,
+          timestamp: item.doneAt,
+          parent: item.parentId ? itemById.get(item.parentId) || null : null
+        }))
+        .sort((a, b) => b.timestamp - a.timestamp);
+    },
+
     sanitizeLastFocusState(raw) {
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
       const taskId = typeof raw.taskId === 'string' ? raw.taskId.trim().slice(0, 120) : '';
@@ -3562,15 +3585,10 @@
   }
 
   function getCompletedTaskHistory() {
-    return items
-      .filter(item => item.done && item.doneAt)
-      .map(item => ({
-        item,
-        timestamp: item.doneAt,
-        parent: getParentItem(item),
-        typeId: getHistoryTaskTypeId(item)
-      }))
-      .sort((a, b) => b.timestamp - a.timestamp);
+    return SyncEngine.getCompletedTaskHistoryRecords(items)
+      .map(record => Object.assign(record, {
+        typeId: getHistoryTaskTypeId(record.item)
+      }));
   }
 
   function getHistoryTaskTypeId(item) {
@@ -3589,7 +3607,7 @@
 
   function getHistoryRelationText(record) {
     if (!record.parent) return '主任務';
-    return `子任務 · ${record.parent.text}`;
+    return `子任務 · 所屬「${record.parent.text}」`;
   }
 
   function getFilteredCompletedTaskHistory() {
@@ -3694,7 +3712,7 @@
         body.className = 'history-task-body';
         const name = document.createElement('span');
         name.className = 'history-task-name';
-        name.textContent = item.text;
+        name.textContent = record.parent ? `- ${item.text}` : item.text;
         const meta = document.createElement('span');
         meta.className = 'history-task-meta';
         meta.textContent = `${getHistoryRelationText(record)} · ${getHistoryTaskTypeName(record.typeId)}`;
@@ -3743,7 +3761,7 @@
         const detail = container.querySelector('.history-calendar-detail');
         const dayItems = byDay.get(Number(button.dataset.historyDay)) || [];
         detail.innerHTML = dayItems.length
-          ? dayItems.map(record => `<div class="history-task-row"><time>${formatHistoryTime(record.timestamp)}</time><div class="history-task-body"><span class="history-task-name">${escapeHtml(record.item.text)}</span><span class="history-task-meta">${escapeHtml(getHistoryRelationText(record))} · ${escapeHtml(getHistoryTaskTypeName(record.typeId))}</span></div></div>`).join('')
+          ? dayItems.map(record => `<div class="history-task-row"><time>${formatHistoryTime(record.timestamp)}</time><div class="history-task-body"><span class="history-task-name">${record.parent ? '- ' : ''}${escapeHtml(record.item.text)}</span><span class="history-task-meta">${escapeHtml(getHistoryRelationText(record))} · ${escapeHtml(getHistoryTaskTypeName(record.typeId))}</span></div></div>`).join('')
           : '這天沒有完成任務。';
       });
     });
