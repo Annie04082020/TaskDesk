@@ -122,18 +122,18 @@
     },
 
     getIsoWeekKey(date) {
-      const d = (date instanceof Date) ? new Date(date.valueOf()) : new Date();
-      if (isNaN(d.getTime())) return null;
-      const target = new Date(d.valueOf());
-      const dayNr = (d.getDay() + 6) % 7;
-      target.setDate(target.getDate() - dayNr + 3);
-      const firstThursday = target.valueOf();
-      target.setMonth(0, 1);
-      if (target.getDay() !== 4) {
-        target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
-      }
-      const weekNum = 1 + Math.ceil((firstThursday - target) / 604800000);
-      return `${target.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+      const local = date instanceof Date ? date : new Date();
+      if (!Number.isFinite(local.getTime())) return null;
+      // 用 UTC 計算本地日曆日期的週別，避免夏令時間改變一週的毫秒數。
+      const thursday = new Date(Date.UTC(local.getFullYear(), local.getMonth(), local.getDate()));
+      thursday.setUTCDate(thursday.getUTCDate() + 3 - (thursday.getUTCDay() + 6) % 7);
+      const year = thursday.getUTCFullYear();
+      const weekNum = Math.floor((thursday.getTime() - Date.UTC(year, 0, 1)) / 604800000) + 1;
+      return `${year}-W${String(weekNum).padStart(2, '0')}`;
+    },
+
+    isRoutineStopped(item, todayStr) {
+      return !!(item.isRoutine && item.routineEndDate && todayStr > item.routineEndDate);
     },
 
     resetRoutinesPure(itemsList, todayStr, currentWeekKey, timestamp = null) {
@@ -145,29 +145,37 @@
         let itemChanged = false;
         const copy = Object.assign({}, it);
 
+        if (this.isRoutineStopped(copy, todayStr)) {
+          if (!copy.isNow) return it;
+          changed = true;
+          return { ...copy, isNow: false };
+        }
+
         if (copy.routineCadence === 'weekly') {
-          // 每週習慣重設
-          if (copy.lastResetWeek !== currentWeekKey) {
-            copy.weeklyCompletedDates = this.sanitizeRoutineCompletions(copy.routineCompletions)
-              .map(entry => entry.date)
-              .filter(date => this.getIsoWeekKey(new Date(`${date}T12:00:00`)) === currentWeekKey);
-            copy.done = copy.weeklyCompletedDates.length >= (copy.weeklyTarget || 2);
+          const dates = this.getRoutineWeekDates(copy, currentWeekKey);
+          const done = dates.length >= (copy.weeklyTarget || 2);
+          if (copy.lastResetWeek !== currentWeekKey || copy.done !== done
+            || dates.join(',') !== (copy.weeklyCompletedDates || []).join(',')) {
+            copy.weeklyCompletedDates = dates;
+            copy.done = done;
             copy.doneAt = copy.done ? (copy.doneAt || now) : null;
             copy.lastResetWeek = currentWeekKey;
-            copy.updatedAt = now;
             itemChanged = true;
           }
         } else {
-          // 每日習慣重設
-          if (copy.lastResetDate !== todayStr) {
-            if (copy.done) {
-              copy.done = false;
-              copy.doneAt = null;
-            }
+          const entry = this.sanitizeRoutineCompletions(copy.routineCompletions).find(event => event.date === todayStr);
+          const done = !!entry || (!Array.isArray(copy.routineCompletions) && copy.lastResetDate === todayStr && !!copy.done);
+          if (copy.lastResetDate !== todayStr || copy.done !== done) {
+            copy.done = done;
+            copy.doneAt = done ? (entry?.completedAt || copy.doneAt || now) : null;
             copy.lastResetDate = todayStr;
-            copy.updatedAt = now;
             itemChanged = true;
           }
+        }
+
+        if (copy.done && copy.isNow) {
+          copy.isNow = false;
+          itemChanged = true;
         }
 
         if (itemChanged) {
@@ -218,6 +226,12 @@
       return this.sanitizeRoutineCompletions(lists.flatMap(list => Array.isArray(list) ? list : []));
     },
 
+    getRoutineWeekDates(item, weekKey) {
+      return this.sanitizeRoutineCompletions(item.routineCompletions)
+        .map(entry => entry.date)
+        .filter(date => this.getIsoWeekKey(new Date(`${date}T12:00:00`)) === weekKey);
+    },
+
     // 歷史任務以「實際完成的工作節點」計數。當所有子任務完成而連帶
     // 自動完成主任務時，主任務只作為脈絡，不另外成為一筆完成紀錄。
     // 保留沒有完成子任務的獨立主任務，避免舊資料或手動紀錄被隱藏。
@@ -226,7 +240,7 @@
       const itemById = new Map(itemsList
         .filter(item => item && typeof item.id === 'string')
         .map(item => [item.id, item]));
-      const completed = itemsList.filter(item => item && item.done && Number.isFinite(item.doneAt) && item.doneAt > 0);
+      const completed = itemsList.filter(item => item && !item.isRoutine && item.done && Number.isFinite(item.doneAt) && item.doneAt > 0);
       const parentsWithCompletedChildren = new Set(completed
         .filter(item => item.parentId && itemById.has(item.parentId))
         .map(item => item.parentId));
@@ -334,6 +348,9 @@
 
       // 習慣設定
       const isRoutine = !!raw.isRoutine;
+      const routineEndDate = isRoutine && typeof raw.routineEndDate === 'string'
+        && this.isValidDateString(raw.routineEndDate.trim()) ? raw.routineEndDate.trim() : null;
+      const routineEndDateUpdatedAt = parseTimestamp(raw.routineEndDateUpdatedAt);
       let routineTrigger = 'recharge';
       if (typeof raw.routineTrigger === 'string' && this.ALLOWED_ROUTINE_TRIGGERS.has(raw.routineTrigger.trim().toLowerCase())) {
         routineTrigger = raw.routineTrigger.trim().toLowerCase();
@@ -391,7 +408,7 @@
         updatedAt: updatedAt !== null ? updatedAt : (createdAt !== null ? createdAt : 0),
         deletedAt,
         deadline,
-        bucket,
+        bucket: isRoutine ? 'routine' : bucket,
         size,
         quadrant,
         manualQuadrant,
@@ -399,12 +416,14 @@
         isRoutine,
         routineTrigger,
         routineCadence,
+        routineEndDate,
+        routineEndDateUpdatedAt,
         lastResetDate,
         weeklyTarget,
         weeklyCompletedDates,
         lastResetWeek,
         routineCompletions,
-        parentId,
+        parentId: isRoutine ? null : parentId,
         projectId,
         typeId,
         typeSource,
@@ -424,7 +443,23 @@
           result.push(sanitized);
         }
       }
+      this.normalizeTaskRelations(result);
       return result;
+    },
+
+    normalizeTaskRelations(itemsList) {
+      const itemById = new Map(itemsList.map(item => [item.id, item]));
+      itemsList.forEach(item => {
+        if (item.isRoutine) {
+          item.bucket = 'routine';
+          item.parentId = null;
+          return;
+        }
+        if (!this.ALLOWED_BUCKETS.has(item.bucket)) item.bucket = 'inbox';
+        const parent = itemById.get(item.parentId);
+        if (parent && parent.isRoutine) item.parentId = null;
+        else if (parent && this.ALLOWED_BUCKETS.has(parent.bucket)) item.bucket = parent.bucket;
+      });
     },
 
     sanitizeMilestone(raw, generateIdFn = null) {
@@ -678,8 +713,8 @@
     },
 
     defaultTieBreaker(a, b) {
-      const strA = JSON.stringify([a.id, a.text, a.updatedAt, a.done, a.bucket]);
-      const strB = JSON.stringify([b.id, b.text, b.updatedAt, b.done, b.bucket]);
+      const strA = JSON.stringify([a.id, a.text, a.updatedAt, a.done, a.bucket, a.routineEndDate, a.routineEndDateUpdatedAt]);
+      const strB = JSON.stringify([b.id, b.text, b.updatedAt, b.done, b.bucket, b.routineEndDate, b.routineEndDateUpdatedAt]);
       if (strA > strB) return 1;
       if (strA < strB) return -1;
       return 0;
@@ -819,6 +854,8 @@
             olderObj.weeklyCompletedDates,
             newerObj.weeklyCompletedDates
           );
+          const endDateSource = (olderObj.routineEndDateUpdatedAt ?? 0) > (newerObj.routineEndDateUpdatedAt ?? 0)
+            ? olderObj : newerObj;
 
           const mergedItem = Object.assign({}, olderObj, newerObj, {
             id: localIt.id,
@@ -840,6 +877,8 @@
             weeklyCompletedDates: mergedWeeklyCompletedDates !== undefined ? mergedWeeklyCompletedDates : (newerObj.weeklyCompletedDates || olderObj.weeklyCompletedDates || []),
             lastResetWeek: newerObj.lastResetWeek || olderObj.lastResetWeek || null,
             routineCompletions: mergedRoutineCompletions,
+            routineEndDate: newerObj.isRoutine ? endDateSource.routineEndDate : null,
+            routineEndDateUpdatedAt: endDateSource.routineEndDateUpdatedAt,
             order: newerObj.order !== undefined ? newerObj.order : olderObj.order
           });
 
@@ -849,6 +888,7 @@
 
       // 4. 維護子任務與母任務狀態聯動
       const mergedList = Array.from(itemMap.values());
+      this.normalizeTaskRelations(mergedList);
       const parentMap = new Map();
       for (const it of mergedList) {
         if (!it.parentId) parentMap.set(it.id, it);
@@ -956,6 +996,7 @@
     setupPWA();
     renderAll();
     syncAndroidNotifications();
+    scheduleRoutineDayRefresh();
     checkLockOnStartup();
     checkStartupStatePrompt();
     if (window.location.hash === '#quick_capture' || window.location.search.includes('action=quick_capture')) {
@@ -1017,10 +1058,10 @@
     }
 
     function getNotificationSummary() {
-      const pending = items.filter(item => !item.done && item.bucket !== 'inbox' && item.bucket !== 'keep' && item.bucket !== 'release');
+      const pending = items.filter(item => !item.done && !item.isRoutine
+        && (item.bucket === 'today' || item.bucket === 'week'));
       const today = pending.filter(item => item.bucket === 'today');
       const week = pending.filter(item => item.bucket === 'week');
-      const routines = pending.filter(item => item.isRoutine);
       const now = new Date();
       const soon = pending.filter(item => {
         if (!item.deadline) return false;
@@ -1032,7 +1073,6 @@
       if (today.length) groups.push(`今日 ${today.length} 件`);
       if (week.length) groups.push(`本週 ${week.length} 件`);
       if (soon.length) groups.push(`快截止 ${soon.length} 件`);
-      if (routines.length) groups.push(`習慣 ${routines.length} 件`);
       const projectAlerts = projects.filter(project => {
         if (project.archived || !project.deadline) return false;
         const deadline = new Date(`${project.deadline}T23:59:59`);
@@ -1049,8 +1089,7 @@
       return groups.length ? groups.join('、') : '目前沒有需要提醒的任務';
     }
 
-    function getPendingRoutineNotification() {
-      const routines = items.filter(item => !item.done && item.isRoutine);
+    function getRoutineNotificationBody(routines) {
       if (routines.length === 0) return null;
       const names = routines.slice(0, 3).map(item => item.text);
       const extra = routines.length > names.length ? `，另 ${routines.length - names.length} 項` : '';
@@ -1065,20 +1104,70 @@
       return `今天尚餘：${names.join('、')}${extra}`;
     }
 
-  async function syncAndroidNotifications() {
+  const routineReminderWindow = 30;
+  const routineReminderBaseId = 920000;
+  const reminderSlots = 12;
+  let notificationSync = Promise.resolve();
+
+  function syncAndroidNotifications() {
+    notificationSync = notificationSync.then(scheduleAndroidNotifications);
+    return notificationSync;
+  }
+
+  function getRoutineReminderSchedule(times, now = new Date()) {
+    const today = getTodayDateStr(now);
+    const pending = items.filter(item => item.isRoutine && !item.done
+      && !SyncEngine.isRoutineStopped(item, today) && !hasRoutineCompletionOnDate(item, today));
+    const recurring = pending.filter(item => !item.routineEndDate);
+    const makeReminder = (id, body, schedule, time) => ({
+      id,
+      title: 'Task Desk 習慣提醒',
+      body,
+      schedule: { ...schedule, allowWhileIdle: true },
+      extra: { source: 'taskdesk-routines', time }
+    });
+    if (!times.length || !pending.length) return [];
+    if (recurring.length) {
+      const body = recurring.length === pending.length
+        ? getRoutineNotificationBody(recurring) : '到習慣庫查看待打卡的習慣';
+      return times.map((time, index) => {
+        const [hour, minute] = time.split(':').map(Number);
+        return makeReminder(routineReminderBaseId + index, body, { on: { hour, minute }, repeats: true }, time);
+      });
+    }
+    // 有停止日期的習慣使用單次提醒，避免 App 關閉時仍由系統無限重複。
+    const notifications = [];
+    for (let offset = 0; offset < routineReminderWindow; offset++) {
+      const date = new Date(now);
+      date.setDate(date.getDate() + offset);
+      const body = getRoutineNotificationBody(pending.filter(item => !SyncEngine.isRoutineStopped(item, getTodayDateStr(date))));
+      if (!body) break;
+      times.forEach((time, index) => {
+        const [hour, minute] = time.split(':').map(Number);
+        const at = new Date(date);
+        at.setHours(hour, minute, 0, 0);
+        if (at <= now) return;
+        notifications.push(makeReminder(routineReminderBaseId + offset * reminderSlots + index, body, { at }, time));
+      });
+    }
+    return notifications;
+  }
+
+  async function scheduleAndroidNotifications() {
       const plugin = getLocalNotificationsPlugin();
       if (!plugin) return;
       try {
-        const notificationIds = [910000, 920000, 930000].flatMap(base =>
-          Array.from({ length: 12 }, (_, index) => ({ id: base + index }))
+        const notificationIds = [910000, 930000].flatMap(base =>
+          Array.from({ length: reminderSlots }, (_, index) => ({ id: base + index }))
         );
+        notificationIds.push(...Array.from({ length: routineReminderWindow * reminderSlots },
+          (_, index) => ({ id: routineReminderBaseId + index })));
         await plugin.cancel({ notifications: notificationIds });
         if (!settings.notificationsEnabled) return;
         const permission = await plugin.checkPermissions();
         if (permission.display !== 'granted') return;
         const notificationGroups = [
           { baseId: 910000, times: settings.notificationTimes, title: 'Task Desk 工作桌摘要', body: getNotificationSummary(), source: 'daily-summary' },
-          { baseId: 920000, times: settings.routineNotificationTimes, title: 'Task Desk 每日習慣', body: getPendingRoutineNotification(), source: 'routines' },
           { baseId: 930000, times: settings.todayTaskNotificationTimes, title: 'Task Desk 今天剩餘任務', body: getTodayTasksNotification(), source: 'today-tasks' }
         ];
         const notifications = notificationGroups.flatMap(group => {
@@ -1094,6 +1183,7 @@
             };
           });
         });
+        notifications.push(...getRoutineReminderSchedule(settings.routineNotificationTimes));
         if (notifications.length) await plugin.schedule({ notifications });
       } catch (error) {
         console.error('排程 Android 通知失敗:', error);
@@ -1207,7 +1297,7 @@
   }
 
   function updateLastFocusState(item, note = '') {
-    if (!item || item.done || item.bucket === 'release') return;
+    if (!item || item.done || item.bucket === 'release' || isRoutineStopped(item)) return;
     lastFocusState = {
       taskId: item.id,
       note: typeof note === 'string' ? note.trim().slice(0, 600) : '',
@@ -1230,7 +1320,7 @@
       return null;
     }
     const item = items.find(candidate => candidate.id === lastFocusState.taskId);
-    if (!item || item.done || item.bucket === 'release') {
+    if (!item || item.done || item.bucket === 'release' || isRoutineStopped(item)) {
       clearLastFocusState();
       return null;
     }
@@ -1257,17 +1347,29 @@
     bar.style.display = 'flex';
   }
 
-  function getTodayDateStr() {
-    const d = new Date();
+  function getTodayDateStr(d = new Date()) {
     const pad = (n) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
+  function isRoutineStopped(item) {
+    return SyncEngine.isRoutineStopped(item, getTodayDateStr());
+  }
+
+  function setRoutineEndDate(item, value) {
+    const endDate = SyncEngine.isValidDateString(value) ? value : null;
+    if ((item.routineEndDate || null) === endDate) return;
+    item.routineEndDate = endDate;
+    item.routineEndDateUpdatedAt = Date.now();
+    item.updatedAt = item.routineEndDateUpdatedAt;
+  }
+
+  function getCompletedRootTasks() {
+    return items.filter(item => item.done && !item.parentId && !item.isRoutine);
+  }
+
   function getRoutineCompletionDatesForWeek(item, weekKey = getWeekKey(new Date())) {
-    const entries = SyncEngine.sanitizeRoutineCompletions(item.routineCompletions);
-    return entries
-      .map(entry => entry.date)
-      .filter(date => getWeekKey(new Date(`${date}T12:00:00`)) === weekKey);
+    return SyncEngine.getRoutineWeekDates(item, weekKey);
   }
 
   function hasRoutineCompletionOnDate(item, dateStr) {
@@ -1286,6 +1388,10 @@
       completions = completions.filter(entry => entry.date !== dateStr);
     }
     item.routineCompletions = SyncEngine.sanitizeRoutineCompletions(completions);
+    if (isCompleted) {
+      item.isNow = false;
+      clearLastFocusState(item.id);
+    }
 
     if (item.routineCadence === 'weekly') {
       const currentWeekKey = getWeekKey(new Date(`${dateStr}T12:00:00`));
@@ -1310,6 +1416,25 @@
       items = res.items;
       saveItems();
     }
+  }
+
+  let lastRoutineViewDate = getTodayDateStr();
+
+  function refreshRoutineDay() {
+    const today = getTodayDateStr();
+    if (lastRoutineViewDate === today) return;
+    lastRoutineViewDate = today;
+    renderAll();
+    const modal = document.getElementById('modalRoutines');
+    if (modal && modal.style.display === 'flex') renderRoutinesModal();
+    syncAndroidNotifications();
+  }
+
+  function scheduleRoutineDayRefresh() {
+    setTimeout(() => {
+      refreshRoutineDay();
+      scheduleRoutineDayRefresh();
+    }, getNextLocalDayStart() - Date.now() + 50);
   }
 
   function checkStartupStatePrompt() {
@@ -1460,7 +1585,6 @@
       if (saved) {
         const parsed = JSON.parse(saved);
         items = SyncEngine.sanitizeItems(parsed);
-        normalizeSubtaskBuckets();
         // 補齊可能缺失的動態屬性
         items.forEach(it => {
           if (!it.size) {
@@ -1484,7 +1608,7 @@
 
   function saveItems() {
     try {
-      normalizeSubtaskBuckets();
+      SyncEngine.normalizeTaskRelations(items);
       localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
       localStorage.setItem(STORAGE_KEY_TOMBSTONES, JSON.stringify(tombstones));
       syncToAndroidWidgets();
@@ -1513,7 +1637,7 @@
   }
 
   function getProjectItems(projectId) {
-        return items.filter(item => item.projectId === projectId);
+        return items.filter(item => !item.isRoutine && item.projectId === projectId);
   }
 
   function formatProjectMinutes(minutes) {
@@ -1767,7 +1891,7 @@
     placeholder.value = '';
     placeholder.textContent = '加入既有任務…';
     picker.appendChild(placeholder);
-    items.filter(item => !item.done && !item.projectId).slice(0, 100).forEach(item => {
+    items.filter(item => !item.done && !item.isRoutine && !item.projectId).slice(0, 100).forEach(item => {
       const option = document.createElement('option');
       option.value = item.id;
       option.textContent = item.text;
@@ -1779,7 +1903,7 @@
     add.textContent = '加入專案';
     add.addEventListener('click', () => {
       const item = items.find(candidate => candidate.id === picker.value);
-      if (!item) return;
+      if (!item || item.isRoutine) return;
       item.projectId = project.id;
       item.deadline = item.deadline || project.deadline || null;
       item.updatedAt = Date.now();
@@ -1878,18 +2002,6 @@
         closeProjectForm();
         renderProjects();
         modal.style.display = 'flex';
-  }
-
-  // 子任務的工作桌位置跟隨主任務；只有耗時與執行屬性可獨立設定。
-  function normalizeSubtaskBuckets() {
-    const itemMap = new Map(items.map(item => [item.id, item]));
-    items.forEach(item => {
-      if (!item.parentId) return;
-      const parent = itemMap.get(item.parentId);
-      if (parent && SyncEngine.ALLOWED_BUCKETS.has(parent.bucket)) {
-        item.bucket = parent.bucket;
-      }
-    });
   }
 
   // 同步任務資料至 Android 原生小工具 (Widgets)
@@ -2149,20 +2261,11 @@
   function getWeekCompletedCount() {
     const now = new Date();
     const currentWeekKey = getWeekKey(now);
-    return items.filter(it => it.done && !it.parentId && it.doneAt && getWeekKey(new Date(it.doneAt)) === currentWeekKey).length;
+    return getCompletedRootTasks().filter(it => it.doneAt && getWeekKey(new Date(it.doneAt)) === currentWeekKey).length;
   }
 
   function getWeekKey(date) {
-    const target = new Date(date.valueOf());
-    const dayNr = (date.getDay() + 6) % 7;
-    target.setDate(target.getDate() - dayNr + 3);
-    const firstThursday = target.valueOf();
-    target.setMonth(0, 1);
-    if (target.getDay() !== 4) {
-      target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
-    }
-    const weekNum = 1 + Math.ceil((firstThursday - target) / 604800000);
-    return `${target.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+    return SyncEngine.getIsoWeekKey(date);
   }
 
   function getWeekDateRangeStr(weekKey) {
@@ -2283,8 +2386,8 @@
   }
 
   // --- 核心業務邏輯：新增項目 ---
-  async function addItemsToInbox(rawTexts, explicitSize, explicitQuadrant, explicitDeadline) {
-    if (!rawTexts || rawTexts.length === 0) return;
+  function addItemsToInbox(rawTexts, explicitSize, explicitQuadrant, explicitDeadline) {
+    if (!rawTexts || rawTexts.length === 0) return [];
 
     const newItems = [];
     let currentParentItem = null;
@@ -2318,14 +2421,16 @@
       }
 
       let isRoutine = isCaptureRoutineActive;
-      if (/#routine\b/i.test(text) || /#習慣\b/.test(text)) {
+      if (/#routine\b/i.test(text) || /#習慣(?=\s|$)/.test(text)) {
         isRoutine = true;
-        text = text.replace(/#routine\b/i, '').replace(/#習慣\b/, '').trim();
+        text = text.replace(/#routine\b/i, '').replace(/#習慣(?=\s|$)/, '').trim();
       }
+      if (!text.trim()) continue;
 
       // 判定是否作為子任務放入 currentParentItem
-      const parentIdToUse = (isSubtask && currentParentItem) ? currentParentItem.id : null;
-      const targetBucket = (parentIdToUse && currentParentItem) ? currentParentItem.bucket : (isRoutine ? 'keep' : 'inbox');
+      const parentIdToUse = (isSubtask && currentParentItem && !currentParentItem.isRoutine && !isRoutine)
+        ? currentParentItem.id : null;
+      const targetBucket = isRoutine ? 'routine' : (parentIdToUse ? currentParentItem.bucket : 'inbox');
 
       // 立即使用本機關鍵字備案作為初值
       const keywordGuessedType = guessTypeByKeywords(text);
@@ -2353,10 +2458,11 @@
         routineCadence: isRoutine ? 'daily' : null,
         lastResetDate: isRoutine ? getTodayDateStr() : null
       };
+      if (isRoutine && isDone) updateRoutineCompletion(item, true);
       items.push(item);
       newItems.push(item);
 
-      if (!parentIdToUse) {
+      if (!isSubtask || !currentParentItem) {
         currentParentItem = item;
       }
     }
@@ -2365,12 +2471,13 @@
     renderAll();
     const projectModal = document.getElementById('modalProjects');
     if (projectModal && projectModal.style.display !== 'none') renderProjects();
+    return newItems;
   }
 
   // 明確指定某項目為「現在做這個」（清除其他現在，並自動移入有效工作桌）
   function setAsNow(itemId) {
     const item = items.find(it => it.id === itemId);
-    if (!item) return;
+    if (!item || item.done || isRoutineStopped(item)) return;
 
     items.forEach(it => {
       it.isNow = false;
@@ -2379,7 +2486,7 @@
     item.updatedAt = Date.now();
 
     // 子任務沿用母任務工作桌；獨立推薦不會解除兩者的關聯。
-    if (item.bucket !== 'today' && item.bucket !== 'week') {
+    if (!item.isRoutine && item.bucket !== 'today' && item.bucket !== 'week') {
       const parent = getParentItem(item);
       item.bucket = parent && parent.bucket
         ? parent.bucket
@@ -2393,7 +2500,7 @@
   // --- 分堆與狀態移動 ---
   function moveItemBucket(itemId, targetBucket) {
     const item = items.find(it => it.id === itemId);
-    if (!item) return;
+    if (!item || item.isRoutine || !SyncEngine.ALLOWED_BUCKETS.has(targetBucket)) return;
 
     item.updatedAt = Date.now();
     const itemSize = item.size || guessSize(item.text, item.typeId);
@@ -2447,7 +2554,7 @@
   // 切換「現在做這個」（全域最多一個）
   function toggleItemNow(itemId) {
     const item = items.find(it => it.id === itemId);
-    if (!item) return;
+    if (!item || isRoutineStopped(item)) return;
 
     if (item.isNow) {
       if (activeFocusTaskId === item.id) updateLastFocusState(item, kairosSession.pauseResumeNote);
@@ -2460,7 +2567,7 @@
       item.isNow = true;
 
       // 若該項目不在「今日」也不在「這週」，移入當前開啟的工作桌
-      if (item.bucket !== 'today' && item.bucket !== 'week') {
+      if (!item.isRoutine && item.bucket !== 'today' && item.bucket !== 'week') {
         const parent = getParentItem(item);
         const targetBucket = parent && parent.bucket
           ? parent.bucket
@@ -2504,7 +2611,7 @@
   // 完成與反完成切換
   function toggleItemDone(itemId, isChecked) {
     const item = items.find(it => it.id === itemId);
-    if (!item) return;
+    if (!item || isRoutineStopped(item)) return;
 
     const cardEl = document.querySelector(`[data-card-id="${itemId}"]`);
     if (cardEl) {
@@ -2512,6 +2619,10 @@
     }
 
     setTimeout(() => {
+      if (isRoutineStopped(item)) {
+        renderAll();
+        return;
+      }
       let routineProgress = null;
       if (item.isRoutine) {
         // 不論從卡片、泡泡或 Kairos 完成，都寫入同一份可同步的習慣足跡。
@@ -2587,7 +2698,7 @@
     const item = items.find(candidate => candidate.id === itemId);
     const modal = document.getElementById('modalCompletionTime');
     const input = document.getElementById('completionTimeInput');
-    if (!item || !item.done || !modal || !input) return;
+    if (!item || item.isRoutine || !item.done || !modal || !input) return;
     document.getElementById('completionTimeItemId').value = item.id;
     document.getElementById('completionTimeTaskName').textContent = item.text;
     input.value = formatDateTimeLocal(item.doneAt || Date.now());
@@ -2606,7 +2717,7 @@
     const value = document.getElementById('completionTimeInput').value;
     const item = items.find(candidate => candidate.id === itemId);
     const timestamp = Date.parse(value);
-    if (!item || !item.done || !Number.isFinite(timestamp)) {
+    if (!item || item.isRoutine || !item.done || !Number.isFinite(timestamp)) {
       showToast('請選擇有效的完成日期與時間');
       return;
     }
@@ -2645,7 +2756,7 @@
   function addSubtask(parentId, subText) {
     if (!subText || !subText.trim()) return;
     const parent = items.find(it => it.id === parentId);
-    if (!parent) return;
+    if (!parent || parent.isRoutine) return;
 
     items.push({
       id: generateId(),
@@ -3492,14 +3603,8 @@
     // 1. 常規與習慣完成統計
     const habitCountsByDate = {};
     const habitNamesByDate = {};
-    items.filter(it => it.isRoutine).forEach(r => {
-      // 新版以不會被 reset 清除的完成事件繪製；舊資料仍退回既有欄位相容。
-      let completionDates = SyncEngine.sanitizeRoutineCompletions(r.routineCompletions).map(entry => entry.date);
-      if (completionDates.length === 0) {
-        completionDates = Array.isArray(r.weeklyCompletedDates) ? r.weeklyCompletedDates.slice() : [];
-        if (r.routineCadence !== 'weekly' && r.done && r.lastResetDate) completionDates.push(r.lastResetDate);
-      }
-      Array.from(new Set(completionDates)).forEach(d => {
+    items.forEach(r => {
+      SyncEngine.sanitizeRoutineCompletions(r.routineCompletions).forEach(({ date: d }) => {
         habitCountsByDate[d] = (habitCountsByDate[d] || 0) + 1;
         if (!habitNamesByDate[d]) habitNamesByDate[d] = [];
         if (!habitNamesByDate[d].includes(r.text)) habitNamesByDate[d].push(r.text);
@@ -4307,7 +4412,7 @@
         card.classList.remove('drag-over');
         const source = items.find(candidate => candidate.id === draggedId.value);
         const target = items.find(candidate => candidate.id === item.id);
-        if (!source || !target || source.id === target.id) return;
+        if (!source || source.isRoutine || !target || source.id === target.id) return;
         const ordered = items
           .filter(candidate => candidate.bucket === bucket && !candidate.parentId && !candidate.done)
           .sort((a, b) => {
@@ -4337,7 +4442,7 @@
       if (event.target.closest('.task-card')) return;
       event.preventDefault();
       const source = items.find(candidate => candidate.id === draggedId.value);
-      if (!source) return;
+      if (!source || source.isRoutine) return;
       const ordered = items
         .filter(candidate => candidate.bucket === bucket && !candidate.parentId && !candidate.done && candidate.id !== source.id)
         .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
@@ -5013,7 +5118,7 @@
       if (keepItems.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'empty-neutral';
-        empty.textContent = '保溫抽屜目前是空的。可將定期習慣或維持型事項移至此抽屜。';
+        empty.textContent = '保溫抽屜目前是空的。可將維持型事項移至此抽屜。';
         listEl.appendChild(empty);
       } else {
         keepItems.forEach(it => listEl.appendChild(createCardElement(it, 'keep')));
@@ -5029,7 +5134,7 @@
         releaseItems.forEach(it => listEl.appendChild(createCardElement(it, 'release')));
       }
     } else if (currentDrawer === 'history') {
-      const doneItems = items.filter(it => it.done && !it.parentId);
+      const doneItems = getCompletedRootTasks();
       doneItems.sort((a, b) => (b.doneAt || b.updatedAt || 0) - (a.doneAt || a.updatedAt || 0));
       if (doneItems.length === 0) {
         const empty = document.createElement('div');
@@ -5046,7 +5151,7 @@
     const inboxCount = items.filter(it => it.bucket === 'inbox' && !it.parentId && !it.done).length;
     const keepCount = items.filter(it => it.bucket === 'keep' && !it.parentId && !it.done).length;
     const releaseCount = items.filter(it => it.bucket === 'release' && !it.parentId && !it.done).length;
-    const historyCount = items.filter(it => it.done && !it.parentId).length;
+    const historyCount = getCompletedRootTasks().length;
 
     const dInbox = document.getElementById('dockBadgeInbox');
     const dKeep = document.getElementById('dockBadgeKeep');
@@ -5620,7 +5725,7 @@
     container.innerHTML = '';
 
     // 依篩選範圍挑選項目
-    let filteredItems = items.filter(it => !it.done && !it.parentId);
+    let filteredItems = items.filter(it => !it.done && !it.parentId && !it.isRoutine);
     if (activeMatrixScope === 'today') {
       filteredItems = filteredItems.filter(it => it.bucket === 'today');
     } else if (activeMatrixScope === 'week') {
@@ -5819,7 +5924,7 @@
   function runAutoDecideTask() {
     // 優先挑選未完成之活躍項目 (今日 > 這週 > 保溫)
     const activeItems = items.filter(it => {
-      if (it.done) return false;
+      if (it.done || it.isRoutine) return false;
       if (!it.parentId) return true;
       const parent = getParentItem(it);
       return !!parent && !parent.done;
@@ -6235,9 +6340,8 @@
     const item = pick.item;
 
     if (item.isRoutine) {
-      item.bucket = 'today';
       setAsNow(item.id);
-      showToast(`已將習慣「${item.text}」移至今日並聚焦現在！`);
+      showToast(`已聚焦習慣「${item.text}」`);
     } else {
       setAsNow(item.id);
       showToast(`已採納推薦，聚焦「${item.text}」！`);
@@ -6270,6 +6374,22 @@
   function checkAndRenderHabitBubble() {
     const container = document.getElementById('habitBubbleContainer');
     if (!container) return;
+    activeHabitBubbleItem = null;
+    const action = document.getElementById('btnHabitBubbleStart');
+    const dismiss = document.getElementById('btnHabitBubbleDismiss');
+    const nowItem = items.find(it => it.isNow && !it.done);
+    const focusedRoutine = nowItem?.isRoutine && !settings.focusLockEnabled;
+    action.textContent = focusedRoutine ? '完成' : '開工';
+    action.title = focusedRoutine ? '記錄習慣打卡' : '立即開工專注';
+    dismiss.title = focusedRoutine ? '取消專注' : '今日收起不再提醒';
+    dismiss.setAttribute('aria-label', focusedRoutine ? '取消專注' : '收起');
+    if (focusedRoutine) {
+      activeHabitBubbleItem = nowItem;
+      document.getElementById('habitBubbleTitle').textContent = nowItem.text;
+      document.getElementById('habitBubbleMeta').textContent = '正在做';
+      container.style.display = 'flex';
+      return;
+    }
 
     const todayStr = getTodayDateStr();
     if (currentUserState.dismissedHabitBubbleDate === todayStr) {
@@ -6277,13 +6397,13 @@
       return;
     }
 
-    const nowItem = items.find(it => it.isNow && !it.done);
     if (nowItem) {
       container.style.display = 'none';
       return;
     }
 
-    const routines = items.filter(it => it.isRoutine && !it.parentId);
+    const routines = items.filter(it => it.isRoutine && !it.done
+      && !isRoutineStopped(it) && !hasRoutineCompletionOnDate(it, todayStr));
     if (routines.length === 0) {
       container.style.display = 'none';
       return;
@@ -6314,7 +6434,6 @@
       }
 
       if (matchScore > 0) {
-        if (!r.done) matchScore += 15;
         matches.push({ item: r, score: matchScore, reason: matchReason });
       }
     });
@@ -6346,6 +6465,14 @@
   // --- 任務屬性詳細設定視窗 (Task Properties Modal: 死線、習慣、預估時間) ---
   let editingPropertyItemId = null;
 
+  function updateItemPropertyRoutineFields() {
+    const isRoutine = document.getElementById('propTaskIsRoutine').checked;
+    document.getElementById('propRoutineTriggerGroup').style.display = isRoutine ? 'block' : 'none';
+    document.getElementById('propTaskParentGroup').style.display = isRoutine ? 'none' : 'block';
+    document.getElementById('propTaskBucketGroup').style.display = isRoutine ? 'none' : 'block';
+    document.getElementById('propTaskBucket').disabled = isRoutine || !!document.getElementById('propTaskParent').value;
+  }
+
   function openItemPropertiesModal(itemId) {
     const item = items.find(it => it.id === itemId);
     if (!item) return;
@@ -6356,12 +6483,10 @@
     const subTitle = document.getElementById('propTaskSubtitle');
     const inputDeadline = document.getElementById('propTaskDeadline');
     const selBucket = document.getElementById('propTaskBucket');
-    const parentGroup = document.getElementById('propTaskParentGroup');
     const selParent = document.getElementById('propTaskParent');
     const parentHint = document.getElementById('propTaskParentHint');
     const relationHint = document.getElementById('propTaskRelationHint');
     const chkRoutine = document.getElementById('propTaskIsRoutine');
-    const triggerGroup = document.getElementById('propRoutineTriggerGroup');
     const selTrigger = document.getElementById('propTaskRoutineTrigger');
     const selSize = document.getElementById('propTaskSize');
 
@@ -6369,7 +6494,6 @@
     if (subTitle) subTitle.textContent = item.text || '';
     if (inputDeadline) inputDeadline.value = item.deadline || '';
     const parent = item.parentId ? getParentItem(item) : null;
-    if (parentGroup) parentGroup.style.display = 'block';
     if (parentHint) {
       parentHint.textContent = getSubtasks(item.id).length > 0
         ? '改為小任務時，原本的子任務會一併移到新的大任務下。'
@@ -6384,7 +6508,7 @@
       selParent.appendChild(independentOption);
       // 所有工作桌都可作為主任務來源；唯一條件是尚未完成且本身不是子任務。
       const parentCandidates = items
-        .filter(candidate => !candidate.done && !candidate.parentId && candidate.id !== item.id)
+        .filter(candidate => !candidate.isRoutine && !candidate.done && !candidate.parentId && candidate.id !== item.id)
         .sort((a, b) => String(a.text || '').localeCompare(String(b.text || '')));
       parentCandidates.forEach(candidate => {
           const option = document.createElement('option');
@@ -6403,22 +6527,20 @@
       // Android WebView 對動態 option 的 selected 屬性不穩定，最後明確指定目前值。
       selParent.value = parent && !parent.done ? parent.id : '';
       if (selParent.selectedIndex < 0) selParent.selectedIndex = 0;
-      selParent.onchange = () => {
-        if (selBucket) selBucket.disabled = !!selParent.value;
-      };
+      selParent.onchange = updateItemPropertyRoutineFields;
     }
     if (selBucket) {
-      selBucket.value = parent ? (parent.bucket || 'inbox') : (item.bucket || 'inbox');
-      selBucket.disabled = !!parent;
+      selBucket.value = item.isRoutine ? 'inbox' : ((parent || item).bucket || 'inbox');
     }
     if (relationHint) {
       relationHint.textContent = parent
-        ? '子任務可獨立設定耗時、截止死線與習慣；安排時段及四象限沿用主任務。'
+        ? '子任務沿用主任務的時段與四象限。設為習慣後會移入習慣庫。'
         : '';
       relationHint.style.display = parent ? 'block' : 'none';
     }
     if (chkRoutine) chkRoutine.checked = !!item.isRoutine;
-    if (triggerGroup) triggerGroup.style.display = item.isRoutine ? 'block' : 'none';
+    document.getElementById('propRoutineEndDate').value = item.routineEndDate || '';
+    updateItemPropertyRoutineFields();
     if (selTrigger) selTrigger.value = item.routineTrigger || 'recharge';
     if (selSize) selSize.value = item.size || 'micro';
 
@@ -6446,6 +6568,18 @@
     const chkRoutine = document.getElementById('propTaskIsRoutine');
     const selTrigger = document.getElementById('propTaskRoutineTrigger');
     const selSize = document.getElementById('propTaskSize');
+    const wasRoutine = item.isRoutine;
+    const isRoutine = !!chkRoutine?.checked;
+    const endDateInput = document.getElementById('propRoutineEndDate');
+    const endDate = endDateInput.value;
+    if (isRoutine && (endDateInput.validity.badInput || (endDate && !SyncEngine.isValidDateString(endDate)))) {
+      showToast('請輸入有效的停止日期');
+      return;
+    }
+    if (isRoutine && getSubtasks(item.id).length) {
+      showToast('請先調整子任務的歸屬，再將此任務設為習慣');
+      return;
+    }
 
     const newText = inputTitle ? inputTitle.value.trim() : '';
     if (newText) {
@@ -6456,9 +6590,9 @@
     item.deadline = newDeadline || null;
     const oldParent = getParentItem(item);
     if (selParent) {
-      const requestedParentId = selParent.value || null;
+      const requestedParentId = isRoutine ? null : selParent.value || null;
       const requestedParent = requestedParentId
-        ? items.find(candidate => candidate.id === requestedParentId && !candidate.done && !candidate.parentId)
+        ? items.find(candidate => candidate.id === requestedParentId && !candidate.isRoutine && !candidate.done && !candidate.parentId)
         : null;
       if (requestedParent && getSubtasks(item.id).length > 0) {
         // TaskDesk 僅呈現一層子任務：改掛時把既有子任務平鋪到新的主任務下。
@@ -6478,12 +6612,18 @@
       item.bucket = newParent.bucket;
     }
 
-    const isRoutine = chkRoutine ? chkRoutine.checked : false;
     item.isRoutine = isRoutine;
+    if (isRoutine !== !!wasRoutine) {
+      item.done = false;
+      item.doneAt = null;
+      item.isNow = false;
+    }
+    setRoutineEndDate(item, isRoutine ? endDate : '');
     if (isRoutine) {
       item.routineTrigger = selTrigger ? selTrigger.value : 'recharge';
-      item.routineCadence = 'daily';
-      if (!item.lastResetDate) item.lastResetDate = getTodayDateStr();
+      if (!wasRoutine) item.routineCadence = 'daily';
+      item.lastResetDate = null;
+      item.lastResetWeek = null;
     } else {
       item.routineTrigger = null;
     }
@@ -6495,7 +6635,6 @@
     item.updatedAt = Date.now();
     reconcileParentCompletion(oldParent);
     if (!oldParent || oldParent.id !== (newParent && newParent.id)) reconcileParentCompletion(newParent);
-    normalizeSubtaskBuckets();
     saveItems();
     renderAll();
     closeItemPropertiesModal();
@@ -6504,6 +6643,7 @@
 
   // --- 每日習慣庫視窗管理 (Routines Management) ---
   function openRoutinesModal() {
+    checkAndResetRoutines();
     renderRoutinesModal();
     const modal = document.getElementById('modalRoutines');
     if (modal) modal.style.display = 'flex';
@@ -6533,6 +6673,8 @@
     };
 
     routines.forEach(r => {
+      const stopped = isRoutineStopped(r);
+      const completedToday = hasRoutineCompletionOnDate(r, getTodayDateStr());
       const row = document.createElement('div');
       row.className = 'routine-item-row';
 
@@ -6543,7 +6685,7 @@
       title.className = 'routine-item-title routine-item-title-editable';
       title.textContent = r.text;
       title.title = '點擊可修改習慣名稱';
-      if (r.done) {
+      if (!stopped && r.done) {
         title.style.textDecoration = 'line-through';
         title.style.opacity = '0.55';
       }
@@ -6588,18 +6730,16 @@
         const val = e.target.value;
         if (val === 'daily') {
           r.routineCadence = 'daily';
+          r.lastResetDate = null;
         } else if (val.startsWith('weekly_')) {
           r.routineCadence = 'weekly';
           r.weeklyTarget = parseInt(val.split('_')[1], 10) || 2;
-          if (!Array.isArray(r.weeklyCompletedDates)) r.weeklyCompletedDates = [];
-          if (!r.lastResetWeek) r.lastResetWeek = getWeekKey(new Date());
-          r.weeklyCompletedDates = getRoutineCompletionDatesForWeek(r);
-          r.done = r.weeklyCompletedDates.length >= r.weeklyTarget;
+          r.lastResetWeek = null;
         }
         r.updatedAt = Date.now();
         saveItems();
-        renderRoutinesModal();
         renderAll();
+        renderRoutinesModal();
         showToast(`已調整「${r.text}」頻率`);
       });
 
@@ -6624,21 +6764,40 @@
         r.routineTrigger = e.target.value;
         r.updatedAt = Date.now();
         saveItems();
-        if (typeof renderAmbientSuggestion === 'function') renderAmbientSuggestion();
+        renderAll();
         showToast(`已將「${r.text}」推薦時機調整為：${triggerLabels[r.routineTrigger] || '任意時段'}`);
       });
 
+      const endLabel = document.createElement('label');
+      endLabel.textContent = '停止日期 ';
+      const endInput = document.createElement('input');
+      endInput.type = 'date';
+      endInput.className = 'routine-select-inline';
+      endInput.value = r.routineEndDate || '';
+      endInput.title = '這天仍可打卡，隔天停止重複。清空可繼續重複。';
+      endInput.addEventListener('change', () => {
+        if (endInput.validity.badInput || (endInput.value && !SyncEngine.isValidDateString(endInput.value))) {
+          endInput.value = r.routineEndDate || '';
+          showToast('請輸入有效的停止日期');
+          return;
+        }
+        setRoutineEndDate(r, endInput.value);
+        saveItems();
+        renderAll();
+        renderRoutinesModal();
+      });
+      endLabel.appendChild(endInput);
+
       const statusSpan = document.createElement('span');
-      if (r.routineCadence === 'weekly') {
-        const count = getRoutineCompletionDatesForWeek(r).length;
-        const target = r.weeklyTarget || 2;
-        statusSpan.textContent = `· 本週 ${count}/${target} 次${r.done ? ' (已達成)' : ''}`;
-      } else {
-        statusSpan.textContent = `· 今日${r.done ? '已完成' : '待命推薦'}`;
-      }
+      const dates = getRoutineCompletionDatesForWeek(r);
+      const count = r.routineCadence === 'weekly' ? `${dates.length}/${r.weeklyTarget || 2}` : dates.length;
+      const dayLabels = dates.map(date => new Date(`${date}T12:00:00`).toLocaleDateString('zh-TW', { weekday: 'short' }));
+      const status = stopped ? '已停止' : (completedToday ? '今日已打卡' : '今日尚未打卡');
+      statusSpan.textContent = `${status} · 本週 ${count} 次${dayLabels.length ? `（${dayLabels.join('、')}）` : ''}`;
 
       meta.appendChild(selectCadence);
       meta.appendChild(selectTrigger);
+      meta.appendChild(endLabel);
       meta.appendChild(statusSpan);
 
       info.appendChild(title);
@@ -6649,9 +6808,11 @@
 
       const btnToggle = document.createElement('button');
       btnToggle.className = 'btn-triage';
+      btnToggle.disabled = stopped || (r.routineCadence === 'weekly' && completedToday);
       if (r.routineCadence === 'weekly') {
         btnToggle.textContent = '+1 完成';
         btnToggle.addEventListener('click', () => {
+          if (isRoutineStopped(r)) return;
           const todayStr = getTodayDateStr();
           if (hasRoutineCompletionOnDate(r, todayStr)) {
             showToast(`「${r.text}」今天已記錄，明天可以再累積一次`);
@@ -6666,9 +6827,10 @@
           showToast(`「${r.text}」本週 ${count}/${target}${count > target ? ' · 超額推進' : ''}`);
         });
       } else {
-        btnToggle.textContent = r.done ? '重設' : '完成';
+        btnToggle.textContent = completedToday ? '取消今日打卡' : '完成';
         btnToggle.addEventListener('click', () => {
-          const completed = !r.done;
+          if (isRoutineStopped(r)) return;
+          const completed = !hasRoutineCompletionOnDate(r, getTodayDateStr());
           updateRoutineCompletion(r, completed);
           r.updatedAt = Date.now();
           saveItems();
@@ -6680,12 +6842,17 @@
 
       const btnDoNow = document.createElement('button');
       btnDoNow.className = 'btn-triage';
-      btnDoNow.textContent = '現在做';
+      btnDoNow.textContent = r.isNow ? '取消專注' : '現在做';
+      btnDoNow.disabled = stopped || (!r.isNow && (r.done || completedToday));
       btnDoNow.addEventListener('click', () => {
+        if (r.isNow) {
+          toggleItemNow(r.id);
+          renderRoutinesModal();
+          return;
+        }
+        if (isRoutineStopped(r)) return;
         closeRoutinesModal();
-        r.bucket = 'today';
         setAsNow(r.id);
-        renderAll();
         showToast(`已將習慣「${r.text}」設為現在！`);
       });
 
@@ -6711,13 +6878,13 @@
     });
   }
 
-  function addRoutine(text, trigger = 'recharge', cadence = 'daily', weeklyTarget = 2) {
+  function addRoutine(text, trigger = 'recharge', cadence = 'daily', weeklyTarget = 2, endDate = '') {
     if (!text || !text.trim()) return;
     const item = {
       id: generateId(),
       text: text.trim(),
       size: 'micro',
-      bucket: 'keep', // 平時收納，不干擾主工作桌
+      bucket: 'routine',
       isNow: false,
       done: false,
       doneAt: null,
@@ -6739,6 +6906,7 @@
       lastResetDate: getTodayDateStr(),
       lastResetWeek: getWeekKey(new Date())
     };
+    setRoutineEndDate(item, endDate);
     items.push(item);
     saveItems();
     renderRoutinesModal();
@@ -6753,7 +6921,7 @@
     if (!listArea) return;
     listArea.innerHTML = '';
 
-    const completedItems = items.filter(it => it.done && !it.parentId);
+    const completedItems = getCompletedRootTasks();
     if (completedItems.length === 0) {
       const emptyMsg = document.createElement('div');
       emptyMsg.className = 'empty-neutral';
@@ -6975,7 +7143,7 @@
     if (!listEl) return;
 
     listEl.innerHTML = '';
-    const completedItems = items.filter(it => it.done && !it.parentId);
+    const completedItems = getCompletedRootTasks();
     if (badgeEl) badgeEl.textContent = completedItems.length;
 
     if (completedItems.length === 0) {
@@ -6996,7 +7164,7 @@
 
   // 匯出歷史封存檔案為 Markdown
   function exportHistoryMarkdown() {
-    const completedItems = items.filter(it => it.done && !it.parentId);
+    const completedItems = getCompletedRootTasks();
     if (completedItems.length === 0) {
       showToast('目前尚無完成任務可供匯出');
       return;
@@ -7045,7 +7213,7 @@
 
   // 匯出歷史封存檔案為 JSON
   function exportHistoryJson() {
-    const completedItems = items.filter(it => it.done && !it.parentId);
+    const completedItems = getCompletedRootTasks();
     if (completedItems.length === 0) {
       showToast('目前尚無完成任務可供匯出');
       return;
@@ -8091,7 +8259,7 @@
       if (!raw || !raw.trim()) return;
       const parsed = parseBatchInput(raw);
       if (parsed.length > 0) {
-        addItemsToInbox(parsed, selectedCaptureSize, null, selectedCaptureDeadline);
+        const added = addItemsToInbox(parsed, selectedCaptureSize, null, selectedCaptureDeadline);
         inputCapture.value = '';
         if (inputDeadline) {
           inputDeadline.value = '';
@@ -8109,10 +8277,13 @@
             btnToggleRoutine.style.borderColor = '';
           }
           if (routineBadgeText) routineBadgeText.textContent = '習慣';
-          showToast(`已建立每日習慣（共 ${parsed.length} 件）！將於時機契合時自動浮出推薦`);
-        } else {
-          showToast(`已存入收集箱（共 ${parsed.length} 件）。點擊底座抽屜即可挑選移至工作桌！`);
         }
+        const routineCount = added.filter(item => item.isRoutine).length;
+        const taskCount = added.length - routineCount;
+        const destinations = [];
+        if (routineCount) destinations.push(`習慣庫 ${routineCount} 項`);
+        if (taskCount) destinations.push(`收集箱 ${taskCount} 件`);
+        if (destinations.length) showToast(`已存入${destinations.join('、')}`);
       }
     };
 
@@ -8429,11 +8600,8 @@
     if (btnHabitBubbleStart) {
       btnHabitBubbleStart.addEventListener('click', () => {
         if (activeHabitBubbleItem) {
-          activeHabitBubbleItem.bucket = 'today';
-          setAsNow(activeHabitBubbleItem.id);
-          const container = document.getElementById('habitBubbleContainer');
-          if (container) container.style.display = 'none';
-          renderAll();
+          if (activeHabitBubbleItem.isNow) toggleItemDone(activeHabitBubbleItem.id, true);
+          else setAsNow(activeHabitBubbleItem.id);
         }
       });
     }
@@ -8441,6 +8609,10 @@
     const btnHabitBubbleDismiss = document.getElementById('btnHabitBubbleDismiss');
     if (btnHabitBubbleDismiss) {
       btnHabitBubbleDismiss.addEventListener('click', () => {
+        if (activeHabitBubbleItem?.isNow) {
+          toggleItemNow(activeHabitBubbleItem.id);
+          return;
+        }
         currentUserState.dismissedHabitBubbleDate = getTodayDateStr();
         saveUserState();
         const container = document.getElementById('habitBubbleContainer');
@@ -8495,6 +8667,7 @@
     const inputNewRoutineText = document.getElementById('inputNewRoutineText');
     const selectRoutineTrigger = document.getElementById('selectRoutineTrigger');
     const selectRoutineCadence = document.getElementById('selectRoutineCadence');
+    const inputNewRoutineEndDate = document.getElementById('inputNewRoutineEndDate');
 
     if (btnAddRoutine && inputNewRoutineText) {
       const handleAddRoutine = () => {
@@ -8508,8 +8681,14 @@
           weeklyTarget = parseInt(cadenceVal.split('_')[1], 10) || 2;
         }
         if (text && text.trim()) {
-          addRoutine(text, trigger, cadence, weeklyTarget);
+          if (inputNewRoutineEndDate.validity.badInput
+            || (inputNewRoutineEndDate.value && !SyncEngine.isValidDateString(inputNewRoutineEndDate.value))) {
+            showToast('請輸入有效的停止日期');
+            return;
+          }
+          addRoutine(text, trigger, cadence, weeklyTarget, inputNewRoutineEndDate.value);
           inputNewRoutineText.value = '';
+          inputNewRoutineEndDate.value = '';
         }
       };
       btnAddRoutine.addEventListener('click', handleAddRoutine);
@@ -8538,10 +8717,7 @@
 
     const propTaskIsRoutine = document.getElementById('propTaskIsRoutine');
     if (propTaskIsRoutine) {
-      propTaskIsRoutine.addEventListener('change', (e) => {
-        const triggerGroup = document.getElementById('propRoutineTriggerGroup');
-        if (triggerGroup) triggerGroup.style.display = e.target.checked ? 'block' : 'none';
-      });
+      propTaskIsRoutine.addEventListener('change', updateItemPropertyRoutineFields);
     }
 
     const mItemLock = document.getElementById('menuItemLock');
@@ -9825,12 +10001,14 @@
 
     // 背景分頁切換回復時，即時刷新真實專注秒數
     document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) refreshRoutineDay();
       if (!document.hidden && kairosSession.status === 'FOCUSING') {
         syncKairosElapsedSeconds();
         updateKairosTimerDisplay();
       }
     });
     window.addEventListener('focus', () => {
+      refreshRoutineDay();
       if (kairosSession.status === 'FOCUSING') {
         syncKairosElapsedSeconds();
         updateKairosTimerDisplay();

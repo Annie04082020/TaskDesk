@@ -949,7 +949,7 @@
           </div>
           <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-subtle);">
             <div class="form-label">每日習慣提醒</div>
-            <div class="form-sublabel">列出尚未完成的每日／每週習慣。預設不提醒，新增時間後才啟用。</div>
+            <div class="form-sublabel">新增時間後才會提醒。有停止日期的提醒會在開啟 App 時安排未來 30 天，最晚到停止日。</div>
             <div id="settingRoutineNotificationTimes" style="margin-top: 4px;"></div>
             <button type="button" id="btnAddRoutineNotificationTime" class="btn-secondary" style="margin-top: 8px; padding: 7px 12px; font-size: 0.78rem;">＋新增習慣提醒時間</button>
           </div>
@@ -1265,6 +1265,8 @@
               <option value="weekly_3">每週 3 次</option>
               <option value="weekly_4">每週 4 次</option>
               <option value="weekly_5">每週 5 次</option>
+              <option value="weekly_6">每週 6 次</option>
+              <option value="weekly_7">每週 7 次</option>
             </select>
             <select id="selectRoutineTrigger" class="routine-select" title="觸發推薦時機" style="flex: 1; min-width: 140px;">
               <option value="recharge">疲憊/卡關時浮出（休整與轉換）</option>
@@ -1274,6 +1276,9 @@
             </select>
             <button type="button" id="btnAddRoutine" class="btn-primary" style="white-space: nowrap;">新增習慣</button>
           </div>
+          <label class="form-label" for="inputNewRoutineEndDate">停止日期（選填）</label>
+          <input type="date" id="inputNewRoutineEndDate" class="routine-input" aria-describedby="newRoutineEndDateHint">
+          <div class="form-sublabel" id="newRoutineEndDateHint">這天仍可打卡，隔天停止重複。留白會持續重複。</div>
         </div>
 
         <!-- 習慣清單 -->
@@ -1306,7 +1311,7 @@
         <div class="form-group">
           <label class="form-label" for="propTaskText">任務名稱</label>
           <input type="text" id="propTaskText" class="form-input" placeholder="輸入任務內容">
-          <div class="form-sublabel" id="propTaskRelationHint" style="display: none; margin-top: 5px;">子任務可獨立設定耗時、截止死線與習慣；安排時段及四象限沿用主任務。</div>
+          <div class="form-sublabel" id="propTaskRelationHint" style="display: none; margin-top: 5px;">子任務沿用主任務的時段與四象限。設為習慣後會移入習慣庫。</div>
         </div>
 
         <!-- 調整任務層級，不需另開流程。 -->
@@ -1343,8 +1348,8 @@
         <div class="form-group" style="padding-top: 10px; border-top: 1px solid var(--border-subtle);">
           <div class="form-toggle-row">
             <div>
-              <div class="form-label">設為每日習慣 (Daily Routine)</div>
-              <div class="form-sublabel">每日凌晨 00:00 自動重設完成狀態，依當前體力心流時機智慧推薦。</div>
+              <div class="form-label">設為習慣</div>
+              <div class="form-sublabel">移入習慣庫，打卡日期會用於習慣熱力圖。</div>
             </div>
             <label class="switch">
               <input type="checkbox" id="propTaskIsRoutine">
@@ -1360,6 +1365,9 @@
               <option value="evening">傍晚/晚間時浮出（日常維護）</option>
               <option value="any">任意契合時段浮出</option>
             </select>
+            <label class="form-label" for="propRoutineEndDate" style="margin-top: 8px;">停止日期（選填）</label>
+            <input type="date" id="propRoutineEndDate" class="routine-input" aria-describedby="propRoutineEndDateHint">
+            <div class="form-sublabel" id="propRoutineEndDateHint">這天仍可打卡，隔天停止重複。留白會持續重複。</div>
           </div>
         </div>
 

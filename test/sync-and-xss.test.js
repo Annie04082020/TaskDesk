@@ -515,6 +515,49 @@ test('Case 18: 接關快照只接受安全且完整的本機狀態', () => {
   assert.equal(SyncEngine.sanitizeLastFocusState({ endedAt: 123456 }), null);
 });
 
+test('舊版抽屜習慣移至習慣庫並保留打卡，不計入任務歷史', () => {
+  const items = SyncEngine.sanitizeItems([
+    { id: 'task', text: '報告', bucket: 'today', done: true, doneAt: 2000 },
+    { id: 'habit', text: '伸展', bucket: 'keep', parentId: 'task', projectId: 'project',
+      isRoutine: true, done: true, doneAt: 1000, lastResetDate: '2026-11-05', routineEndDate: '2026-02-30' },
+    { id: 'child', text: '舊子任務', parentId: 'habit', bucket: 'week' }
+  ]);
+  const habit = items[1];
+  assert.equal(habit.bucket, 'routine');
+  assert.equal(habit.parentId, null);
+  assert.equal(habit.projectId, 'project');
+  assert.equal(habit.routineEndDate, null);
+  assert.equal(items[2].parentId, null);
+  assert.deepEqual(SyncEngine.getRoutineWeekDates(habit, '2026-W45'), ['2026-11-05']);
+  assert.deepEqual(SyncEngine.getCompletedTaskHistoryRecords(items).map(record => record.item.id), ['task']);
+});
+
+test('停止日仍可執行習慣，隔天停止重複並保留既有足跡', () => {
+  const habit = SyncEngine.sanitizeItem({
+    id: 'habit', text: '閱讀', isRoutine: true, isNow: true, routineEndDate: '2026-11-05',
+    lastResetDate: '2026-11-05', routineCompletions: ['2026-11-02', '2026-11-04']
+  });
+  assert.equal(SyncEngine.isRoutineStopped(habit, '2026-11-05'), false);
+  assert.equal(SyncEngine.resetRoutinesPure([habit], '2026-11-05', '2026-W45').items[0].isNow, true);
+  const stopped = SyncEngine.resetRoutinesPure([habit], '2026-11-06', '2026-W45').items[0];
+  assert.equal(stopped.isNow, false);
+  assert.equal(stopped.lastResetDate, '2026-11-05');
+  assert.deepEqual(SyncEngine.getRoutineWeekDates(stopped, '2026-W45'), ['2026-11-02', '2026-11-04']);
+  const resumed = SyncEngine.resetRoutinesPure([{ ...stopped, routineEndDate: null }], '2026-11-06', '2026-W45').items[0];
+  assert.equal(resumed.lastResetDate, '2026-11-06');
+});
+
+test('另一裝置打卡後仍保留停止日期，之後清空日期也能同步', () => {
+  const habit = { id: 'habit', text: '閱讀', isRoutine: true };
+  const stopped = { ...habit, updatedAt: 2000, routineEndDate: '2026-11-05', routineEndDateUpdatedAt: 2000 };
+  const checkedIn = { ...habit, updatedAt: 3000, routineCompletions: ['2026-11-04'] };
+  const [merged] = SyncEngine.smartMergeItems([stopped], [checkedIn]);
+  assert.equal(merged.routineEndDate, '2026-11-05');
+  assert.deepEqual(SyncEngine.getRoutineWeekDates(merged, '2026-W45'), ['2026-11-04']);
+  const resumed = { ...habit, updatedAt: 4000, routineEndDate: null, routineEndDateUpdatedAt: 4000 };
+  assert.equal(SyncEngine.smartMergeItems([resumed], [merged])[0].routineEndDate, null);
+});
+
 test('Case 19: 歷史完成數不重複計入子任務自動結案的主任務', () => {
   const records = SyncEngine.getCompletedTaskHistoryRecords([
     { id: 'parent', text: '期中報告', done: true, doneAt: 3000 },
