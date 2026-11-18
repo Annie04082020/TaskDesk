@@ -934,7 +934,7 @@
           <div class="form-toggle-row">
             <div>
               <div class="form-label">Android 任務通知</div>
-              <div class="form-sublabel">三種提醒可各自設定時間：工作桌摘要、每日習慣與今天剩餘任務。</div>
+              <div class="form-sublabel">四種提醒可各自設定時間：工作桌摘要、每日習慣、今天與本週剩餘任務。</div>
             </div>
             <label class="switch">
               <input type="checkbox" id="settingNotificationsEnabled" checked>
@@ -955,9 +955,15 @@
           </div>
           <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-subtle);">
             <div class="form-label">今天剩餘任務提醒</div>
-            <div class="form-sublabel">通知會直接列出「今日」工作桌尚未完成的任務。預設不提醒，新增時間後才啟用。</div>
+            <div class="form-sublabel">通知會直接列出「今日」工作桌尚未完成的主任務。預設不提醒，新增時間後才啟用。</div>
             <div id="settingTodayTaskNotificationTimes" style="margin-top: 4px;"></div>
             <button type="button" id="btnAddTodayTaskNotificationTime" class="btn-secondary" style="margin-top: 8px; padding: 7px 12px; font-size: 0.78rem;">＋新增今日任務提醒時間</button>
+          </div>
+          <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+            <div class="form-label">本週剩餘任務提醒</div>
+            <div class="form-sublabel">通知會直接列出「本週」工作桌尚未完成的主任務。預設不提醒，新增時間後才啟用。</div>
+            <div id="settingWeekTaskNotificationTimes" style="margin-top: 4px;"></div>
+            <button type="button" id="btnAddWeekTaskNotificationTime" class="btn-secondary" style="margin-top: 8px; padding: 7px 12px; font-size: 0.78rem;">＋新增本週任務提醒時間</button>
           </div>
         </div>
 

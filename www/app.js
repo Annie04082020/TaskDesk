@@ -630,6 +630,7 @@
       if (clean.notificationTimes.length === 0) clean.notificationTimes = ['10:00'];
       clean.routineNotificationTimes = sanitizeNotificationTimes(raw.routineNotificationTimes);
       clean.todayTaskNotificationTimes = sanitizeNotificationTimes(raw.todayTaskNotificationTimes);
+      clean.weekTaskNotificationTimes = sanitizeNotificationTimes(raw.weekTaskNotificationTimes);
       if (typeof raw.updatedAt === 'number' && Number.isFinite(raw.updatedAt)) {
         clean.updatedAt = Math.floor(raw.updatedAt);
       }
@@ -937,7 +938,8 @@
     notificationsEnabled: true,
     notificationTimes: ['10:00'],
     routineNotificationTimes: [],
-    todayTaskNotificationTimes: []
+    todayTaskNotificationTimes: [],
+    weekTaskNotificationTimes: []
   };
 
   let activeWorkbench = 'today'; // 'today' | 'week'
@@ -1034,6 +1036,9 @@
         settings.todayTaskNotificationTimes = Array.isArray(parsed.todayTaskNotificationTimes)
           ? [...new Set(parsed.todayTaskNotificationTimes.filter(time => typeof time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)))].slice(0, 12)
           : [];
+        settings.weekTaskNotificationTimes = Array.isArray(parsed.weekTaskNotificationTimes)
+          ? [...new Set(parsed.weekTaskNotificationTimes.filter(time => typeof time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)))].slice(0, 12)
+          : [];
       }
     } catch (e) {
       console.warn('載入設定失敗:', e);
@@ -1097,11 +1102,19 @@
     }
 
     function getTodayTasksNotification() {
-      const tasks = items.filter(item => !item.done && !item.parentId && item.bucket === 'today' && !item.isRoutine);
+      return getRemainingTasksNotification('today', '今天');
+    }
+
+    function getWeekTasksNotification() {
+      return getRemainingTasksNotification('week', '本週');
+    }
+
+    function getRemainingTasksNotification(bucket, label) {
+      const tasks = items.filter(item => !item.done && !item.parentId && item.bucket === bucket && !item.isRoutine);
       if (tasks.length === 0) return null;
       const names = tasks.slice(0, 4).map(item => item.text);
       const extra = tasks.length > names.length ? `，另 ${tasks.length - names.length} 件` : '';
-      return `今天尚餘：${names.join('、')}${extra}`;
+      return `${label}尚餘：${names.join('、')}${extra}`;
     }
 
   const routineReminderWindow = 30;
@@ -1157,7 +1170,7 @@
       const plugin = getLocalNotificationsPlugin();
       if (!plugin) return;
       try {
-        const notificationIds = [910000, 930000].flatMap(base =>
+        const notificationIds = [910000, 930000, 940000].flatMap(base =>
           Array.from({ length: reminderSlots }, (_, index) => ({ id: base + index }))
         );
         notificationIds.push(...Array.from({ length: routineReminderWindow * reminderSlots },
@@ -1168,7 +1181,8 @@
         if (permission.display !== 'granted') return;
         const notificationGroups = [
           { baseId: 910000, times: settings.notificationTimes, title: 'Task Desk 工作桌摘要', body: getNotificationSummary(), source: 'daily-summary' },
-          { baseId: 930000, times: settings.todayTaskNotificationTimes, title: 'Task Desk 今天剩餘任務', body: getTodayTasksNotification(), source: 'today-tasks' }
+          { baseId: 930000, times: settings.todayTaskNotificationTimes, title: 'Task Desk 今天剩餘任務', body: getTodayTasksNotification(), source: 'today-tasks' },
+          { baseId: 940000, times: settings.weekTaskNotificationTimes, title: 'Task Desk 本週剩餘任務', body: getWeekTasksNotification(), source: 'week-tasks' }
         ];
         const notifications = notificationGroups.flatMap(group => {
           if (!group.body) return [];
@@ -1248,6 +1262,7 @@
     renderNotificationTimeGroup('notificationTimes', 'settingNotificationTimes');
     renderNotificationTimeGroup('routineNotificationTimes', 'settingRoutineNotificationTimes');
     renderNotificationTimeGroup('todayTaskNotificationTimes', 'settingTodayTaskNotificationTimes');
+    renderNotificationTimeGroup('weekTaskNotificationTimes', 'settingWeekTaskNotificationTimes');
   }
 
   function loadUserState() {
@@ -9531,6 +9546,7 @@
     safeOn('btnAddNotificationTime', 'click', () => addNotificationTime('notificationTimes'));
     safeOn('btnAddRoutineNotificationTime', 'click', () => addNotificationTime('routineNotificationTimes'));
     safeOn('btnAddTodayTaskNotificationTime', 'click', () => addNotificationTime('todayTaskNotificationTimes'));
+    safeOn('btnAddWeekTaskNotificationTime', 'click', () => addNotificationTime('weekTaskNotificationTimes'));
 
     const settingSafeTop = document.getElementById('settingSafeTop');
     if (settingSafeTop) {
@@ -9763,7 +9779,7 @@
 
       const settingNotificationsEl = document.getElementById('settingNotificationsEnabled');
       if (settingNotificationsEl) settings.notificationsEnabled = settingNotificationsEl.checked;
-      const notificationKeys = ['notificationTimes', 'routineNotificationTimes', 'todayTaskNotificationTimes'];
+      const notificationKeys = ['notificationTimes', 'routineNotificationTimes', 'todayTaskNotificationTimes', 'weekTaskNotificationTimes'];
       notificationKeys.forEach(key => {
         const notificationTimes = Array.from(document.querySelectorAll(`.notification-time-input[data-notification-key="${key}"]`))
           .map(input => input.value)

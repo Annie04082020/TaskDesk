@@ -52,6 +52,40 @@
             android:background="@drawable/widget_btn_bg" />
     </LinearLayout>
 
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingBottom="8dp">
+
+        <TextView
+            android:id="@+id/widget_tab_today"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="今日"
+            android:textColor="#e6edf3"
+            android:textSize="11sp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:background="@drawable/widget_tab_active" />
+
+        <TextView
+            android:id="@+id/widget_tab_week"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="本週"
+            android:textColor="#9ba3b5"
+            android:textSize="11sp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:background="@drawable/widget_tab_inactive" />
+    </LinearLayout>
+
     <!-- Divider -->
     <View
         android:layout_width="match_parent"

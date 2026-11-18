@@ -17,6 +17,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class TodayTasksWidget extends AppWidgetProvider {
+    private static final String PREFS_NAME = "taskdesk_widgets_data";
+    private static final String KEY_SELECTED_BUCKET_PREFIX = "today_tasks_widget_bucket_";
+    private static final String ACTION_SHOW_TODAY = "com.annie.taskdesk.widget.SHOW_TODAY";
+    private static final String ACTION_SHOW_WEEK = "com.annie.taskdesk.widget.SHOW_WEEK";
+    private static final String EXTRA_APP_WIDGET_ID = "appWidgetId";
 
     public static void updateAllWidgets(Context context) {
         AppWidgetManager manager = AppWidgetManager.getInstance(context);
@@ -32,6 +37,24 @@ public class TodayTasksWidget extends AppWidgetProvider {
         for (int appWidgetId : appWidgetIds) {
             updateAppWidget(context, appWidgetManager, appWidgetId);
         }
+    }
+
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        String action = intent.getAction();
+        if (ACTION_SHOW_TODAY.equals(action) || ACTION_SHOW_WEEK.equals(action)) {
+            int appWidgetId = intent.getIntExtra(EXTRA_APP_WIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID);
+            if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                String bucket = ACTION_SHOW_WEEK.equals(action) ? "week" : "today";
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                        .edit()
+                        .putString(KEY_SELECTED_BUCKET_PREFIX + appWidgetId, bucket)
+                        .apply();
+                updateAppWidget(context, AppWidgetManager.getInstance(context), appWidgetId);
+            }
+            return;
+        }
+        super.onReceive(context, intent);
     }
 
     private static void updateAppWidget(Context context, AppWidgetManager appWidgetManager, int appWidgetId) {
@@ -57,9 +80,11 @@ public class TodayTasksWidget extends AppWidgetProvider {
         );
         views.setOnClickPendingIntent(R.id.btn_widget_add, quickCapturePending);
 
-        // Read tasks from SharedPreferences
-        SharedPreferences prefs = context.getSharedPreferences("taskdesk_widgets_data", Context.MODE_PRIVATE);
+        // Read tasks and this widget instance's selected page from SharedPreferences.
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         String rawJson = prefs.getString("raw_json", null);
+        String selectedBucket = prefs.getString(KEY_SELECTED_BUCKET_PREFIX + appWidgetId, "today");
+        if (!"week".equals(selectedBucket)) selectedBucket = "today";
 
         List<JSONObject> todayTasks = new ArrayList<>();
         List<JSONObject> weekTasks = new ArrayList<>();
@@ -97,7 +122,31 @@ public class TodayTasksWidget extends AppWidgetProvider {
                 R.id.widget_count_badge,
                 "今日 " + todayTasks.size() + " · 這週 " + weekTasks.size()
         );
-        views.setTextViewText(R.id.widget_title, "Task Desk · 今日 / 這週");
+        boolean showingWeek = "week".equals(selectedBucket);
+        views.setTextViewText(R.id.widget_title, showingWeek ? "Task Desk · 本週" : "Task Desk · 今日");
+        views.setInt(R.id.widget_tab_today, "setBackgroundResource",
+                showingWeek ? R.drawable.widget_tab_inactive : R.drawable.widget_tab_active);
+        views.setInt(R.id.widget_tab_week, "setBackgroundResource",
+                showingWeek ? R.drawable.widget_tab_active : R.drawable.widget_tab_inactive);
+        views.setTextColor(R.id.widget_tab_today, showingWeek ? 0xff9ba3b5 : 0xffe6edf3);
+        views.setTextColor(R.id.widget_tab_week, showingWeek ? 0xffe6edf3 : 0xff9ba3b5);
+
+        Intent showTodayIntent = new Intent(context, TodayTasksWidget.class);
+        showTodayIntent.setAction(ACTION_SHOW_TODAY);
+        showTodayIntent.putExtra(EXTRA_APP_WIDGET_ID, appWidgetId);
+        PendingIntent showTodayPending = PendingIntent.getBroadcast(
+                context, appWidgetId * 10 + 2, showTodayIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+        Intent showWeekIntent = new Intent(context, TodayTasksWidget.class);
+        showWeekIntent.setAction(ACTION_SHOW_WEEK);
+        showWeekIntent.putExtra(EXTRA_APP_WIDGET_ID, appWidgetId);
+        PendingIntent showWeekPending = PendingIntent.getBroadcast(
+                context, appWidgetId * 10 + 3, showWeekIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+        views.setOnClickPendingIntent(R.id.widget_tab_today, showTodayPending);
+        views.setOnClickPendingIntent(R.id.widget_tab_week, showWeekPending);
 
         // Slots
         int[] rowIds = {
@@ -112,12 +161,14 @@ public class TodayTasksWidget extends AppWidgetProvider {
                 R.id.widget_task_size_1, R.id.widget_task_size_2, R.id.widget_task_size_3,
                 R.id.widget_task_size_4, R.id.widget_task_size_5, R.id.widget_task_size_6
         };
-        List<JSONObject> visibleTasks = new ArrayList<>();
-        visibleTasks.addAll(todayTasks.subList(0, Math.min(todayTasks.size(), 3)));
-        visibleTasks.addAll(weekTasks.subList(0, Math.min(weekTasks.size(), 3)));
+        List<JSONObject> selectedTasks = showingWeek ? weekTasks : todayTasks;
+        List<JSONObject> visibleTasks = new ArrayList<>(selectedTasks.subList(0, Math.min(selectedTasks.size(), rowIds.length)));
 
         if (visibleTasks.isEmpty()) {
             views.setViewVisibility(R.id.widget_empty_view, View.VISIBLE);
+            views.setTextViewText(R.id.widget_empty_view, showingWeek
+                    ? "本週桌面尚無任務\n點擊進入挑選"
+                    : "今日桌面尚無任務\n點擊進入挑選");
             for (int rowId : rowIds) {
                 views.setViewVisibility(rowId, View.GONE);
             }

@@ -337,6 +337,7 @@ test('Case 11: 可攜備份設定不得包含 PIN hash 或鎖定狀態', () => {
     notificationTimes: ['10:00'],
     routineNotificationTimes: ['12:30', 'bad-value'],
     todayTaskNotificationTimes: ['18:00'],
+    weekTaskNotificationTimes: ['20:00', 'invalid'],
     updatedAt: 123456
   };
 
@@ -347,6 +348,7 @@ test('Case 11: 可攜備份設定不得包含 PIN hash 或鎖定狀態', () => {
   assert.equal(portable.notificationTimes[0], '10:00');
   assert.deepEqual(portable.routineNotificationTimes, ['12:30']);
   assert.deepEqual(portable.todayTaskNotificationTimes, ['18:00']);
+  assert.deepEqual(portable.weekTaskNotificationTimes, ['20:00']);
 });
 
 test('Case 12: 匯入不含 PIN 欄位的設定時，不應覆寫本機 PIN 狀態', () => {
