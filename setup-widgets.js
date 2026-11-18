@@ -37,7 +37,7 @@ function injectManifest(manifestPath) {
   const originalContent = fs.readFileSync(manifestPath, 'utf8');
   let content = originalContent;
   // Keep one predictable widget entry point. Older releases registered two
-  // additional providers whose UI is no longer part of the supported widget.
+  // additional providers whose UI is now consolidated into the tabbed task widget.
   content = content.replace(
     /\s*<receiver\b[^>]*android:name="\.widgets\.(NowTaskWidget|QuickCaptureWidget)"[^>]*>[\s\S]*?<\/receiver>/g,
     ''
@@ -64,30 +64,6 @@ function injectManifest(manifestPath) {
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_today_tasks_info" />
-        </receiver>
-
-        <receiver
-            android:name=".widgets.NowTaskWidget"
-            android:exported="true"
-            android:label="@string/widget_now_label">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/widget_now_task_info" />
-        </receiver>
-
-        <receiver
-            android:name=".widgets.QuickCaptureWidget"
-            android:exported="true"
-            android:label="@string/widget_capture_label">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/widget_quick_capture_info" />
         </receiver>
 
         <!-- Focus Guardian (取代 StayFree 原生鎖定守護服務) -->

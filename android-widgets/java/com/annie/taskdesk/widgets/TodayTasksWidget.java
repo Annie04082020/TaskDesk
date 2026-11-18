@@ -124,12 +124,11 @@ public class TodayTasksWidget extends AppWidgetProvider {
         );
         boolean showingWeek = "week".equals(selectedBucket);
         views.setTextViewText(R.id.widget_title, showingWeek ? "Task Desk · 本週" : "Task Desk · 今日");
-        views.setInt(R.id.widget_tab_today, "setBackgroundResource",
-                showingWeek ? R.drawable.widget_tab_inactive : R.drawable.widget_tab_active);
-        views.setInt(R.id.widget_tab_week, "setBackgroundResource",
-                showingWeek ? R.drawable.widget_tab_active : R.drawable.widget_tab_inactive);
-        views.setTextColor(R.id.widget_tab_today, showingWeek ? 0xff9ba3b5 : 0xffe6edf3);
-        views.setTextColor(R.id.widget_tab_week, showingWeek ? 0xffe6edf3 : 0xff9ba3b5);
+        // Keep tab rendering to RemoteViews' oldest, most reliable calls. The
+        // title tells users which page is active; some launchers reject dynamic
+        // background/text-colour reflection calls and show "Couldn't load widget".
+        views.setTextViewText(R.id.widget_tab_today, showingWeek ? "今日" : "［今日］");
+        views.setTextViewText(R.id.widget_tab_week, showingWeek ? "［本週］" : "本週");
 
         Intent showTodayIntent = new Intent(context, TodayTasksWidget.class);
         showTodayIntent.setAction(ACTION_SHOW_TODAY);

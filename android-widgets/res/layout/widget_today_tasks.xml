@@ -69,7 +69,7 @@
             android:paddingEnd="10dp"
             android:paddingTop="4dp"
             android:paddingBottom="4dp"
-            android:background="@drawable/widget_tab_active" />
+            android:background="@drawable/widget_tag_bg" />
 
         <TextView
             android:id="@+id/widget_tab_week"
@@ -83,7 +83,7 @@
             android:paddingEnd="10dp"
             android:paddingTop="4dp"
             android:paddingBottom="4dp"
-            android:background="@drawable/widget_tab_inactive" />
+            android:background="@drawable/widget_tag_bg" />
     </LinearLayout>
 
     <!-- Divider -->
