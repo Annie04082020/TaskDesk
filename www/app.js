@@ -1001,11 +1001,6 @@
     scheduleRoutineDayRefresh();
     checkLockOnStartup();
     checkStartupStatePrompt();
-    if (window.location.hash === '#quick_capture' || window.location.search.includes('action=quick_capture')) {
-      setTimeout(() => {
-        if (window.handleQuickCaptureFromWidget) window.handleQuickCaptureFromWidget();
-      }, 350);
-    }
   }
 
   // --- 載入與儲存 ---
@@ -1626,7 +1621,6 @@
       SyncEngine.normalizeTaskRelations(items);
       localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
       localStorage.setItem(STORAGE_KEY_TOMBSTONES, JSON.stringify(tombstones));
-      syncToAndroidWidgets();
       syncAndroidNotifications();
     } catch (e) {
       console.error('儲存任務失敗:', e);
@@ -2017,48 +2011,6 @@
         closeProjectForm();
         renderProjects();
         modal.style.display = 'flex';
-  }
-
-  // 同步任務資料至 Android 原生小工具 (Widgets)
-  function syncToAndroidWidgets() {
-    try {
-      if (window.AndroidWidgetBridge && typeof window.AndroidWidgetBridge.updateWidgetsData === 'function') {
-        const widgetItems = items
-          .filter(item => !item.done && !item.parentId && (item.bucket === 'today' || item.bucket === 'week'))
-          .sort((a, b) => {
-            const orderA = Number.isFinite(a.order) ? a.order : Number.MAX_SAFE_INTEGER;
-            const orderB = Number.isFinite(b.order) ? b.order : Number.MAX_SAFE_INTEGER;
-            return orderA - orderB || (a.createdAt || 0) - (b.createdAt || 0);
-          })
-          .map(item => ({
-            id: item.id,
-            text: item.text,
-            bucket: item.bucket,
-            size: item.size,
-            order: item.order
-          }));
-        const payload = {
-          items: widgetItems,
-          todaySmallLimit: settings.todaySmallLimit || 3,
-          weekMediumLargeLimit: settings.weekMediumLargeLimit || 3
-        };
-        window.AndroidWidgetBridge.updateWidgetsData(JSON.stringify(payload));
-      }
-    } catch (err) {
-      console.warn('Android Widget 同步略過或尚未就緒:', err);
-    }
-  }
-
-  // 接收來自 Android Widget 的快速記錄觸發
-  if (typeof window !== 'undefined') {
-    window.handleQuickCaptureFromWidget = function () {
-      const quickInput = document.getElementById('inputQuickTask');
-      if (quickInput) {
-        quickInput.focus();
-        quickInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        showToast('快速記錄模式：請輸入任務名稱');
-      }
-    };
   }
 
   async function loadRules() {
@@ -2715,7 +2667,10 @@
     const input = document.getElementById('completionTimeInput');
     if (!item || item.isRoutine || !item.done || !modal || !input) return;
     document.getElementById('completionTimeItemId').value = item.id;
-    document.getElementById('completionTimeTaskName').textContent = item.text;
+    const parent = getParentItem(item);
+    document.getElementById('completionTimeTaskName').textContent = parent
+      ? `子任務「${item.text}」· 所屬「${parent.text}」`
+      : item.text;
     input.value = formatDateTimeLocal(item.doneAt || Date.now());
     input.max = formatDateTimeLocal(Date.now());
     modal.style.display = 'flex';
@@ -3836,7 +3791,12 @@
         const meta = document.createElement('span');
         meta.className = 'history-task-meta';
         meta.textContent = `${getHistoryRelationText(record)} · ${getHistoryTaskTypeName(record.typeId)}`;
-        body.append(name, meta);
+        const edit = document.createElement('button');
+        edit.type = 'button';
+        edit.className = 'history-completion-edit';
+        edit.textContent = '調整完成時間';
+        edit.addEventListener('click', () => openCompletionTimeEditor(item.id));
+        body.append(name, meta, edit);
         row.append(time, body);
         section.appendChild(row);
       });
@@ -3881,8 +3841,11 @@
         const detail = container.querySelector('.history-calendar-detail');
         const dayItems = byDay.get(Number(button.dataset.historyDay)) || [];
         detail.innerHTML = dayItems.length
-          ? dayItems.map(record => `<div class="history-task-row"><time>${formatHistoryTime(record.timestamp)}</time><div class="history-task-body"><span class="history-task-name">${record.parent ? '- ' : ''}${escapeHtml(record.item.text)}</span><span class="history-task-meta">${escapeHtml(getHistoryRelationText(record))} · ${escapeHtml(getHistoryTaskTypeName(record.typeId))}</span></div></div>`).join('')
+          ? dayItems.map(record => `<div class="history-task-row"><time>${formatHistoryTime(record.timestamp)}</time><div class="history-task-body"><span class="history-task-name">${record.parent ? '- ' : ''}${escapeHtml(record.item.text)}</span><span class="history-task-meta">${escapeHtml(getHistoryRelationText(record))} · ${escapeHtml(getHistoryTaskTypeName(record.typeId))}</span><button type="button" class="history-completion-edit" data-history-completion-edit="${escapeHtml(record.item.id)}">調整完成時間</button></div></div>`).join('')
           : '這天沒有完成任務。';
+        detail.querySelectorAll('[data-history-completion-edit]').forEach(edit => {
+          edit.addEventListener('click', () => openCompletionTimeEditor(edit.dataset.historyCompletionEdit));
+        });
       });
     });
   }

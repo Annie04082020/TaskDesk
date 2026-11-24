@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:background="@drawable/widget_bg_rounded"
+        android:background="@drawable/guardian_card_bg"
         android:orientation="vertical"
         android:padding="28dp">
 
@@ -18,7 +18,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/widget_tag_bg"
+            android:background="@drawable/guardian_tag_bg"
             android:paddingLeft="10dp"
             android:paddingRight="10dp"
             android:paddingTop="4dp"
@@ -139,7 +139,7 @@
             android:id="@+id/tvBreathingCountdown"
             android:layout_width="100dp"
             android:layout_height="100dp"
-            android:background="@drawable/widget_bg_rounded"
+            android:background="@drawable/guardian_card_bg"
             android:gravity="center"
             android:text="5"
             android:textColor="#38bdf8"

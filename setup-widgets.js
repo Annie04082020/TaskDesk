@@ -1,17 +1,32 @@
 /**
  * setup-widgets.js
- * Injects Android AppWidget classes, layouts, and receivers into Capacitor's android platform.
+ * Retained as the Android native setup entry point for release compatibility.
+ * AppWidgets have been removed; this script now installs only Focus Guardian
+ * bridge/resources and strips widget receivers from generated Capacitor apps.
  */
 
 const fs = require('fs');
 const path = require('path');
 
 const ROOT_DIR = __dirname;
-const WIDGETS_DIR = path.join(ROOT_DIR, 'android-widgets');
+const NATIVE_DIR = path.join(ROOT_DIR, 'android-widgets');
 const ANDROID_MAIN = path.join(ROOT_DIR, 'android', 'app', 'src', 'main');
-const REQUIRED_MANIFEST_ENTRIES = [
-  '.widgets.TodayTasksWidget',
-  '@xml/widget_today_tasks_info'
+const WIDGET_ARTIFACTS = [
+  'java/com/annie/taskdesk/widgets/TodayTasksWidget.java',
+  'java/com/annie/taskdesk/widgets/NowTaskWidget.java',
+  'java/com/annie/taskdesk/widgets/QuickCaptureWidget.java',
+  'res/layout/widget_today_tasks.xml',
+  'res/layout/widget_now_task.xml',
+  'res/layout/widget_quick_capture.xml',
+  'res/xml/widget_today_tasks_info.xml',
+  'res/xml/widget_now_task_info.xml',
+  'res/xml/widget_quick_capture_info.xml',
+  'res/drawable/widget_bg_rounded.xml',
+  'res/drawable/widget_btn_bg.xml',
+  'res/drawable/widget_tag_bg.xml',
+  'res/drawable/widget_tab_active.xml',
+  'res/drawable/widget_tab_inactive.xml',
+  'res/values/widget_strings.xml'
 ];
 
 function copyRecursive(src, dest) {
@@ -19,54 +34,41 @@ function copyRecursive(src, dest) {
   const stats = fs.statSync(src);
   if (stats.isDirectory()) {
     if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-    fs.readdirSync(src).forEach(file => {
-      copyRecursive(path.join(src, file), path.join(dest, file));
-    });
-  } else {
-    fs.copyFileSync(src, dest);
-    console.log(`[Widgets] Copied: ${path.relative(ROOT_DIR, dest)}`);
+    fs.readdirSync(src).forEach(file => copyRecursive(path.join(src, file), path.join(dest, file)));
+    return;
   }
+  fs.copyFileSync(src, dest);
+  console.log(`[Android native] Copied: ${path.relative(ROOT_DIR, dest)}`);
 }
 
-function injectManifest(manifestPath) {
-  if (!fs.existsSync(manifestPath)) {
-    console.warn(`[Widgets] Manifest not found at ${manifestPath}`);
-    return;
-  }
+function removeWidgetArtifacts() {
+  WIDGET_ARTIFACTS.forEach(relativePath => {
+    const target = path.join(ANDROID_MAIN, relativePath);
+    if (fs.existsSync(target)) {
+      fs.rmSync(target, { force: true });
+      console.log(`[Android native] Removed widget artifact: ${relativePath}`);
+    }
+  });
+}
 
-  const originalContent = fs.readFileSync(manifestPath, 'utf8');
-  let content = originalContent;
-  // Keep one predictable widget entry point. Older releases registered two
-  // additional providers whose UI is now consolidated into the tabbed task widget.
-  content = content.replace(
-    /\s*<receiver\b[^>]*android:name="\.widgets\.(NowTaskWidget|QuickCaptureWidget)"[^>]*>[\s\S]*?<\/receiver>/g,
+function injectGuardian(manifestPath) {
+  if (!fs.existsSync(manifestPath)) throw new Error(`AndroidManifest.xml not found: ${manifestPath}`);
+  const original = fs.readFileSync(manifestPath, 'utf8');
+  let content = original.replace(
+    /\s*<!-- Task Desk Widgets -->\s*<receiver\b[^>]*android:name="\.widgets\.[^"]+"[^>]*>[\s\S]*?<\/receiver>/g,
     ''
   );
-  const hasAllManifestEntries = REQUIRED_MANIFEST_ENTRIES.every(entry => content.includes(entry));
-  if (hasAllManifestEntries) {
-    if (content !== originalContent) {
-      fs.writeFileSync(manifestPath, content, 'utf8');
-      console.log('[Widgets] Removed deprecated widget receivers from AndroidManifest.xml');
-    }
-    console.log('[Widgets] Receivers already present in AndroidManifest.xml');
-    return;
-  }
+  const guardianPresent = content.includes('.guardian.FocusGuardianAccessibilityService')
+    && content.includes('@xml/focus_guardian_accessibility_config');
 
-  const receiverSnippet = `
-        <!-- Task Desk Widgets -->
-        <receiver
-            android:name=".widgets.TodayTasksWidget"
-            android:exported="true"
-            android:label="@string/widget_today_label">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/widget_today_tasks_info" />
-        </receiver>
-
-        <!-- Focus Guardian (取代 StayFree 原生鎖定守護服務) -->
+  if (!guardianPresent) {
+    const missingPermissions = ['android.permission.SYSTEM_ALERT_WINDOW', 'android.permission.POST_NOTIFICATIONS']
+      .filter(permission => !content.includes(permission))
+      .map(permission => `    <uses-permission android:name="${permission}" />`)
+      .join('\n');
+    if (missingPermissions) content = content.replace('<application', `${missingPermissions}\n    <application`);
+    const guardianSnippet = `
+        <!-- Focus Guardian -->
         <service
             android:name="com.annie.taskdesk.guardian.FocusGuardianAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
@@ -86,72 +88,31 @@ function injectManifest(manifestPath) {
             android:theme="@style/AppTheme.NoActionBar"
             android:launchMode="singleTop" />
     </application>`;
-
-  const permissions = [
-    'android.permission.SYSTEM_ALERT_WINDOW',
-    'android.permission.POST_NOTIFICATIONS'
-  ];
-  const missingPermissions = permissions
-    .filter(permission => !content.includes(permission))
-    .map(permission => `    <uses-permission android:name="${permission}" />`)
-    .join('\n');
-  if (missingPermissions) {
-    content = content.replace('<application', `${missingPermissions}\n    <application`);
+    content = content.replace('</application>', guardianSnippet);
   }
-
-  if (content.includes('</application>')) {
-    content = content.replace('</application>', receiverSnippet);
-    fs.writeFileSync(manifestPath, content, 'utf8');
-    console.log('[Widgets & Guardian] Successfully injected AppWidget receivers and Focus Guardian into AndroidManifest.xml');
-  } else {
-    console.warn('[Widgets] Could not find </application> tag in AndroidManifest.xml');
-  }
+  if (content !== original) fs.writeFileSync(manifestPath, content, 'utf8');
 }
 
 function main() {
   if (!fs.existsSync(ANDROID_MAIN)) {
-    console.log('[Widgets] android/app/src/main does not exist yet. Please run "npx cap add android" first.');
+    console.log('[Android native] android/app/src/main does not exist yet. Run npx cap add android first.');
     return;
   }
 
-  console.log('[Widgets] Injecting Android widgets into', ANDROID_MAIN);
+  copyRecursive(path.join(NATIVE_DIR, 'java', 'com', 'annie', 'taskdesk', 'MainActivity.java'),
+    path.join(ANDROID_MAIN, 'java', 'com', 'annie', 'taskdesk', 'MainActivity.java'));
+  copyRecursive(path.join(NATIVE_DIR, 'java', 'com', 'annie', 'taskdesk', 'WidgetBridge.java'),
+    path.join(ANDROID_MAIN, 'java', 'com', 'annie', 'taskdesk', 'WidgetBridge.java'));
+  copyRecursive(path.join(NATIVE_DIR, 'java', 'com', 'annie', 'taskdesk', 'guardian'),
+    path.join(ANDROID_MAIN, 'java', 'com', 'annie', 'taskdesk', 'guardian'));
+  copyRecursive(path.join(NATIVE_DIR, 'res', 'layout', 'activity_block_overlay.xml'),
+    path.join(ANDROID_MAIN, 'res', 'layout', 'activity_block_overlay.xml'));
+  copyRecursive(path.join(NATIVE_DIR, 'res', 'xml', 'focus_guardian_accessibility_config.xml'),
+    path.join(ANDROID_MAIN, 'res', 'xml', 'focus_guardian_accessibility_config.xml'));
 
-  // 1. Copy Java sources
-  const srcJava = path.join(WIDGETS_DIR, 'java');
-  const destJava = path.join(ANDROID_MAIN, 'java');
-  copyRecursive(srcJava, destJava);
-
-  // 2. Copy Resources (drawables, layouts, xmls, values)
-  const srcRes = path.join(WIDGETS_DIR, 'res');
-  const destRes = path.join(ANDROID_MAIN, 'res');
-  copyRecursive(srcRes, destRes);
-
-  // 3. Patch AndroidManifest.xml
-  const manifestPath = path.join(ANDROID_MAIN, 'AndroidManifest.xml');
-  injectManifest(manifestPath);
-
-  const requiredFiles = [
-    path.join(destJava, 'com', 'annie', 'taskdesk', 'widgets', 'TodayTasksWidget.java'),
-    path.join(destJava, 'com', 'annie', 'taskdesk', 'widgets', 'NowTaskWidget.java'),
-    path.join(destJava, 'com', 'annie', 'taskdesk', 'widgets', 'QuickCaptureWidget.java'),
-    path.join(destRes, 'layout', 'widget_today_tasks.xml'),
-    path.join(destRes, 'layout', 'widget_now_task.xml'),
-    path.join(destRes, 'layout', 'widget_quick_capture.xml'),
-    path.join(destRes, 'xml', 'widget_today_tasks_info.xml'),
-    path.join(destRes, 'xml', 'widget_now_task_info.xml'),
-    path.join(destRes, 'xml', 'widget_quick_capture_info.xml')
-  ];
-  const missingFiles = requiredFiles.filter(file => !fs.existsSync(file));
-  if (missingFiles.length > 0) {
-    throw new Error(`[Widgets] Required widget files were not copied:\n${missingFiles.join('\n')}`);
-  }
-
-  const manifest = fs.readFileSync(manifestPath, 'utf8');
-  if (!REQUIRED_MANIFEST_ENTRIES.every(entry => manifest.includes(entry))) {
-    throw new Error('[Widgets] AndroidManifest.xml is missing one or more widget receivers or provider metadata entries.');
-  }
-
-  console.log('[Widgets] Android AppWidgets setup completed successfully!');
+  removeWidgetArtifacts();
+  injectGuardian(path.join(ANDROID_MAIN, 'AndroidManifest.xml'));
+  console.log('[Android native] Focus Guardian setup complete; AppWidgets are disabled.');
 }
 
 main();

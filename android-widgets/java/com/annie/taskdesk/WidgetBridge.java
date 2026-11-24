@@ -7,37 +7,17 @@ import android.provider.Settings;
 import android.text.TextUtils;
 import android.webkit.JavascriptInterface;
 import com.annie.taskdesk.guardian.FocusGuardianAccessibilityService;
-import com.annie.taskdesk.widgets.TodayTasksWidget;
-import com.annie.taskdesk.widgets.NowTaskWidget;
-import com.annie.taskdesk.widgets.QuickCaptureWidget;
 
 /**
- * Bridge exposing Android Widget update & Focus Guardian functionality to Web App.
+ * Bridge exposing Focus Guardian functionality to the Web App.
  */
 public class WidgetBridge {
-    private static final int MAX_WIDGET_JSON_LENGTH = 250_000;
     private static final int MAX_TASK_TEXT_LENGTH = 300;
     private static final int MAX_BLOCKED_PACKAGES = 50;
     private final Context context;
 
     public WidgetBridge(Context context) {
         this.context = context.getApplicationContext();
-    }
-
-    @JavascriptInterface
-    public void updateWidgetsData(String jsonData) {
-        if (jsonData == null || jsonData.length() > MAX_WIDGET_JSON_LENGTH) return;
-        try {
-            SharedPreferences prefs = context.getSharedPreferences("taskdesk_widgets_data", Context.MODE_PRIVATE);
-            prefs.edit().putString("raw_json", jsonData).putLong("last_updated", System.currentTimeMillis()).apply();
-
-            // Refresh all 3 widget types
-            TodayTasksWidget.updateAllWidgets(context);
-            NowTaskWidget.updateAllWidgets(context);
-            QuickCaptureWidget.updateAllWidgets(context);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
     }
 
     // --- Focus Guardian (取代 StayFree 原生鎖定守護) ---

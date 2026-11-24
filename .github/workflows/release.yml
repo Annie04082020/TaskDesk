@@ -46,7 +46,7 @@ jobs:
           npm ci || npm install
           node build.js
 
-      - name: Setup Capacitor Android platform & Widgets
+      - name: Setup Capacitor Android platform & Focus Guardian
         run: |
           if [ ! -d "android" ]; then
             npx cap add android
