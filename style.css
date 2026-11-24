@@ -510,6 +510,11 @@ body::before {
   width: min(420px, calc(100vw - 24px));
 }
 
+/* 完成時間編輯可由分析儀表板開啟，必須高於分析 Modal。 */
+#modalCompletionTime {
+  z-index: 1100;
+}
+
 .history-time-edit {
   border: 0;
   padding: 0;
